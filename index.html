@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FleetMagnify | Enterprise Fleet Cost Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #F0F2F5; overflow-x: hidden; }
+
+  /* ── NAV ── */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(8,12,18,0.90);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding: 0 3rem;
+  }
+  .nav-inner {
+    max-width: 1280px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 68px;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .logo-mark {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: #0EA57A;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 800; color: #080C12; letter-spacing: -0.5px;
+  }
+  .logo-name { font-size: 17px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
+  .logo-name span { color: #0EA57A; }
+  .nav-links { display: flex; align-items: center; gap: 32px; }
+  .nav-links a { font-size: 13.5px; font-weight: 500; color: #9BA4B0; text-decoration: none; transition: color 0.2s; }
+  .nav-links a:hover { color: #F0F2F5; }
+  .nav-actions { display: flex; align-items: center; gap: 12px; }
+  .btn-ghost {
+    background: none; border: 1px solid rgba(255,255,255,0.10);
+    color: #C8D0DB; font-size: 13px; font-weight: 500;
+    padding: 8px 20px; border-radius: 8px; cursor: pointer;
+    transition: all 0.2s; font-family: inherit;
+  }
+  .btn-ghost:hover { border-color: rgba(255,255,255,0.25); color: #F0F2F5; }
+  .btn-primary {
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 13px; font-weight: 700; padding: 9px 22px;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-primary:hover { background: #0BC48E; }
+
+  /* ── HERO ── */
+  .hero {
+    min-height: 100vh;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 100px 3rem 80px;
+    background: #080C12;
+    position: relative; overflow: hidden;
+  }
+  .hero-glow {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 65% 55% at 58% 50%, rgba(14,165,122,0.07) 0%, transparent 70%);
+  }
+  .hero-grid {
+    position: absolute; inset: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+    background-size: 64px 64px;
+  }
+  .hero-inner {
+    max-width: 1280px; margin: 0 auto;
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 64px; align-items: center; position: relative; z-index: 1;
+  }
+  .hero-eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(14,165,122,0.10); border: 1px solid rgba(14,165,122,0.25);
+    color: #0EA57A; font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em;
+    padding: 5px 14px; border-radius: 100px; margin-bottom: 28px; text-transform: uppercase;
+  }
+  .eyebrow-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: #0EA57A;
+    animation: blink 2s ease-in-out infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.35} }
+  .hero h1 {
+    font-size: 64px; font-weight: 800; letter-spacing: -2.5px;
+    line-height: 1.03; color: #F0F2F5; margin-bottom: 24px;
+  }
+  .hero h1 .accent { color: #0EA57A; }
+  .hero h1 .muted { color: #3D4F62; }
+  .hero-desc {
+    font-size: 17px; color: #6B7785; line-height: 1.7;
+    max-width: 460px; margin-bottom: 40px;
+  }
+  .hero-actions { display: flex; align-items: center; gap: 14px; margin-bottom: 48px; flex-wrap: wrap; }
+  .btn-hero-cta {
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 15px; font-weight: 700; padding: 14px 30px;
+    border-radius: 10px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-hero-cta:hover { background: #0BC48E; transform: translateY(-1px); }
+  .btn-hero-outline {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10);
+    color: #C8D0DB; font-size: 15px; font-weight: 500; padding: 14px 26px;
+    border-radius: 10px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+    display: flex; align-items: center; gap: 9px;
+  }
+  .btn-hero-outline:hover { border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.07); }
+  .play-circle {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: rgba(14,165,122,0.15); border: 1px solid rgba(14,165,122,0.30);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .trust-row { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+  .trust-item { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #4A5568; }
+  .trust-item svg { flex-shrink: 0; }
+  .trust-sep { width: 1px; height: 14px; background: rgba(255,255,255,0.07); }
+
+  /* ── HERO VISUAL ── */
+  .hero-visual { position: relative; }
+  .hero-img-wrap {
+    border-radius: 16px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.07);
+    position: relative;
+  }
+  .hero-img-wrap img {
+    width: 100%; height: 340px; object-fit: cover;
+    display: block; filter: brightness(0.82) saturate(0.9);
+  }
+  .hero-img-overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(to bottom, transparent 45%, rgba(8,12,18,0.55) 100%);
+  }
+  .float-card {
+    position: absolute;
+    background: rgba(10,16,26,0.96);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 14px; padding: 16px 20px;
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  }
+  .float-card.savings { bottom: -20px; left: -22px; }
+  .float-card.idle    { top: -18px; right: -18px; }
+  .float-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.11em;
+    text-transform: uppercase; color: #0EA57A; margin-bottom: 5px;
+  }
+  .float-value { font-size: 30px; font-weight: 800; color: #F0F2F5; letter-spacing: -1.2px; line-height: 1; }
+  .float-sub { font-size: 11px; color: #4A5568; margin-top: 3px; }
+  .float-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: rgba(14,165,122,0.12); border: 1px solid rgba(14,165,122,0.22);
+    color: #0EA57A; font-size: 11px; font-weight: 600;
+    padding: 3px 9px; border-radius: 100px; margin-top: 7px;
+  }
+
+  /* ── LOGO STRIP ── */
+  .logos {
+    padding: 36px 3rem;
+    border-top: 1px solid rgba(255,255,255,0.04);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    background: rgba(255,255,255,0.012);
+  }
+  .logos-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; gap: 16px; }
+  .logos-label {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #2E3A4A; white-space: nowrap; flex-shrink: 0;
+  }
+  .logos-divider { width: 1px; height: 20px; background: rgba(255,255,255,0.06); flex-shrink: 0; }
+  .logos-list { display: flex; align-items: center; gap: 40px; overflow: hidden; }
+  .logos-list span { font-size: 12.5px; font-weight: 600; color: #253040; white-space: nowrap; letter-spacing: -0.1px; }
+
+  /* ── STATS ── */
+  .stats { padding: 72px 3rem; }
+  .stats-inner {
+    max-width: 1280px; margin: 0 auto;
+    display: grid; grid-template-columns: repeat(4,1fr);
+    gap: 1px; background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 16px; overflow: hidden;
+  }
+  .stat {
+    padding: 36px 32px; background: #080C12;
+    border-right: 1px solid rgba(255,255,255,0.04);
+  }
+  .stat:last-child { border-right: none; }
+  .stat-num {
+    font-size: 46px; font-weight: 800; letter-spacing: -2.2px;
+    color: #F0F2F5; line-height: 1; margin-bottom: 9px;
+  }
+  .stat-num em { color: #0EA57A; font-style: normal; }
+  .stat-desc { font-size: 13px; color: #4A5568; line-height: 1.55; }
+
+  /* ── FEATURES ── */
+  .features { padding: 100px 3rem; }
+  .features-inner { max-width: 1280px; margin: 0 auto; }
+  .section-eyebrow {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #0EA57A; margin-bottom: 16px;
+  }
+  .section-eyebrow .dash { width: 16px; height: 1.5px; background: #0EA57A; border-radius: 2px; }
+  .section-title {
+    font-size: 48px; font-weight: 800; letter-spacing: -2.2px;
+    color: #F0F2F5; line-height: 1.04; margin-bottom: 14px;
+  }
+  .section-sub {
+    font-size: 16px; color: #5A6474; max-width: 520px;
+    line-height: 1.65; margin-bottom: 60px;
+  }
+  .features-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 18px; }
+  .feat-card {
+    background: rgba(255,255,255,0.018);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px; padding: 32px;
+    transition: border-color 0.25s, background 0.25s;
+    position: relative; overflow: hidden;
+  }
+  .feat-card:hover { border-color: rgba(14,165,122,0.22); background: rgba(14,165,122,0.02); }
+  .feat-icon {
+    width: 46px; height: 46px; border-radius: 12px;
+    background: rgba(14,165,122,0.09);
+    border: 1px solid rgba(14,165,122,0.16);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 21px; margin-bottom: 22px;
+  }
+  .feat-card h3 {
+    font-size: 17px; font-weight: 700; color: #D8DFE8;
+    margin-bottom: 10px; letter-spacing: -0.3px;
+  }
+  .feat-card p { font-size: 13.5px; color: #4A5568; line-height: 1.65; }
+  .feat-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 20px; }
+  .feat-tag {
+    font-size: 11px; font-weight: 600; color: #0EA57A;
+    background: rgba(14,165,122,0.08); border: 1px solid rgba(14,165,122,0.16);
+    padding: 3px 10px; border-radius: 100px;
+  }
+
+  /* ── DEMO SECTION ── */
+  .demo { padding: 80px 3rem 100px; }
+  .demo-inner {
+    max-width: 1280px; margin: 0 auto;
+    display: grid; grid-template-columns: 1fr 1.45fr;
+    gap: 80px; align-items: center;
+  }
+  .demo-checks { display: flex; flex-direction: column; gap: 18px; margin-bottom: 40px; }
+  .demo-check { display: flex; align-items: flex-start; gap: 12px; }
+  .check-dot {
+    width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; margin-top: 1px;
+    background: rgba(14,165,122,0.12); border: 1px solid rgba(14,165,122,0.28);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .demo-check p { font-size: 14px; color: #5A6474; line-height: 1.55; }
+  .demo-check p strong { color: #C8D0DB; font-weight: 600; }
+
+  /* Dashboard mockup */
+  .dash-frame {
+    background: rgba(10,16,26,0.85);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px; overflow: hidden;
+  }
+  .dash-bar {
+    display: flex; align-items: center; gap: 7px;
+    padding: 13px 18px; border-bottom: 1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.02);
+  }
+  .traffic-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.08); }
+  .dash-bar-title { font-size: 12px; color: #2E3A4A; margin: 0 auto; }
+  .dash-body { padding: 20px; }
+  .dash-header-row {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+  }
+  .dash-asset-label { font-size: 11.5px; font-weight: 700; color: #3A4A5C; letter-spacing: 0.06em; text-transform: uppercase; }
+  .dash-site-badge {
+    font-size: 10px; color: #2E3A4A; background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05); padding: 3px 10px; border-radius: 6px;
+  }
+  .kpi-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 14px; }
+  .kpi {
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 10px; padding: 13px 15px;
+  }
+  .kpi-label { font-size: 9.5px; font-weight: 700; color: #2E3A4A; text-transform: uppercase; letter-spacing: 0.09em; margin-bottom: 6px; }
+  .kpi-val { font-size: 22px; font-weight: 800; letter-spacing: -0.8px; line-height: 1; }
+  .kpi-val.green { color: #0EA57A; }
+  .kpi-val.amber { color: #EF9F27; }
+  .kpi-val.white { color: #D8DFE8; }
+  .kpi-delta { font-size: 10px; margin-top: 5px; }
+  .kpi-delta.pos { color: rgba(14,165,122,0.65); }
+  .kpi-delta.neg { color: rgba(239,159,39,0.65); }
+  .chart-block {
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 10px; padding: 14px;
+  }
+  .chart-label { font-size: 10px; font-weight: 700; color: #2E3A4A; margin-bottom: 12px; letter-spacing: 0.07em; text-transform: uppercase; }
+  .bars { display: flex; align-items: flex-end; gap: 3px; height: 68px; }
+  .bar { flex: 1; border-radius: 3px 3px 0 0; }
+  .chart-foot {
+    display: flex; justify-content: space-between; margin-top: 5px;
+  }
+  .chart-foot span { font-size: 9px; color: #2E3A4A; }
+  .dash-total-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.04);
+  }
+  .dash-total-label { font-size: 11px; color: #2E3A4A; }
+  .dash-total-val { font-size: 18px; font-weight: 800; color: #0EA57A; letter-spacing: -0.5px; }
+
+  /* ── HOW IT WORKS ── */
+  .how { padding: 100px 3rem; background: rgba(255,255,255,0.01); border-top: 1px solid rgba(255,255,255,0.04); }
+  .how-inner { max-width: 1280px; margin: 0 auto; }
+  .how-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 0; margin-top: 60px; }
+  .how-step { padding: 0 40px 0 0; position: relative; }
+  .how-step:not(:last-child)::after {
+    content: '';
+    position: absolute; top: 20px; right: 0;
+    width: 1px; height: 60px;
+    background: linear-gradient(to bottom, rgba(14,165,122,0.3), transparent);
+  }
+  .how-step:not(:first-child) { padding-left: 40px; }
+  .step-num {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: #0EA57A;
+    text-transform: uppercase; margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .step-num::before {
+    content: '';
+    display: inline-block; width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(14,165,122,0.10); border: 1px solid rgba(14,165,122,0.25);
+    flex-shrink: 0;
+  }
+  .how-step h3 { font-size: 20px; font-weight: 700; color: #D8DFE8; margin-bottom: 12px; letter-spacing: -0.3px; }
+  .how-step p { font-size: 14px; color: #4A5568; line-height: 1.65; }
+
+  /* ── CTA ── */
+  .cta { padding: 100px 3rem; }
+  .cta-inner { max-width: 1280px; margin: 0 auto; }
+  .cta-card {
+    background: rgba(14,165,122,0.055);
+    border: 1px solid rgba(14,165,122,0.14);
+    border-radius: 24px; padding: 90px 80px;
+    text-align: center; position: relative; overflow: hidden;
+  }
+  .cta-glow {
+    position: absolute; top: -100px; left: 50%; transform: translateX(-50%);
+    width: 500px; height: 300px;
+    background: radial-gradient(ellipse, rgba(14,165,122,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .cta-card h2 {
+    font-size: 52px; font-weight: 800; letter-spacing: -2.5px;
+    line-height: 1.04; margin-bottom: 16px; position: relative;
+  }
+  .cta-card p { font-size: 16px; color: #5A6474; margin-bottom: 42px; position: relative; line-height: 1.6; }
+  .cta-btns { display: flex; align-items: center; justify-content: center; gap: 14px; position: relative; }
+  .btn-cta-main {
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 15px; font-weight: 700; padding: 16px 38px;
+    border-radius: 10px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-cta-main:hover { background: #0BC48E; transform: translateY(-1px); }
+  .btn-cta-sec {
+    background: none; border: 1px solid rgba(255,255,255,0.10);
+    color: #9BA4B0; font-size: 15px; font-weight: 500; padding: 16px 30px;
+    border-radius: 10px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-cta-sec:hover { border-color: rgba(255,255,255,0.22); color: #F0F2F5; }
+  .cta-note { font-size: 12px; color: #2E3A4A; margin-top: 22px; position: relative; }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid rgba(255,255,255,0.04);
+    padding: 48px 3rem;
+  }
+  .footer-inner {
+    max-width: 1280px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .footer-left { display: flex; align-items: center; gap: 24px; }
+  .footer-logo { display: flex; align-items: center; gap: 9px; }
+  .footer-logo-mark {
+    width: 28px; height: 28px; border-radius: 8px; background: #0EA57A;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 800; color: #080C12;
+  }
+  .footer-logo-name { font-size: 14px; font-weight: 700; color: #3A4A5C; }
+  .footer-copy { font-size: 12px; color: #253040; }
+  .footer-links { display: flex; gap: 24px; }
+  .footer-links a { font-size: 12px; color: #253040; text-decoration: none; transition: color 0.2s; }
+  .footer-links a:hover { color: #5A6474; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 900px) {
+    nav { padding: 0 1.5rem; }
+    .nav-links { display: none; }
+    .hero { padding: 80px 1.5rem 60px; }
+    .hero-inner { grid-template-columns: 1fr; gap: 48px; }
+    .hero h1 { font-size: 44px; }
+    .hero-visual { display: none; }
+    .logos { padding: 28px 1.5rem; }
+    .logos-list { gap: 24px; }
+    .stats { padding: 48px 1.5rem; }
+    .stats-inner { grid-template-columns: repeat(2,1fr); }
+    .features { padding: 64px 1.5rem; }
+    .features-grid { grid-template-columns: 1fr; }
+    .section-title { font-size: 36px; }
+    .demo { padding: 48px 1.5rem 64px; }
+    .demo-inner { grid-template-columns: 1fr; gap: 48px; }
+    .how { padding: 64px 1.5rem; }
+    .how-grid { grid-template-columns: 1fr; gap: 40px; }
+    .how-step { padding: 0; }
+    .how-step:not(:last-child)::after { display: none; }
+    .cta { padding: 64px 1.5rem; }
+    .cta-card { padding: 56px 28px; }
+    .cta-card h2 { font-size: 36px; }
+    .footer-inner { flex-direction: column; gap: 20px; text-align: center; }
+    .footer-left { flex-direction: column; gap: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── NAV ────────────────────────────────────── -->
+<nav>
+  <div class="nav-inner">
+    <a class="logo" href="#">
+      <div class="logo-mark">FM</div>
+      <span class="logo-name">Fleet<span>Magnify</span></span>
+    </a>
+    <div class="nav-links">
+      <a href="fleetmagnify-insights.html">Insights</a>
+      <a href="#">Testimonials</a>
+      <a href="#">Features</a>
+      <a href="#">Resources</a>
+      <a href="#">Pricing</a>
+    </div>
+    <div class="nav-actions">
+      <button class="btn-ghost">Sign in</button>
+      <button class="btn-primary">Request Demo</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ── HERO ────────────────────────────────────── -->
+<section class="hero">
+  <div class="hero-glow"></div>
+  <div class="hero-grid"></div>
+  <div class="hero-inner">
+
+    <!-- Left text -->
+    <div>
+      <div class="hero-eyebrow"><div class="eyebrow-dot"></div> Enterprise Fleet Intelligence</div>
+      <h1>
+        Turn fleet data<br>
+        into <span class="accent">measurable</span><br>
+        <span class="muted">profit.</span>
+      </h1>
+      <p class="hero-desc">
+        FleetMagnify integrates telematics and fuel supplier data to surface true
+        operating costs, idle waste, emissions, and utilisation — asset by asset,
+        job by job.
+      </p>
+      <div class="hero-actions">
+        <button class="btn-hero-cta">Request Enterprise Demo</button>
+        <button class="btn-hero-outline">
+          <div class="play-circle">
+            <svg width="9" height="10" viewBox="0 0 9 10" fill="none">
+              <path d="M1.5 1.5L7.5 5L1.5 8.5V1.5Z" fill="#0EA57A"/>
+            </svg>
+          </div>
+          Watch 2-min overview
+        </button>
+      </div>
+      <div class="trust-row">
+        <div class="trust-item">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <circle cx="6.5" cy="6.5" r="5.5" stroke="#0EA57A" stroke-width="1.2"/>
+            <path d="M4 6.5L5.8 8.5L9 5" stroke="#0EA57A" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+          ISO 27001 Certified
+        </div>
+        <div class="trust-sep"></div>
+        <div class="trust-item">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <rect x="2" y="5.5" width="9" height="6" rx="1.5" stroke="#0EA57A" stroke-width="1.2"/>
+            <path d="M4.5 5.5V4A2 2 0 016.5 2v0A2 2 0 018.5 4V5.5" stroke="#0EA57A" stroke-width="1.2"/>
+          </svg>
+          Bank-level Encryption
+        </div>
+        <div class="trust-sep"></div>
+        <div class="trust-item">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M6.5 1.5L8 4.5L11.5 5L9 7.5L9.5 11L6.5 9.5L3.5 11L4 7.5L1.5 5L5 4.5L6.5 1.5Z" stroke="#0EA57A" stroke-width="1.1" stroke-linejoin="round"/>
+          </svg>
+          SOC 2 Type II
+        </div>
+      </div>
+    </div>
+
+    <!-- Right visual -->
+    <div class="hero-visual">
+      <div class="hero-img-wrap">
+        <img
+          src= "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?q=80&w=2000&auto=format&fit=crop"
+          alt="Heavy equipment fleet — excavator and truck on a construction site"
+        >
+        <div class="hero-img-overlay"></div>
+      </div>
+      <div class="float-card savings">
+        <div class="float-label">Monthly Cost Savings</div>
+        <div class="float-value">$21,840</div>
+        <div class="float-sub">avg. per fleet · 30-day rolling</div>
+        <div class="float-badge">
+          <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+            <path d="M4.5 7V2M4.5 2L2 4.5M4.5 2L7 4.5" stroke="#0EA57A" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          +18.2% vs last quarter
+        </div>
+      </div>
+      <div class="float-card idle">
+        <div class="float-label">Idle Reduction</div>
+        <div class="float-value">34%</div>
+        <div class="float-sub">avg. after 90 days</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── LOGO STRIP ───────────────────────────────── -->
+<div class="logos">
+  <div class="logos-inner">
+    <span class="logos-label">Trusted by</span>
+    <div class="logos-divider"></div>
+    <div class="logos-list">
+      <span>Caterpillar Fleet Co.</span>
+      <span>Komatsu Pacific</span>
+      <span>Volvo Construction</span>
+      <span>Liebherr Group</span>
+      <span>John Deere Fleet</span>
+      <span>Hitachi Mining</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── STATS ────────────────────────────────────── -->
+<div class="stats">
+  <div class="stats-inner">
+    <div class="stat">
+      <div class="stat-num">$<em>2.4</em>B</div>
+      <div class="stat-desc">Fleet operating costs<br>analysed to date</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num"><em>34</em>%</div>
+      <div class="stat-desc">Average idle reduction<br>within 90 days</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num"><em>8,200</em>+</div>
+      <div class="stat-desc">Assets actively<br>monitored globally</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num"><em>99.98</em>%</div>
+      <div class="stat-desc">Platform uptime<br>SLA guaranteed</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── FEATURES ─────────────────────────────────── -->
+<section class="features">
+  <div class="features-inner">
+    <div class="section-eyebrow"><div class="dash"></div> Analytics Modules</div>
+    <h2 class="section-title">Every cost. Every asset.<br>Every decision.</h2>
+    <p class="section-sub">
+      Five integrated intelligence modules — built for operators who demand
+      granular, job-level insight from every machine in their fleet.
+    </p>
+    <div class="features-grid">
+
+      <div class="feat-card">
+        <div class="feat-icon">⛽</div>
+        <h3>Fuel Analyst</h3>
+        <p>Combine fuel supplier invoices with telematics to precisely separate
+        travelling consumption from idle burn. Calculate true per-litre operating
+        rates per asset and per job — and reconcile them against supplier data.</p>
+        <div class="feat-tags">
+          <span class="feat-tag">Idle vs. Travel Split</span>
+          <span class="feat-tag">L/hr Operating Rate</span>
+          <span class="feat-tag">Supplier Reconciliation</span>
+        </div>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon">⏱</div>
+        <h3>Idle Cost Analyst</h3>
+        <p>Fuel is only part of idle cost. Quantify the true financial impact per
+        asset including accelerated depreciation, unnecessary service intervals,
+        and direct fuel waste — with daily and monthly breakdowns.</p>
+        <div class="feat-tags">
+          <span class="feat-tag">Depreciation Cost</span>
+          <span class="feat-tag">Service Interval Impact</span>
+          <span class="feat-tag">Fuel Waste</span>
+        </div>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon">🌍</div>
+        <h3>Emissions Intelligence</h3>
+        <p>Generate auditable CO₂ and greenhouse gas reports derived from actual
+        fuel consumption data. Export NGER-compliant reports for regulatory
+        obligations and ESG disclosure requirements.</p>
+        <div class="feat-tags">
+          <span class="feat-tag">CO₂ per Asset</span>
+          <span class="feat-tag">NGER Export</span>
+          <span class="feat-tag">ESG Reporting</span>
+        </div>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon">📊</div>
+        <h3>Utilisation Analyst</h3>
+        <p>Set your own utilisation benchmark per asset class and instantly see
+        which machines are underperforming. Identify standby costs dragging
+        down fleet ROI and make data-driven redeployment decisions.</p>
+        <div class="feat-tags">
+          <span class="feat-tag">Custom Benchmarks</span>
+          <span class="feat-tag">Job-level View</span>
+          <span class="feat-tag">ROI Alerts</span>
+        </div>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon">📋</div>
+        <h3>Reports Centre</h3>
+        <p>Scheduled or on-demand reports across all five modules. Deliver
+        executive summaries, operator-level detail, and client-ready cost
+        breakdowns — in PDF or CSV — in a single click.</p>
+        <div class="feat-tags">
+          <span class="feat-tag">Scheduled Delivery</span>
+          <span class="feat-tag">PDF &amp; CSV</span>
+          <span class="feat-tag">Client Branding</span>
+        </div>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon">🔗</div>
+        <h3>Telematics Integration</h3>
+        <p>Native connectors to leading telematics platforms and fuel card
+        providers. Zero manual data entry — your data flows in automatically,
+        validated and reconciled in real time across all modules.</p>
+        <div class="feat-tags">
+          <span class="feat-tag">API Connectors</span>
+          <span class="feat-tag">Auto-reconcile</span>
+          <span class="feat-tag">Multi-provider</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── DEMO SECTION ──────────────────────────────── -->
+<section class="demo">
+  <div class="demo-inner">
+
+    <!-- Left text -->
+    <div>
+      <div class="section-eyebrow"><div class="dash"></div> Live Platform</div>
+      <h2 class="section-title" style="font-size:38px; letter-spacing:-1.8px;">
+        Built for the<br>asset level.
+      </h2>
+      <p class="section-sub" style="margin-bottom:36px;">
+        Filter by asset, date range, and time window. Drill into any machine,
+        on any job, in any period — across every module.
+      </p>
+      <div class="demo-checks">
+        <div class="demo-check">
+          <div class="check-dot">
+            <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+              <path d="M1 3.5L3.5 6.5L9 1" stroke="#0EA57A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <p><strong>Asset-level granularity</strong> — see the true cost of every machine, not just fleet averages.</p>
+        </div>
+        <div class="demo-check">
+          <div class="check-dot">
+            <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+              <path d="M1 3.5L3.5 6.5L9 1" stroke="#0EA57A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <p><strong>Job-site context</strong> — filter by project or site to attribute costs precisely where they belong.</p>
+        </div>
+        <div class="demo-check">
+          <div class="check-dot">
+            <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+              <path d="M1 3.5L3.5 6.5L9 1" stroke="#0EA57A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <p><strong>Flexible date ranges</strong> — daily, weekly, monthly, or custom windows across all five modules.</p>
+        </div>
+      </div>
+      <button class="btn-hero-cta">See a live walkthrough</button>
+    </div>
+
+    <!-- Dashboard mockup -->
+    <div class="dash-frame">
+      <div class="dash-bar">
+        <div class="traffic-dot"></div>
+        <div class="traffic-dot"></div>
+        <div class="traffic-dot"></div>
+        <span class="dash-bar-title">FleetMagnify — Idle Cost Analyst</span>
+      </div>
+      <div class="dash-body">
+        <div class="dash-header-row">
+          <span class="dash-asset-label">CAT 390F Excavator &middot; July 2026</span>
+          <span class="dash-site-badge">Site: Eastfield Project</span>
+        </div>
+        <div class="kpi-row">
+          <div class="kpi">
+            <div class="kpi-label">Idle Fuel Cost</div>
+            <div class="kpi-val green">$4,210</div>
+            <div class="kpi-delta neg">↑ $380 vs Jun</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Depreciation Cost</div>
+            <div class="kpi-val amber">$1,840</div>
+            <div class="kpi-delta neg">↑ 14% excess hours</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Service Impact</div>
+            <div class="kpi-val white">$620</div>
+            <div class="kpi-delta pos">↓ from last month</div>
+          </div>
+        </div>
+        <div class="chart-block">
+          <div class="chart-label">Daily Idle Hours — July 2026</div>
+          <div class="bars" id="dashBars"></div>
+          <div class="chart-foot">
+            <span>1 Jul</span><span>15 Jul</span><span>31 Jul</span>
+          </div>
+        </div>
+        <div class="dash-total-row">
+          <span class="dash-total-label">Total idle cost this month</span>
+          <span class="dash-total-val">$6,670</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── HOW IT WORKS ──────────────────────────────── -->
+<section class="how">
+  <div class="how-inner">
+    <div class="section-eyebrow"><div class="dash"></div> How It Works</div>
+    <h2 class="section-title">Up and running<br>in 48 hours.</h2>
+    <div class="how-grid">
+      <div class="how-step">
+        <div class="step-num">Step 01 &nbsp;— Connect</div>
+        <h3>Plug in your data sources</h3>
+        <p>Connect your telematics provider and fuel card accounts via our
+        pre-built API connectors. No spreadsheets, no manual uploads.
+        Data begins flowing immediately upon authorisation.</p>
+      </div>
+      <div class="how-step">
+        <div class="step-num">Step 02 &nbsp;— Configure</div>
+        <h3>Set your asset benchmarks</h3>
+        <p>Define your target utilisation rates, idle thresholds, and
+        depreciation parameters per asset class. FleetMagnify uses
+        these to calculate the cost impact specific to your operation.</p>
+      </div>
+      <div class="how-step">
+        <div class="step-num">Step 03 &nbsp;— Analyse</div>
+        <h3>Recover cost, every month</h3>
+        <p>Access live dashboards, schedule automated reports, and identify
+        the highest-cost assets on any job. Most clients recover their
+        subscription cost within the first billing cycle.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA ──────────────────────────────────────── -->
+<section class="cta">
+  <div class="cta-inner">
+    <div class="cta-card">
+      <div class="cta-glow"></div>
+      <h2>Ready to magnify<br>your fleet performance?</h2>
+      <p>
+        Join leading fleet operators already recovering thousands every month.<br>
+        Onboarding takes under 48 hours. No lock-in contracts.
+      </p>
+      <div class="cta-btns">
+        <button class="btn-cta-main">Request Enterprise Demo</button>
+        <button class="btn-cta-sec">Talk to Sales</button>
+      </div>
+      <p class="cta-note">No credit card required &nbsp;·&nbsp; 14-day free trial &nbsp;·&nbsp; Cancel anytime</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ────────────────────────────────────── -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">
+      <div class="footer-logo">
+        <div class="footer-logo-mark">FM</div>
+        <span class="footer-logo-name">FleetMagnify</span>
+      </div>
+      <span class="footer-copy">© 2026 FleetMagnify Pty Ltd. Enterprise Fleet Cost Intelligence.</span>
+    </div>
+    <div class="footer-links">
+      <a href="#">Privacy</a>
+      <a href="#">Terms</a>
+      <a href="#">Security</a>
+      <a href="#">Status</a>
+      <a href="#">Contact</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Generate bar chart for dashboard mockup
+  const container = document.getElementById('dashBars');
+  const vals = [2.1,3.4,1.8,4.2,3.9,2.6,4.8,3.1,2.9,4.5,3.7,2.3,1.9,4.1,3.6,2.8,4.7,3.3,2.5,4.0,3.8,2.2,4.4,3.5,2.7,4.3,3.0,2.4,4.6,3.2,2.0];
+  const flagged = [3,6,9,12,16,19,22,25,28]; // amber/red days
+  const high = [6,16,22,28]; // high-idle red days
+  const maxVal = Math.max(...vals);
+  vals.forEach(function(v, i) {
+    var bar = document.createElement('div');
+    bar.className = 'bar';
+    var pct = Math.round((v / maxVal) * 100);
+    var color = high.indexOf(i) !== -1 ? '#E24B4A' : flagged.indexOf(i) !== -1 ? '#EF9F27' : '#0EA57A';
+    bar.style.cssText = 'height:' + pct + '%;background:' + color + ';opacity:0.75;';
+    container.appendChild(bar);
+  });
+</script>
+
+</body>
+</html>

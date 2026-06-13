@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Insights | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #F0F2F5; overflow-x: hidden; }
+
+  /* ── NAV ── */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(8,12,18,0.90);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding: 0 3rem;
+  }
+  .nav-inner {
+    max-width: 1280px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 68px;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .logo-mark {
+    width: 36px; height: 36px; border-radius: 10px; background: #0EA57A;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 800; color: #080C12; letter-spacing: -0.5px;
+  }
+  .logo-name { font-size: 17px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
+  .logo-name span { color: #0EA57A; }
+  .nav-links { display: flex; align-items: center; gap: 32px; }
+  .nav-links a {
+    font-size: 13.5px; font-weight: 500; color: #9BA4B0;
+    text-decoration: none; transition: color 0.2s;
+  }
+  .nav-links a:hover { color: #F0F2F5; }
+  .nav-links a.active { color: #0EA57A; }
+  .nav-actions { display: flex; align-items: center; gap: 12px; }
+  .btn-ghost {
+    background: none; border: 1px solid rgba(255,255,255,0.10);
+    color: #C8D0DB; font-size: 13px; font-weight: 500;
+    padding: 8px 20px; border-radius: 8px; cursor: pointer;
+    transition: all 0.2s; font-family: inherit;
+  }
+  .btn-ghost:hover { border-color: rgba(255,255,255,0.25); color: #F0F2F5; }
+  .btn-primary {
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 13px; font-weight: 700; padding: 9px 22px;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-primary:hover { background: #0BC48E; }
+
+  /* ── PAGE HERO ── */
+  .page-hero {
+    padding: 96px 3rem 80px;
+    position: relative; overflow: hidden;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .page-hero-glow {
+    position: absolute; top: -60px; left: 50%; transform: translateX(-50%);
+    width: 700px; height: 400px; pointer-events: none;
+    background: radial-gradient(ellipse, rgba(14,165,122,0.06) 0%, transparent 70%);
+  }
+  .page-hero-grid {
+    position: absolute; inset: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+    background-size: 64px 64px;
+  }
+  .page-hero-inner {
+    max-width: 860px; margin: 0 auto; position: relative; z-index: 1;
+    text-align: center;
+  }
+  .page-eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(14,165,122,0.10); border: 1px solid rgba(14,165,122,0.25);
+    color: #0EA57A; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    padding: 5px 16px; border-radius: 100px; margin-bottom: 28px; text-transform: uppercase;
+  }
+  .page-hero h1 {
+    font-size: 58px; font-weight: 800; letter-spacing: -2.5px;
+    line-height: 1.04; color: #F0F2F5; margin-bottom: 22px;
+  }
+  .page-hero h1 span { color: #0EA57A; }
+  .page-hero-sub {
+    font-size: 17px; color: #5A6474; line-height: 1.7; max-width: 600px; margin: 0 auto;
+  }
+
+  /* ── ARTICLE LAYOUT ── */
+  .article-wrap { max-width: 1280px; margin: 0 auto; padding: 80px 3rem 100px; display: grid; grid-template-columns: 1fr 340px; gap: 72px; align-items: start; }
+
+  /* ── MAIN ARTICLE ── */
+  .article-body {}
+
+  /* Pull quote — the signature design element */
+  .pull-quote {
+    border-left: 3px solid #0EA57A;
+    padding: 24px 32px;
+    margin: 48px 0;
+    background: rgba(14,165,122,0.04);
+    border-radius: 0 12px 12px 0;
+    position: relative;
+  }
+  .pull-quote p {
+    font-size: 22px; font-weight: 600; color: #C8D0DB;
+    line-height: 1.5; letter-spacing: -0.4px; font-style: italic;
+  }
+  .pull-quote cite {
+    display: block; margin-top: 14px;
+    font-size: 12px; font-weight: 700; color: #0EA57A;
+    text-transform: uppercase; letter-spacing: 0.1em; font-style: normal;
+  }
+
+  /* Article sections */
+  .article-section { margin-bottom: 56px; }
+  .article-section:last-child { margin-bottom: 0; }
+
+  .section-kicker {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #0EA57A; margin-bottom: 14px;
+  }
+  .section-kicker .line { flex: 1; height: 1px; background: rgba(14,165,122,0.25); max-width: 40px; }
+
+  .article-section h2 {
+    font-size: 30px; font-weight: 800; letter-spacing: -1px;
+    color: #D8DFE8; line-height: 1.15; margin-bottom: 20px;
+  }
+  .article-section p {
+    font-size: 16px; color: #6B7785; line-height: 1.8; margin-bottom: 18px;
+  }
+  .article-section p:last-child { margin-bottom: 0; }
+  .article-section p strong { color: #B8C4D0; font-weight: 600; }
+
+  /* Highlight boxes */
+  .highlight-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 32px 0; }
+  .highlight-box {
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px; padding: 22px 24px; transition: border-color 0.2s;
+  }
+  .highlight-box:hover { border-color: rgba(14,165,122,0.2); }
+  .highlight-box-icon { font-size: 22px; margin-bottom: 12px; }
+  .highlight-box h4 { font-size: 15px; font-weight: 700; color: #C8D0DB; margin-bottom: 8px; letter-spacing: -0.2px; }
+  .highlight-box p { font-size: 13px; color: #4A5568; line-height: 1.6; margin: 0; }
+
+  /* Outcome stats strip */
+  .outcomes-strip {
+    background: rgba(14,165,122,0.05); border: 1px solid rgba(14,165,122,0.12);
+    border-radius: 16px; padding: 32px 36px; margin: 40px 0;
+    display: grid; grid-template-columns: repeat(4,1fr); gap: 24px;
+  }
+  .outcome { text-align: center; }
+  .outcome-val { font-size: 36px; font-weight: 800; letter-spacing: -1.5px; color: #0EA57A; line-height: 1; margin-bottom: 6px; }
+  .outcome-label { font-size: 12px; color: #4A5568; line-height: 1.4; }
+
+  /* ── SIDEBAR ── */
+  .sidebar { position: sticky; top: 96px; }
+
+  .sidebar-card {
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px; padding: 28px; margin-bottom: 20px;
+  }
+  .sidebar-card-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #3A4A5C; margin-bottom: 20px;
+    padding-bottom: 14px; border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+
+  /* Module list in sidebar */
+  .module-list { display: flex; flex-direction: column; gap: 4px; }
+  .module-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 14px; border-radius: 10px;
+    transition: background 0.2s; cursor: default; text-decoration: none;
+  }
+  .module-item:hover { background: rgba(255,255,255,0.04); }
+  .module-item.active { background: rgba(14,165,122,0.08); }
+  .module-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    background: rgba(255,255,255,0.12);
+  }
+  .module-item.active .module-dot { background: #0EA57A; }
+  .module-item-name { font-size: 13.5px; font-weight: 500; color: #6B7785; }
+  .module-item.active .module-item-name { color: #C8D0DB; }
+  .module-item-tag {
+    margin-left: auto; font-size: 10px; font-weight: 600;
+    color: #0EA57A; background: rgba(14,165,122,0.10);
+    border: 1px solid rgba(14,165,122,0.18);
+    padding: 2px 8px; border-radius: 100px;
+  }
+
+  /* Key stats in sidebar */
+  .stat-list { display: flex; flex-direction: column; gap: 16px; }
+  .stat-row { display: flex; align-items: center; justify-content: space-between; }
+  .stat-row-label { font-size: 13px; color: #4A5568; }
+  .stat-row-val { font-size: 15px; font-weight: 700; color: #0EA57A; }
+
+  /* CTA card in sidebar */
+  .sidebar-cta {
+    background: rgba(14,165,122,0.07); border: 1px solid rgba(14,165,122,0.18);
+    border-radius: 16px; padding: 28px; text-align: center;
+  }
+  .sidebar-cta h4 { font-size: 16px; font-weight: 700; color: #D8DFE8; margin-bottom: 10px; letter-spacing: -0.3px; }
+  .sidebar-cta p { font-size: 13px; color: #4A5568; line-height: 1.55; margin-bottom: 20px; }
+  .sidebar-cta-btn {
+    display: block; width: 100%;
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 13px; font-weight: 700; padding: 11px 0;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .sidebar-cta-btn:hover { background: #0BC48E; }
+  .sidebar-cta-link {
+    display: block; margin-top: 12px;
+    font-size: 12px; color: #3A4A5C; text-decoration: none; transition: color 0.2s;
+  }
+  .sidebar-cta-link:hover { color: #6B7785; }
+
+  /* ── RELATED ARTICLES ── */
+  .related { padding: 0 3rem 100px; }
+  .related-inner { max-width: 1280px; margin: 0 auto; }
+  .related-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #3A4A5C; margin-bottom: 28px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .related-title::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.05); }
+  .related-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; }
+  .related-card {
+    background: rgba(255,255,255,0.018); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px; padding: 28px; transition: border-color 0.2s; cursor: default;
+  }
+  .related-card:hover { border-color: rgba(14,165,122,0.2); }
+  .related-tag {
+    display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #0EA57A;
+    background: rgba(14,165,122,0.08); border: 1px solid rgba(14,165,122,0.16);
+    padding: 3px 10px; border-radius: 100px; margin-bottom: 16px;
+  }
+  .related-card h3 { font-size: 16px; font-weight: 700; color: #C8D0DB; margin-bottom: 10px; letter-spacing: -0.2px; line-height: 1.3; }
+  .related-card p { font-size: 13px; color: #4A5568; line-height: 1.6; }
+  .related-card-foot { margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; }
+  .related-read { font-size: 12px; color: #3A4A5C; }
+  .related-arrow { font-size: 16px; color: #0EA57A; }
+
+  /* ── CTA BANNER ── */
+  .cta-banner { padding: 0 3rem 100px; }
+  .cta-banner-inner { max-width: 1280px; margin: 0 auto; }
+  .cta-banner-card {
+    background: rgba(14,165,122,0.055); border: 1px solid rgba(14,165,122,0.14);
+    border-radius: 20px; padding: 60px 72px;
+    display: flex; align-items: center; justify-content: space-between; gap: 48px;
+  }
+  .cta-banner-text h2 { font-size: 32px; font-weight: 800; letter-spacing: -1.2px; color: #F0F2F5; margin-bottom: 10px; }
+  .cta-banner-text p { font-size: 15px; color: #5A6474; line-height: 1.6; }
+  .cta-banner-btns { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .btn-banner-main {
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 14px; font-weight: 700; padding: 13px 28px;
+    border-radius: 9px; cursor: pointer; transition: all 0.2s; font-family: inherit; white-space: nowrap;
+  }
+  .btn-banner-main:hover { background: #0BC48E; }
+  .btn-banner-sec {
+    background: none; border: 1px solid rgba(255,255,255,0.10);
+    color: #9BA4B0; font-size: 14px; font-weight: 500; padding: 13px 24px;
+    border-radius: 9px; cursor: pointer; transition: all 0.2s; font-family: inherit; white-space: nowrap;
+  }
+  .btn-banner-sec:hover { border-color: rgba(255,255,255,0.22); color: #F0F2F5; }
+
+  /* ── FOOTER ── */
+  footer { border-top: 1px solid rgba(255,255,255,0.04); padding: 44px 3rem; }
+  .footer-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+  .footer-left { display: flex; align-items: center; gap: 24px; }
+  .footer-logo { display: flex; align-items: center; gap: 9px; }
+  .footer-logo-mark {
+    width: 28px; height: 28px; border-radius: 8px; background: #0EA57A;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 800; color: #080C12;
+  }
+  .footer-logo-name { font-size: 14px; font-weight: 700; color: #3A4A5C; }
+  .footer-copy { font-size: 12px; color: #253040; }
+  .footer-links { display: flex; gap: 24px; }
+  .footer-links a { font-size: 12px; color: #253040; text-decoration: none; transition: color 0.2s; }
+  .footer-links a:hover { color: #5A6474; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 1024px) {
+    .article-wrap { grid-template-columns: 1fr; gap: 48px; }
+    .sidebar { position: static; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .sidebar-cta { grid-column: span 2; }
+    .outcomes-strip { grid-template-columns: repeat(2,1fr); }
+  }
+  @media (max-width: 768px) {
+    nav { padding: 0 1.5rem; }
+    .nav-links { display: none; }
+    .page-hero { padding: 72px 1.5rem 60px; }
+    .page-hero h1 { font-size: 38px; }
+    .article-wrap { padding: 48px 1.5rem 64px; }
+    .highlight-row { grid-template-columns: 1fr; }
+    .outcomes-strip { grid-template-columns: repeat(2,1fr); padding: 24px; }
+    .sidebar { grid-template-columns: 1fr; }
+    .sidebar-cta { grid-column: span 1; }
+    .related { padding: 0 1.5rem 64px; }
+    .related-grid { grid-template-columns: 1fr; }
+    .cta-banner { padding: 0 1.5rem 64px; }
+    .cta-banner-card { flex-direction: column; padding: 40px 28px; gap: 28px; }
+    .footer-inner { flex-direction: column; gap: 18px; }
+    .footer-left { flex-direction: column; gap: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── NAV ── -->
+<nav>
+  <div class="nav-inner">
+    <a class="logo" href="fleetmagnify-landing.html">
+      <div class="logo-mark">FM</div>
+      <span class="logo-name">Fleet<span>Magnify</span></span>
+    </a>
+    <div class="nav-links">
+      <a href="#" class="active">Insights</a>
+      <a href="#">Solutions</a>
+      <a href="#">Features</a>
+      <a href="#">Resources</a>
+      <a href="#">Pricing</a>
+    </div>
+    <div class="nav-actions">
+      <button class="btn-ghost">Sign in</button>
+      <button class="btn-primary">Request Demo</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ── PAGE HERO ── -->
+<div class="page-hero">
+  <div class="page-hero-glow"></div>
+  <div class="page-hero-grid"></div>
+  <div class="page-hero-inner">
+    <div class="page-eyebrow">Fleet Intelligence Insights</div>
+    <h1>Beyond surface-level<br><span>reporting.</span></h1>
+    <p class="page-hero-sub">
+      Understanding how FleetMagnify's integrated modules work together is the first step
+      toward recovering cost, reducing waste, and building a defensible operational strategy.
+    </p>
+  </div>
+</div>
+
+<!-- ── ARTICLE + SIDEBAR ── -->
+<div class="article-wrap">
+
+  <!-- MAIN ARTICLE -->
+  <article class="article-body">
+
+    <!-- Section 1 -->
+    <div class="article-section">
+      <div class="section-kicker"><div class="line"></div> The case for deeper insight</div>
+      <h2>Why surface-level reporting is no longer enough</h2>
+      <p>
+        In today's competitive fleet operations environment, surface-level reporting is no longer enough.
+        Gaining an in-depth understanding of FleetMagnify's integrated solutions empowers fleet managers
+        and executives to move beyond basic tracking and uncover the <strong>true cost drivers hidden within
+        their operations.</strong>
+      </p>
+      <p>
+        By combining high-resolution telematics data with fuel supplier records, our platform delivers
+        granular visibility into every aspect of fleet performance — from actual fuel consumption rates
+        during travel versus idle time, to the full financial impact of inefficient asset utilisation.
+      </p>
+    </div>
+
+    <!-- Pull quote -->
+    <div class="pull-quote">
+      <p>"The true cost of running a fleet is almost never what the fuel invoices suggest. The gap between what you're billed and what you're burning is where FleetMagnify operates."</p>
+      <cite>FleetMagnify — Platform Intelligence Brief</cite>
+    </div>
+
+    <!-- Section 2 -->
+    <div class="article-section">
+      <div class="section-kicker"><div class="line"></div> Module integration</div>
+      <h2>Modules that work together, not in isolation</h2>
+      <p>
+        This depth of insight is transformative. The <strong>Fuel Analyst</strong> and <strong>Idle Cost Analyst</strong>
+        modules don't just show you where fuel is being used — they quantify the real economic cost of idling
+        by factoring in fuel waste, accelerated depreciation, and unnecessary maintenance cycles.
+      </p>
+
+      <div class="highlight-row">
+        <div class="highlight-box">
+          <div class="highlight-box-icon">⛽</div>
+          <h4>Fuel Analyst</h4>
+          <p>Separates travelling consumption from idle burn using telematics, then reconciles both against fuel supplier invoices for a verified cost picture.</p>
+        </div>
+        <div class="highlight-box">
+          <div class="highlight-box-icon">⏱</div>
+          <h4>Idle Cost Analyst</h4>
+          <p>Quantifies the true cost of idle per asset — fuel, accelerated depreciation, and unnecessary service intervals — not just hours on a clock.</p>
+        </div>
+        <div class="highlight-box">
+          <div class="highlight-box-icon">🌍</div>
+          <h4>Emissions Intelligence</h4>
+          <p>Translates actual fuel consumption into auditable CO₂ figures, NGER-compliant reports, and ESG disclosures — derived from real data, not estimates.</p>
+        </div>
+        <div class="highlight-box">
+          <div class="highlight-box-icon">📊</div>
+          <h4>Utilisation Analyst</h4>
+          <p>Measures every asset against your own benchmark, not an industry average. Identifies which machines are dragging down fleet ROI and why.</p>
+        </div>
+      </div>
+
+      <p>
+        Similarly, the <strong>Emissions Intelligence</strong> and <strong>Utilisation Analyst</strong> pages translate raw data
+        into actionable intelligence, helping you meet increasingly stringent environmental regulations
+        while optimising asset productivity against your own benchmarks. These aren't isolated reports;
+        they work together to create a complete picture of each asset's contribution to your bottom line.
+      </p>
+    </div>
+
+    <!-- Outcome stats -->
+    <div class="outcomes-strip">
+      <div class="outcome">
+        <div class="outcome-val">34%</div>
+        <div class="outcome-label">Average idle reduction within 90 days</div>
+      </div>
+      <div class="outcome">
+        <div class="outcome-val">$21K</div>
+        <div class="outcome-label">Average monthly savings per fleet</div>
+      </div>
+      <div class="outcome">
+        <div class="outcome-val">18%</div>
+        <div class="outcome-label">Extended asset lifespan on average</div>
+      </div>
+      <div class="outcome">
+        <div class="outcome-val">48hr</div>
+        <div class="outcome-label">From sign-up to live data</div>
+      </div>
+    </div>
+
+    <!-- Section 3 -->
+    <div class="article-section">
+      <div class="section-kicker"><div class="line"></div> Strategic outcomes</div>
+      <h2>A strategic advantage, not just a reporting tool</h2>
+      <p>
+        Organisations that fully leverage these insights consistently achieve significant results:
+        substantial reductions in operating costs, extended asset lifespans, improved sustainability
+        performance, and more informed capital allocation decisions.
+      </p>
+      <p>
+        In an era where every percentage point of efficiency matters, an in-depth understanding of
+        FleetMagnify's capabilities becomes a <strong>strategic advantage</strong> — turning complex fleet data into
+        clear, defensible strategies that drive both immediate savings and long-term profitability.
+      </p>
+      <p>
+        The organisations seeing the greatest returns are those that move past a single module and
+        treat the platform as a unified intelligence layer across their entire operation. When fuel
+        reconciliation data feeds into depreciation modelling, and utilisation benchmarks inform
+        procurement decisions, the compounding effect on cost recovery is significant — and measurable
+        within a single billing cycle.
+      </p>
+    </div>
+
+  </article>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+
+    <!-- Modules nav -->
+    <div class="sidebar-card">
+      <div class="sidebar-card-title">Platform Modules</div>
+      <div class="module-list">
+        <a class="module-item" href="#">
+          <div class="module-dot"></div>
+          <span class="module-item-name">Fuel Analyst</span>
+        </a>
+        <a class="module-item" href="#">
+          <div class="module-dot"></div>
+          <span class="module-item-name">Idle Cost Analyst</span>
+        </a>
+        <a class="module-item" href="#">
+          <div class="module-dot"></div>
+          <span class="module-item-name">Emissions Intelligence</span>
+        </a>
+        <a class="module-item" href="#">
+          <div class="module-dot"></div>
+          <span class="module-item-name">Utilisation Analyst</span>
+        </a>
+        <a class="module-item active" href="#">
+          <div class="module-dot"></div>
+          <span class="module-item-name">Insights</span>
+          <span class="module-item-tag">You are here</span>
+        </a>
+        <a class="module-item" href="#">
+          <div class="module-dot"></div>
+          <span class="module-item-name">Reports Centre</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Key stats -->
+    <div class="sidebar-card">
+      <div class="sidebar-card-title">Platform at a Glance</div>
+      <div class="stat-list">
+        <div class="stat-row">
+          <span class="stat-row-label">Assets monitored</span>
+          <span class="stat-row-val">8,200+</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-row-label">Cost analysed</span>
+          <span class="stat-row-val">$2.4B</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-row-label">Avg. idle reduction</span>
+          <span class="stat-row-val">34%</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-row-label">Platform uptime</span>
+          <span class="stat-row-val">99.98%</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-row-label">Onboarding time</span>
+          <span class="stat-row-val">&lt; 48 hrs</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <div class="sidebar-cta">
+      <h4>See it with your own data</h4>
+      <p>Request a live walkthrough using your fleet's actual telematics and fuel records.</p>
+      <button class="sidebar-cta-btn">Request a Demo</button>
+      <a href="#" class="sidebar-cta-link">Talk to Sales instead →</a>
+    </div>
+
+  </aside>
+</div>
+
+<!-- ── RELATED ARTICLES ── -->
+<div class="related">
+  <div class="related-inner">
+    <div class="related-title">Related reading</div>
+    <div class="related-grid">
+
+      <div class="related-card">
+        <span class="related-tag">Fuel Management</span>
+        <h3>The hidden cost of idle: why hours on a clock don't tell the full story</h3>
+        <p>Idle time costs extend well beyond fuel. Understand how depreciation and servicing cycles compound the true financial impact on your fleet.</p>
+        <div class="related-card-foot">
+          <span class="related-read">6 min read</span>
+          <span class="related-arrow">→</span>
+        </div>
+      </div>
+
+      <div class="related-card">
+        <span class="related-tag">Emissions</span>
+        <h3>Meeting NGER obligations without the manual effort</h3>
+        <p>How FleetMagnify's Emissions Intelligence module automatically generates auditable CO₂ reports from live fuel consumption data.</p>
+        <div class="related-card-foot">
+          <span class="related-read">4 min read</span>
+          <span class="related-arrow">→</span>
+        </div>
+      </div>
+
+      <div class="related-card">
+        <span class="related-tag">Utilisation</span>
+        <h3>Setting the right utilisation benchmark for your asset class</h3>
+        <p>Industry averages are a poor proxy for your operation. Learn how to configure meaningful benchmarks that surface real underperformance.</p>
+        <div class="related-card-foot">
+          <span class="related-read">5 min read</span>
+          <span class="related-arrow">→</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── CTA BANNER ── -->
+<div class="cta-banner">
+  <div class="cta-banner-inner">
+    <div class="cta-banner-card">
+      <div class="cta-banner-text">
+        <h2>Ready to move beyond surface-level reporting?</h2>
+        <p>See FleetMagnify working with your own telematics and fuel data — onboarding takes under 48 hours.</p>
+      </div>
+      <div class="cta-banner-btns">
+        <button class="btn-banner-main">Request Enterprise Demo</button>
+        <button class="btn-banner-sec">Talk to Sales</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">
+      <div class="footer-logo">
+        <div class="footer-logo-mark">FM</div>
+        <span class="footer-logo-name">FleetMagnify</span>
+      </div>
+      <span class="footer-copy">© 2026 FleetMagnify Pty Ltd. Enterprise Fleet Cost Intelligence.</span>
+    </div>
+    <div class="footer-links">
+      <a href="#">Privacy</a>
+      <a href="#">Terms</a>
+      <a href="#">Security</a>
+      <a href="#">Status</a>
+      <a href="#">Contact</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
