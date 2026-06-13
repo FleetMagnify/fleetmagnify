@@ -394,6 +394,102 @@
   .footer-links a { font-size: 12px; color: #253040; text-decoration: none; transition: color 0.2s; }
   .footer-links a:hover { color: #5A6474; }
 
+  /* ── DEMO MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(4,8,14,0.82);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 1.5rem;
+    opacity: 0; visibility: hidden;
+    transition: opacity 0.25s, visibility 0.25s;
+  }
+  .modal-overlay.is-open { opacity: 1; visibility: visible; }
+  .modal {
+    width: 100%; max-width: 480px;
+    background: rgba(10,16,26,0.98);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 20px; padding: 40px 36px 36px;
+    position: relative;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.55);
+    transform: translateY(12px) scale(0.98);
+    transition: transform 0.25s;
+  }
+  .modal-overlay.is-open .modal { transform: translateY(0) scale(1); }
+  .modal-close {
+    position: absolute; top: 16px; right: 16px;
+    width: 32px; height: 32px; border-radius: 8px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    color: #6B7785; font-size: 20px; line-height: 1;
+    cursor: pointer; transition: all 0.2s; font-family: inherit;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal-close:hover { color: #F0F2F5; border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.07); }
+  .modal-eyebrow {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #0EA57A; margin-bottom: 14px;
+  }
+  .modal-eyebrow .dash { width: 14px; height: 1.5px; background: #0EA57A; border-radius: 2px; }
+  .modal h2 {
+    font-size: 26px; font-weight: 800; letter-spacing: -1px;
+    color: #F0F2F5; margin-bottom: 8px;
+  }
+  .modal-sub { font-size: 14px; color: #5A6474; line-height: 1.6; margin-bottom: 28px; }
+  .form-group { margin-bottom: 18px; }
+  .form-group label {
+    display: block; font-size: 12px; font-weight: 600;
+    color: #9BA4B0; margin-bottom: 7px; letter-spacing: 0.02em;
+  }
+  .form-group input,
+  .form-group select {
+    width: 100%; padding: 12px 14px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 10px; color: #F0F2F5;
+    font-size: 14px; font-family: inherit;
+    transition: border-color 0.2s, background 0.2s;
+    outline: none;
+  }
+  .form-group input::placeholder { color: #3D4F62; }
+  .form-group select { cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%234A5568' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center;
+    padding-right: 36px;
+  }
+  .form-group select option { background: #0A101A; color: #F0F2F5; }
+  .form-group input:focus,
+  .form-group select:focus {
+    border-color: rgba(14,165,122,0.45);
+    background: rgba(14,165,122,0.04);
+  }
+  .form-group input:invalid:not(:placeholder-shown) { border-color: rgba(226,75,74,0.5); }
+  .btn-modal-submit {
+    width: 100%; margin-top: 8px;
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 15px; font-weight: 700; padding: 14px 24px;
+    border-radius: 10px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-modal-submit:hover:not(:disabled) { background: #0BC48E; transform: translateY(-1px); }
+  .btn-modal-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+  .modal-thanks { text-align: center; padding: 12px 0 8px; }
+  .thanks-icon {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: rgba(14,165,122,0.12); border: 1px solid rgba(14,165,122,0.28);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 22px;
+  }
+  .modal-thanks h2 { margin-bottom: 12px; }
+  .modal-thanks p { font-size: 15px; color: #5A6474; line-height: 1.65; margin-bottom: 28px; }
+  .btn-modal-done {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10);
+    color: #C8D0DB; font-size: 14px; font-weight: 500;
+    padding: 12px 28px; border-radius: 10px; cursor: pointer;
+    transition: all 0.2s; font-family: inherit;
+  }
+  .btn-modal-done:hover { border-color: rgba(255,255,255,0.22); color: #F0F2F5; }
+  .modal-view[hidden] { display: none; }
+
   /* ── RESPONSIVE ── */
   @media (max-width: 900px) {
     nav { padding: 0 1.5rem; }
@@ -420,6 +516,8 @@
     .cta-card h2 { font-size: 36px; }
     .footer-inner { flex-direction: column; gap: 20px; text-align: center; }
     .footer-left { flex-direction: column; gap: 8px; }
+    .modal { padding: 32px 24px 28px; }
+    .modal h2 { font-size: 22px; }
   }
 </style>
 </head>
@@ -441,7 +539,7 @@
     </div>
     <div class="nav-actions">
       <button class="btn-ghost">Sign in</button>
-      <button class="btn-primary">Request Demo</button>
+      <button class="btn-primary js-request-demo">Request Demo</button>
     </div>
   </div>
 </nav>
@@ -466,7 +564,7 @@
         job by job.
       </p>
       <div class="hero-actions">
-        <button class="btn-hero-cta">Request Enterprise Demo</button>
+        <button class="btn-hero-cta js-request-demo">Request Enterprise Demo</button>
         <button class="btn-hero-outline">
           <div class="play-circle">
             <svg width="9" height="10" viewBox="0 0 9 10" fill="none">
@@ -795,7 +893,7 @@
         Onboarding takes under 48 hours. No lock-in contracts.
       </p>
       <div class="cta-btns">
-        <button class="btn-cta-main">Request Enterprise Demo</button>
+        <button class="btn-cta-main js-request-demo">Request Enterprise Demo</button>
         <button class="btn-cta-sec">Talk to Sales</button>
       </div>
       <p class="cta-note">No credit card required &nbsp;·&nbsp; 14-day free trial &nbsp;·&nbsp; Cancel anytime</p>
@@ -823,6 +921,57 @@
   </div>
 </footer>
 
+<!-- ── DEMO REQUEST MODAL ───────────────────────── -->
+<div id="demo-modal" class="modal-overlay" aria-hidden="true">
+  <div class="modal" role="dialog" aria-labelledby="modal-title" aria-modal="true">
+    <button type="button" class="modal-close" id="modal-close" aria-label="Close">&times;</button>
+
+    <div id="modal-form-view" class="modal-view">
+      <div class="modal-eyebrow"><div class="dash"></div> Get Started</div>
+      <h2 id="modal-title">Request a Demo</h2>
+      <p class="modal-sub">Tell us about your fleet and we'll schedule a personalised walkthrough of FleetMagnify.</p>
+      <form id="demo-form" novalidate>
+        <div class="form-group">
+          <label for="full-name">Full Name</label>
+          <input type="text" id="full-name" name="fullName" placeholder="Jane Smith" required autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label for="company-name">Company Name</label>
+          <input type="text" id="company-name" name="companyName" placeholder="Acme Construction" required autocomplete="organization">
+        </div>
+        <div class="form-group">
+          <label for="email">Email Address</label>
+          <input type="email" id="email" name="email" placeholder="jane@company.com" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="fleet-size">Fleet Size</label>
+          <select id="fleet-size" name="fleetSize" required>
+            <option value="" disabled selected>Select fleet size</option>
+            <option value="1–10 assets">1–10 assets</option>
+            <option value="11–50 assets">11–50 assets</option>
+            <option value="51–200 assets">51–200 assets</option>
+            <option value="201–500 assets">201–500 assets</option>
+            <option value="500+ assets">500+ assets</option>
+          </select>
+        </div>
+        <button type="submit" class="btn-modal-submit" id="demo-submit">Submit Request</button>
+      </form>
+    </div>
+
+    <div id="modal-thanks-view" class="modal-view modal-thanks" hidden>
+      <div class="thanks-icon">
+        <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+          <circle cx="13" cy="13" r="11" stroke="#0EA57A" stroke-width="1.5"/>
+          <path d="M8 13L11.5 16.5L19 9" stroke="#0EA57A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h2>Thank you!</h2>
+      <p>We've received your demo request. A member of our team will be in touch within one business day.</p>
+      <button type="button" class="btn-modal-done" id="modal-done">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
   // Generate bar chart for dashboard mockup
   const container = document.getElementById('dashBars');
@@ -838,6 +987,90 @@
     bar.style.cssText = 'height:' + pct + '%;background:' + color + ';opacity:0.75;';
     container.appendChild(bar);
   });
+
+  // Demo request modal
+  (function() {
+    var modal = document.getElementById('demo-modal');
+    var formView = document.getElementById('modal-form-view');
+    var thanksView = document.getElementById('modal-thanks-view');
+    var form = document.getElementById('demo-form');
+    var submitBtn = document.getElementById('demo-submit');
+    var closeBtn = document.getElementById('modal-close');
+    var doneBtn = document.getElementById('modal-done');
+    var triggers = document.querySelectorAll('.js-request-demo');
+
+    function openModal() {
+      modal.classList.add('is-open');
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      formView.hidden = false;
+      thanksView.hidden = true;
+      form.reset();
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Submit Request';
+      setTimeout(function() {
+        document.getElementById('full-name').focus();
+      }, 100);
+    }
+
+    function closeModal() {
+      modal.classList.remove('is-open');
+      modal.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+    }
+
+    triggers.forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        openModal();
+      });
+    });
+
+    closeBtn.addEventListener('click', closeModal);
+    doneBtn.addEventListener('click', closeModal);
+
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) closeModal();
+    });
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && modal.classList.contains('is-open')) closeModal();
+    });
+
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting…';
+
+      var data = new FormData(form);
+
+      fetch('https://formspree.io/f/mlgkaeez', {
+        method: 'POST',
+        body: data,
+        headers: { 'Accept': 'application/json' }
+      })
+      .then(function(res) {
+        if (res.ok) {
+          formView.hidden = true;
+          thanksView.hidden = false;
+        } else {
+          return res.json().then(function(err) {
+            throw new Error(err.error || 'Submission failed');
+          });
+        }
+      })
+      .catch(function() {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Request';
+        alert('Something went wrong. Please try again or email us directly.');
+      });
+    });
+  })();
 </script>
 
 </body>
