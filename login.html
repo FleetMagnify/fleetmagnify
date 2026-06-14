@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign In | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #080C12; color: #F0F2F5;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+
+  .page-glow {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background: radial-gradient(ellipse 55% 45% at 50% 0%, rgba(14,165,122,0.08) 0%, transparent 70%);
+  }
+  .page-grid {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+    background-size: 64px 64px;
+  }
+
+  header {
+    position: relative; z-index: 1;
+    padding: 24px 3rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    background: rgba(8,12,18,0.90);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+  .header-inner {
+    max-width: 1280px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .logo-mark {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: #0EA57A;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 800; color: #080C12; letter-spacing: -0.5px;
+  }
+  .logo-name { font-size: 17px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
+  .logo-name span { color: #0EA57A; }
+  .back-link {
+    font-size: 13.5px; font-weight: 500; color: #9BA4B0;
+    text-decoration: none; transition: color 0.2s;
+  }
+  .back-link:hover { color: #F0F2F5; }
+
+  main {
+    position: relative; z-index: 1; flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    padding: 48px 1.5rem 64px;
+  }
+
+  .auth-card {
+    width: 100%; max-width: 460px;
+    background: rgba(10,16,26,0.96);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 20px; padding: 44px 40px 40px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.45);
+  }
+
+  .card-eyebrow {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #0EA57A; margin-bottom: 14px;
+  }
+  .card-eyebrow .dash { width: 14px; height: 1.5px; background: #0EA57A; border-radius: 2px; }
+  .auth-card h1 {
+    font-size: 28px; font-weight: 800; letter-spacing: -1.2px;
+    color: #F0F2F5; margin-bottom: 8px;
+  }
+  .card-sub {
+    font-size: 14px; color: #5A6474; line-height: 1.6; margin-bottom: 32px;
+  }
+
+  .form-error {
+    display: none;
+    background: rgba(226,75,74,0.10);
+    border: 1px solid rgba(226,75,74,0.28);
+    color: #F0A8A7;
+    font-size: 13.5px; line-height: 1.5;
+    padding: 12px 14px; border-radius: 10px; margin-bottom: 20px;
+  }
+  .form-error.is-visible { display: block; }
+
+  .form-success {
+    display: none;
+    background: rgba(14,165,122,0.10);
+    border: 1px solid rgba(14,165,122,0.28);
+    color: #7DD4B8;
+    font-size: 13.5px; line-height: 1.5;
+    padding: 12px 14px; border-radius: 10px; margin-bottom: 20px;
+  }
+  .form-success.is-visible { display: block; }
+
+  .form-group { margin-bottom: 18px; }
+  .form-group label {
+    display: block; font-size: 12px; font-weight: 600;
+    color: #9BA4B0; margin-bottom: 7px; letter-spacing: 0.02em;
+  }
+  .form-group input {
+    width: 100%; padding: 12px 14px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 10px; color: #F0F2F5;
+    font-size: 14px; font-family: inherit;
+    transition: border-color 0.2s, background 0.2s;
+    outline: none;
+  }
+  .form-group input::placeholder { color: #3D4F62; }
+  .form-group input:focus {
+    border-color: rgba(14,165,122,0.45);
+    background: rgba(14,165,122,0.04);
+  }
+
+  .password-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 7px;
+  }
+  .password-header label { margin-bottom: 0; }
+  .forgot-link {
+    font-size: 12px; font-weight: 500; color: #0EA57A;
+    text-decoration: none; transition: color 0.2s;
+  }
+  .forgot-link:hover { color: #0BC48E; }
+
+  .btn-submit {
+    width: 100%; margin-top: 8px;
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 15px; font-weight: 700; padding: 14px 24px;
+    border-radius: 10px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-submit:hover:not(:disabled) { background: #0BC48E; transform: translateY(-1px); }
+  .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  .auth-prompt {
+    text-align: center; margin-top: 26px;
+    font-size: 13.5px; color: #5A6474;
+  }
+  .auth-prompt a {
+    color: #0EA57A; font-weight: 600; text-decoration: none;
+    transition: color 0.2s;
+  }
+  .auth-prompt a:hover { color: #0BC48E; }
+
+  .view-panel[hidden] { display: none; }
+
+  @media (max-width: 600px) {
+    header { padding: 20px 1.5rem; }
+    .auth-card { padding: 32px 24px 28px; }
+    .auth-card h1 { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page-glow"></div>
+<div class="page-grid"></div>
+
+<header>
+  <div class="header-inner">
+    <a class="logo" href="index.html">
+      <div class="logo-mark">FM</div>
+      <span class="logo-name">Fleet<span>Magnify</span></span>
+    </a>
+    <a class="back-link" href="index.html">&larr; Back to home</a>
+  </div>
+</header>
+
+<main>
+  <div class="auth-card">
+    <div id="login-view" class="view-panel">
+      <div class="card-eyebrow"><div class="dash"></div> Welcome Back</div>
+      <h1>Sign in</h1>
+      <p class="card-sub">Access your fleet intelligence dashboard.</p>
+
+      <div id="form-error" class="form-error" role="alert"></div>
+
+      <form id="login-form" novalidate>
+        <div class="form-group">
+          <label for="email">Email Address</label>
+          <input type="email" id="email" name="email" placeholder="jane@company.com" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <div class="password-header">
+            <label for="password">Password</label>
+            <a href="#" class="forgot-link" id="forgot-link">Forgot password?</a>
+          </div>
+          <input type="password" id="password" name="password" placeholder="Your password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn-submit" id="submit-btn">Sign In</button>
+      </form>
+
+      <p class="auth-prompt">
+        Don't have an account? <a href="signup.html">Create one</a>
+      </p>
+    </div>
+
+    <div id="forgot-view" class="view-panel" hidden>
+      <div class="card-eyebrow"><div class="dash"></div> Reset Password</div>
+      <h1>Forgot password</h1>
+      <p class="card-sub">Enter your email and we'll send you a link to reset your password.</p>
+
+      <div id="forgot-error" class="form-error" role="alert"></div>
+      <div id="forgot-success" class="form-success" role="status"></div>
+
+      <form id="forgot-form" novalidate>
+        <div class="form-group">
+          <label for="reset-email">Email Address</label>
+          <input type="email" id="reset-email" name="resetEmail" placeholder="jane@company.com" required autocomplete="email">
+        </div>
+        <button type="submit" class="btn-submit" id="reset-btn">Send Reset Link</button>
+      </form>
+
+      <p class="auth-prompt">
+        <a href="#" id="back-to-login">Back to sign in</a>
+      </p>
+    </div>
+  </div>
+</main>
+
+<script src="js/supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  (function() {
+    var loginView = document.getElementById('login-view');
+    var forgotView = document.getElementById('forgot-view');
+    var errorEl = document.getElementById('form-error');
+    var forgotErrorEl = document.getElementById('forgot-error');
+    var forgotSuccessEl = document.getElementById('forgot-success');
+    var form = document.getElementById('login-form');
+    var forgotForm = document.getElementById('forgot-form');
+    var submitBtn = document.getElementById('submit-btn');
+    var resetBtn = document.getElementById('reset-btn');
+    var forgotLink = document.getElementById('forgot-link');
+    var backToLogin = document.getElementById('back-to-login');
+    var emailInput = document.getElementById('email');
+    var resetEmailInput = document.getElementById('reset-email');
+
+    if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY ||
+        window.SUPABASE_URL === 'YOUR_SUPABASE_URL') {
+      showError('Supabase is not configured. Add your project URL and anon key in js/supabase-config.js.');
+      submitBtn.disabled = true;
+      return;
+    }
+
+    var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+    function showError(el, message) {
+      el.textContent = message;
+      el.classList.add('is-visible');
+    }
+
+    function hideError(el) {
+      el.textContent = '';
+      el.classList.remove('is-visible');
+    }
+
+    function showForgotSuccess(message) {
+      forgotSuccessEl.textContent = message;
+      forgotSuccessEl.classList.add('is-visible');
+    }
+
+    function hideForgotSuccess() {
+      forgotSuccessEl.textContent = '';
+      forgotSuccessEl.classList.remove('is-visible');
+    }
+
+    function showLoginView() {
+      loginView.hidden = false;
+      forgotView.hidden = true;
+      hideError(errorEl);
+      hideError(forgotErrorEl);
+      hideForgotSuccess();
+    }
+
+    function showForgotView() {
+      loginView.hidden = true;
+      forgotView.hidden = false;
+      hideError(forgotErrorEl);
+      hideForgotSuccess();
+      resetEmailInput.value = emailInput.value.trim();
+      resetEmailInput.focus();
+    }
+
+    function friendlyLoginError(error) {
+      var msg = (error && error.message) ? error.message.toLowerCase() : '';
+
+      if (msg.indexOf('invalid login credentials') !== -1 ||
+          msg.indexOf('invalid email or password') !== -1) {
+        return 'Incorrect email or password.';
+      }
+      if (msg.indexOf('email not confirmed') !== -1) {
+        return 'Please confirm your email address before signing in.';
+      }
+      if (msg.indexOf('invalid email') !== -1) {
+        return 'Please enter a valid email address.';
+      }
+
+      return 'Incorrect email or password.';
+    }
+
+    forgotLink.addEventListener('click', function(e) {
+      e.preventDefault();
+      showForgotView();
+    });
+
+    backToLogin.addEventListener('click', function(e) {
+      e.preventDefault();
+      showLoginView();
+    });
+
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      hideError(errorEl);
+
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+
+      var email = emailInput.value.trim();
+      var password = document.getElementById('password').value;
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Signing in…';
+
+      try {
+        var result = await supabase.auth.signInWithPassword({
+          email: email,
+          password: password
+        });
+
+        if (result.error) {
+          throw result.error;
+        }
+
+        window.location.href = 'dashboard.html';
+      } catch (err) {
+        showError(errorEl, friendlyLoginError(err));
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Sign In';
+      }
+    });
+
+    forgotForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      hideError(forgotErrorEl);
+      hideForgotSuccess();
+
+      if (!forgotForm.checkValidity()) {
+        forgotForm.reportValidity();
+        return;
+      }
+
+      var email = resetEmailInput.value.trim();
+
+      resetBtn.disabled = true;
+      resetBtn.textContent = 'Sending…';
+
+      try {
+        var result = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: new URL('login.html', window.location.href).href
+        });
+
+        if (result.error) {
+          throw result.error;
+        }
+
+        showForgotSuccess('If an account exists for that email, a reset link has been sent.');
+        resetBtn.textContent = 'Send Reset Link';
+      } catch (err) {
+        showError(forgotErrorEl, err.message || 'Could not send reset link. Please try again.');
+        resetBtn.disabled = false;
+        resetBtn.textContent = 'Send Reset Link';
+      }
+    });
+  })();
+</script>
+
+</body>
+</html>
