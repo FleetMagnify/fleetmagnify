@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assets | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #F0F2F5; min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── LAYOUT ── */
+  .app-layout { display: flex; min-height: 100vh; }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 240px; flex-shrink: 0;
+    background: rgba(10,16,26,0.95);
+    border-right: 1px solid rgba(255,255,255,0.06);
+    display: flex; flex-direction: column;
+    position: fixed; top: 0; left: 0; height: 100vh; z-index: 50;
+  }
+  .sidebar-logo {
+    display: flex; align-items: center; gap: 10px;
+    padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.06);
+    text-decoration: none;
+  }
+  .logo-mark {
+    width: 34px; height: 34px; border-radius: 9px; background: #0EA57A;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; color: #080C12;
+  }
+  .logo-name { font-size: 16px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
+  .logo-name span { color: #0EA57A; }
+  .sidebar-nav { flex: 1; padding: 16px 12px; overflow-y: auto; }
+  .nav-section-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #2E3A4A; padding: 0 8px; margin-bottom: 8px; margin-top: 16px;
+  }
+  .nav-section-label:first-child { margin-top: 0; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px; border-radius: 8px; margin-bottom: 2px;
+    text-decoration: none; font-size: 13.5px; font-weight: 500; color: #6B7785;
+    transition: all 0.2s;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.04); color: #C8D0DB; }
+  .nav-item.active { background: rgba(14,165,122,0.10); color: #0EA57A; }
+  .nav-item-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+  .sidebar-footer { padding: 16px 12px; border-top: 1px solid rgba(255,255,255,0.06); }
+  .btn-signout {
+    width: 100%; display: flex; align-items: center; gap: 8px;
+    padding: 9px 10px; border-radius: 8px; border: none; background: none;
+    font-size: 13px; font-weight: 500; color: #4A5568; cursor: pointer;
+    transition: all 0.2s; font-family: inherit;
+  }
+  .btn-signout:hover { background: rgba(226,75,74,0.08); color: #F0A8A7; }
+
+  /* ── MAIN ── */
+  .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; }
+  .topbar {
+    padding: 20px 36px; border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(8,12,18,0.80); backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 40;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 12px; }
+  .breadcrumb { font-size: 13px; color: #3A4A5C; }
+  .breadcrumb a { color: #3A4A5C; text-decoration: none; }
+  .breadcrumb a:hover { color: #6B7785; }
+  .topbar-title { font-size: 18px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.4px; }
+  .user-pill {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 100px; padding: 6px 14px 6px 8px;
+  }
+  .user-avatar {
+    width: 26px; height: 26px; border-radius: 50%; background: rgba(14,165,122,0.20);
+    border: 1px solid rgba(14,165,122,0.30);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #0EA57A;
+  }
+  .user-name { font-size: 12.5px; font-weight: 500; color: #9BA4B0; }
+
+  /* ── PAGE CONTENT ── */
+  .page-content { padding: 36px; flex: 1; max-width: 1100px; }
+  .page-header { margin-bottom: 28px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .page-header-text {}
+  .page-eyebrow {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #0EA57A; margin-bottom: 8px;
+  }
+  .page-eyebrow .dash { width: 14px; height: 1.5px; background: #0EA57A; border-radius: 2px; }
+  .page-title { font-size: 28px; font-weight: 800; letter-spacing: -1px; color: #F0F2F5; margin-bottom: 6px; }
+  .page-sub { font-size: 14px; color: #5A6474; line-height: 1.55; }
+  .page-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .btn-secondary {
+    display: flex; align-items: center; gap: 7px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10);
+    color: #C8D0DB; font-size: 13px; font-weight: 500; padding: 9px 18px;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-secondary:hover { border-color: rgba(255,255,255,0.20); background: rgba(255,255,255,0.07); }
+  .btn-teal {
+    display: flex; align-items: center; gap: 7px;
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 13px; font-weight: 700; padding: 9px 18px;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-teal:hover { background: #0BC48E; }
+
+  /* ── STATS ROW ── */
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 28px; }
+  .stat-card {
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px; padding: 20px 22px;
+  }
+  .stat-card-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #3A4A5C; margin-bottom: 8px; }
+  .stat-card-value { font-size: 32px; font-weight: 800; letter-spacing: -1.2px; color: #0EA57A; line-height: 1; }
+  .stat-card-sub { font-size: 11px; color: #3A4A5C; margin-top: 4px; }
+
+  /* ── UPLOAD CARD ── */
+  .upload-card {
+    background: rgba(14,165,122,0.04); border: 1px solid rgba(14,165,122,0.14);
+    border-radius: 14px; padding: 24px 28px; margin-bottom: 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  }
+  .upload-card-text h3 { font-size: 15px; font-weight: 700; color: #C8D0DB; margin-bottom: 5px; }
+  .upload-card-text p { font-size: 13px; color: #4A5568; line-height: 1.5; }
+  .upload-card-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .upload-zone {
+    display: none;
+    border: 1.5px dashed rgba(14,165,122,0.30);
+    border-radius: 10px; padding: 20px;
+    text-align: center; margin-top: 16px;
+    background: rgba(14,165,122,0.02);
+    transition: all 0.2s;
+  }
+  .upload-zone.visible { display: block; }
+  .upload-zone.drag-over { border-color: #0EA57A; background: rgba(14,165,122,0.06); }
+  .upload-zone input[type="file"] { display: none; }
+  .upload-zone label {
+    cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  .upload-icon { font-size: 28px; }
+  .upload-zone-text { font-size: 13px; color: #5A6474; }
+  .upload-zone-text strong { color: #0EA57A; }
+  .upload-preview {
+    display: none; margin-top: 14px;
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px; overflow: hidden;
+  }
+  .upload-preview.visible { display: block; }
+  .upload-preview-title {
+    font-size: 11px; font-weight: 700; color: #3A4A5C; letter-spacing: 0.08em;
+    text-transform: uppercase; padding: 10px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .preview-table { width: 100%; border-collapse: collapse; }
+  .preview-table th, .preview-table td {
+    padding: 8px 12px; text-align: left; font-size: 11.5px;
+  }
+  .preview-table th { color: #3A4A5C; font-weight: 600; }
+  .preview-table td { color: #6B7785; border-top: 1px solid rgba(255,255,255,0.04); }
+  .upload-actions { padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.05); }
+  .upload-count { font-size: 12px; color: #4A5568; }
+
+  /* ── ASSETS TABLE ── */
+  .table-card {
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px; overflow: hidden;
+  }
+  .table-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .table-title { font-size: 14px; font-weight: 700; color: #C8D0DB; letter-spacing: -0.2px; }
+  .table-count { font-size: 12px; color: #3A4A5C; }
+  .search-box {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 8px; padding: 7px 12px;
+  }
+  .search-box input {
+    background: none; border: none; outline: none;
+    font-size: 13px; color: #C8D0DB; font-family: inherit; width: 200px;
+  }
+  .search-box input::placeholder { color: #2E3A4A; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    padding: 11px 16px; text-align: left;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em;
+    text-transform: uppercase; color: #2E3A4A;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.01);
+  }
+  tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  tbody td { padding: 14px 16px; font-size: 13.5px; color: #9BA4B0; vertical-align: middle; }
+  .asset-name-cell { font-weight: 600; color: #D8DFE8; }
+  .asset-type-badge {
+    display: inline-flex; align-items: center;
+    font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 100px;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); color: #6B7785;
+  }
+  .btn-delete {
+    background: none; border: 1px solid transparent; color: #3A4A5C;
+    font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 6px;
+    cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-delete:hover { border-color: rgba(226,75,74,0.3); color: #F0A8A7; background: rgba(226,75,74,0.08); }
+
+  /* ── EMPTY STATE ── */
+  .empty-state {
+    padding: 60px 24px; text-align: center;
+  }
+  .empty-icon { font-size: 40px; margin-bottom: 16px; opacity: 0.4; }
+  .empty-title { font-size: 16px; font-weight: 700; color: #4A5568; margin-bottom: 8px; }
+  .empty-sub { font-size: 13.5px; color: #2E3A4A; line-height: 1.6; margin-bottom: 24px; }
+
+  /* ── LOADING ── */
+  .loading-row td { text-align: center; padding: 40px; color: #2E3A4A; font-size: 13px; }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 28px; right: 28px; z-index: 200;
+    background: rgba(10,16,26,0.98); border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 12px; padding: 14px 20px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13.5px; color: #C8D0DB;
+    transform: translateY(80px); opacity: 0;
+    transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    pointer-events: none; max-width: 340px;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; pointer-events: auto; }
+  .toast.success { border-color: rgba(14,165,122,0.3); }
+  .toast.error { border-color: rgba(226,75,74,0.3); }
+  .toast-icon { font-size: 16px; flex-shrink: 0; }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center; padding: 24px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: #0A101A; border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 18px; padding: 36px; width: 100%; max-width: 480px;
+    box-shadow: 0 32px 80px rgba(0,0,0,0.5);
+  }
+  .modal-eyebrow {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #0EA57A; margin-bottom: 10px;
+  }
+  .modal h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.8px; color: #F0F2F5; margin-bottom: 6px; }
+  .modal-sub { font-size: 13.5px; color: #5A6474; margin-bottom: 28px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 12px; font-weight: 600; color: #9BA4B0; margin-bottom: 6px; }
+  .form-group input, .form-group select {
+    width: 100%; padding: 11px 14px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 9px; color: #F0F2F5; font-size: 13.5px; font-family: inherit;
+    outline: none; transition: border-color 0.2s;
+  }
+  .form-group input::placeholder { color: #2E3A4A; }
+  .form-group input:focus, .form-group select:focus { border-color: rgba(14,165,122,0.45); }
+  .form-group select {
+    cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%234A5568' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px;
+  }
+  .form-group select option { background: #0A101A; color: #F0F2F5; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .modal-actions { display: flex; align-items: center; gap: 10px; margin-top: 24px; }
+  .btn-cancel {
+    flex: 1; background: none; border: 1px solid rgba(255,255,255,0.09);
+    color: #6B7785; font-size: 14px; font-weight: 500; padding: 12px;
+    border-radius: 9px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-cancel:hover { border-color: rgba(255,255,255,0.18); color: #C8D0DB; }
+  .btn-save {
+    flex: 2; background: #0EA57A; border: none; color: #080C12;
+    font-size: 14px; font-weight: 700; padding: 12px;
+    border-radius: 9px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-save:hover:not(:disabled) { background: #0BC48E; }
+  .btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  /* ── CONFIRM MODAL ── */
+  .confirm-modal { max-width: 380px; text-align: center; }
+  .confirm-icon { font-size: 36px; margin-bottom: 14px; }
+  .confirm-modal h2 { font-size: 20px; }
+  .confirm-modal .modal-sub { margin-bottom: 20px; }
+  .btn-danger {
+    flex: 2; background: rgba(226,75,74,0.15); border: 1px solid rgba(226,75,74,0.30);
+    color: #F0A8A7; font-size: 14px; font-weight: 700; padding: 12px;
+    border-radius: 9px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-danger:hover { background: rgba(226,75,74,0.25); }
+
+  /* ── ERROR BOX ── */
+  .form-error {
+    display: none; background: rgba(226,75,74,0.10); border: 1px solid rgba(226,75,74,0.28);
+    color: #F0A8A7; font-size: 13px; line-height: 1.5; padding: 11px 14px;
+    border-radius: 9px; margin-bottom: 16px;
+  }
+  .form-error.visible { display: block; }
+
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
+    .page-content { padding: 20px; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .upload-card { flex-direction: column; align-items: flex-start; }
+    .form-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <a class="sidebar-logo" href="dashboard.html">
+      <div class="logo-mark">FM</div>
+      <span class="logo-name">Fleet<span>Magnify</span></span>
+    </a>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Analytics Modules</div>
+      <a class="nav-item" href="fuel-analyst.html">
+        <span class="nav-item-icon">⛽</span> Fuel Analyst
+      </a>
+      <a class="nav-item" href="idle-cost-analyst.html">
+        <span class="nav-item-icon">⏱</span> Idle Cost Analyst
+      </a>
+      <a class="nav-item" href="emissions.html">
+        <span class="nav-item-icon">🌍</span> Emissions Intelligence
+      </a>
+      <a class="nav-item" href="utilisation.html">
+        <span class="nav-item-icon">📊</span> Utilisation Analyst
+      </a>
+      <a class="nav-item" href="reports.html">
+        <span class="nav-item-icon">📋</span> Reports
+      </a>
+      <div class="nav-section-label">Fleet Management</div>
+      <a class="nav-item active" href="assets.html">
+        <span class="nav-item-icon">🚧</span> Assets
+      </a>
+      <a class="nav-item" href="upload.html">
+        <span class="nav-item-icon">📤</span> Upload Data
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="btn-signout" id="signout-btn">
+        <span>↩</span> Sign Out
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div>
+          <div class="breadcrumb"><a href="dashboard.html">Dashboard</a> / Assets</div>
+          <div class="topbar-title">Asset Management</div>
+        </div>
+      </div>
+      <div class="user-pill">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <span class="user-name" id="user-name">Loading...</span>
+      </div>
+    </div>
+
+    <div class="page-content">
+
+      <!-- PAGE HEADER -->
+      <div class="page-header">
+        <div class="page-header-text">
+          <div class="page-eyebrow"><div class="dash"></div> Fleet Assets</div>
+          <h1 class="page-title">Your Assets</h1>
+          <p class="page-sub">Manage your fleet. Add assets manually or import in bulk via CSV.</p>
+        </div>
+        <div class="page-actions">
+          <button class="btn-secondary" id="csv-toggle-btn">
+            <span>📤</span> Import CSV
+          </button>
+          <button class="btn-teal" id="add-asset-btn">
+            <span>+</span> Add Asset
+          </button>
+        </div>
+      </div>
+
+      <!-- STATS ROW -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-card-label">Total Assets</div>
+          <div class="stat-card-value" id="stat-total">—</div>
+          <div class="stat-card-sub">in your fleet</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">Asset Types</div>
+          <div class="stat-card-value" id="stat-types">—</div>
+          <div class="stat-card-sub">unique categories</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">Newest Asset</div>
+          <div class="stat-card-value" id="stat-newest" style="font-size:20px; margin-top:4px;">—</div>
+          <div class="stat-card-sub">most recently added</div>
+        </div>
+      </div>
+
+      <!-- CSV UPLOAD CARD -->
+      <div class="upload-card" id="csv-section" style="display:none; flex-direction: column;">
+        <div style="display:flex; align-items:center; justify-content:space-between; width:100%; gap:24px; flex-wrap:wrap;">
+          <div class="upload-card-text">
+            <h3>Bulk Import via CSV</h3>
+            <p>Download the template, fill in your asset details, then upload it to import your entire fleet at once.</p>
+          </div>
+          <div class="upload-card-actions">
+            <button class="btn-secondary" id="download-template-btn">⬇ Download Template</button>
+          </div>
+        </div>
+        <div class="upload-zone visible" id="upload-zone">
+          <input type="file" id="csv-file-input" accept=".csv">
+          <label for="csv-file-input">
+            <div class="upload-icon">📂</div>
+            <div class="upload-zone-text">
+              <strong>Click to browse</strong> or drag and drop your CSV file here
+            </div>
+            <div style="font-size:11px; color:#2E3A4A; margin-top:4px;">Accepts .csv files only</div>
+          </label>
+        </div>
+        <div class="upload-preview" id="upload-preview">
+          <div class="upload-preview-title">Preview — first 5 rows</div>
+          <div style="overflow-x:auto;">
+            <table class="preview-table" id="preview-table"></table>
+          </div>
+          <div class="upload-actions">
+            <span class="upload-count" id="upload-count"></span>
+            <div style="display:flex; gap:8px;">
+              <button class="btn-secondary" id="clear-csv-btn">Clear</button>
+              <button class="btn-teal" id="import-csv-btn">Import All Assets</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ASSETS TABLE -->
+      <div class="table-card">
+        <div class="table-header">
+          <div>
+            <div class="table-title">Fleet Assets</div>
+            <div class="table-count" id="table-count">Loading...</div>
+          </div>
+          <div class="search-box">
+            <span style="color:#2E3A4A; font-size:13px;">🔍</span>
+            <input type="text" id="search-input" placeholder="Search assets...">
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table id="assets-table">
+            <thead>
+              <tr>
+                <th>Asset Name</th>
+                <th>Type</th>
+                <th>Make</th>
+                <th>Model</th>
+                <th>Year</th>
+                <th>Fuel Type</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="assets-tbody">
+              <tr class="loading-row"><td colspan="7">Loading assets...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ADD ASSET MODAL -->
+<div class="modal-overlay" id="add-modal">
+  <div class="modal">
+    <div class="modal-eyebrow">Fleet Assets</div>
+    <h2>Add New Asset</h2>
+    <p class="modal-sub">Enter the details for this asset. You can add fuel and telematics data from the Upload Data page.</p>
+    <div id="modal-error" class="form-error"></div>
+    <div class="form-group">
+      <label for="asset-name">Asset Name *</label>
+      <input type="text" id="asset-name" placeholder="e.g. CAT 390F Excavator #1">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="asset-type">Asset Type *</label>
+        <select id="asset-type">
+          <option value="" disabled selected>Select type</option>
+          <option>Excavator</option>
+          <option>Dump Truck</option>
+          <option>Wheel Loader</option>
+          <option>Motor Grader</option>
+          <option>Bulldozer</option>
+          <option>Crane</option>
+          <option>Forklift</option>
+          <option>Light Vehicle</option>
+          <option>Rigid Truck</option>
+          <option>Semi Trailer</option>
+          <option>Water Truck</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="fuel-type">Fuel Type *</label>
+        <select id="fuel-type">
+          <option value="" disabled selected>Select fuel type</option>
+          <option>Diesel</option>
+          <option>Petrol</option>
+          <option>Electric</option>
+          <option>Hybrid</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="asset-make">Make</label>
+        <input type="text" id="asset-make" placeholder="e.g. Caterpillar">
+      </div>
+      <div class="form-group">
+        <label for="asset-model">Model</label>
+        <input type="text" id="asset-model" placeholder="e.g. 390F">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="asset-year">Year</label>
+        <input type="number" id="asset-year" placeholder="e.g. 2021" min="1990" max="2030">
+      </div>
+      <div class="form-group">
+        <label for="asset-rego">Registration / ID</label>
+        <input type="text" id="asset-rego" placeholder="e.g. ABC123">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="cancel-modal-btn">Cancel</button>
+      <button class="btn-save" id="save-asset-btn">Add Asset</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM DELETE MODAL -->
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal confirm-modal">
+    <div class="confirm-icon">🗑</div>
+    <h2>Delete Asset?</h2>
+    <p class="modal-sub">This will permanently remove the asset and all associated data records. This action cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="cancel-delete-btn">Keep Asset</button>
+      <button class="btn-danger" id="confirm-delete-btn">Yes, Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <span class="toast-icon" id="toast-icon">✓</span>
+  <span id="toast-msg"></span>
+</div>
+
+<script src="js/supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function() {
+  // ── Init ──
+  var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var currentUser = null;
+  var allAssets = [];
+  var pendingDeleteId = null;
+  var csvRows = [];
+
+  // ── Auth check ──
+  async function init() {
+    var { data: { session } } = await supabase.auth.getSession();
+    if (!session) { window.location.href = 'login.html'; return; }
+    currentUser = session.user;
+    var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
+      ? currentUser.user_metadata.company_name
+      : currentUser.email.split('@')[0];
+    document.getElementById('user-name').textContent = name;
+    document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+    loadAssets();
+  }
+
+  // ── Load assets ──
+  async function loadAssets() {
+    var tbody = document.getElementById('assets-tbody');
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="7">Loading assets...</td></tr>';
+    var { data, error } = await supabase
+      .from('assets')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: false });
+    if (error) { showToast('Failed to load assets', 'error'); return; }
+    allAssets = data || [];
+    renderAssets(allAssets);
+    updateStats(allAssets);
+  }
+
+  function renderAssets(assets) {
+    var tbody = document.getElementById('assets-tbody');
+    var count = document.getElementById('table-count');
+    count.textContent = assets.length + ' asset' + (assets.length !== 1 ? 's' : '');
+    if (assets.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🚧</div><div class="empty-title">No assets yet</div><div class="empty-sub">Add your first asset using the button above,<br>or import your fleet via CSV.</div></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = assets.map(function(a) {
+      return '<tr>' +
+        '<td class="asset-name-cell">' + esc(a.asset_name || '—') + '</td>' +
+        '<td><span class="asset-type-badge">' + esc(a.asset_type || '—') + '</span></td>' +
+        '<td>' + esc(a.make || '—') + '</td>' +
+        '<td>' + esc(a.model || '—') + '</td>' +
+        '<td>' + esc(a.year ? String(a.year) : '—') + '</td>' +
+        '<td>' + esc(a.fuel_type || '—') + '</td>' +
+        '<td><button class="btn-delete" data-id="' + a.id + '">Delete</button></td>' +
+      '</tr>';
+    }).join('');
+    tbody.querySelectorAll('.btn-delete').forEach(function(btn) {
+      btn.addEventListener('click', function() { openConfirmDelete(btn.dataset.id); });
+    });
+  }
+
+  function updateStats(assets) {
+    document.getElementById('stat-total').textContent = assets.length;
+    var types = new Set(assets.map(function(a) { return a.asset_type; }).filter(Boolean));
+    document.getElementById('stat-types').textContent = types.size || '—';
+    document.getElementById('stat-newest').textContent = assets.length > 0 ? esc(assets[0].asset_name || '—') : '—';
+  }
+
+  // ── Search ──
+  document.getElementById('search-input').addEventListener('input', function() {
+    var q = this.value.toLowerCase();
+    var filtered = allAssets.filter(function(a) {
+      return (a.asset_name || '').toLowerCase().includes(q) ||
+             (a.asset_type || '').toLowerCase().includes(q) ||
+             (a.make || '').toLowerCase().includes(q) ||
+             (a.model || '').toLowerCase().includes(q);
+    });
+    renderAssets(filtered);
+  });
+
+  // ── Add asset modal ──
+  document.getElementById('add-asset-btn').addEventListener('click', function() {
+    document.getElementById('add-modal').classList.add('open');
+    document.getElementById('modal-error').classList.remove('visible');
+    document.getElementById('modal-error').textContent = '';
+    document.getElementById('asset-name').value = '';
+    document.getElementById('asset-type').value = '';
+    document.getElementById('fuel-type').value = '';
+    document.getElementById('asset-make').value = '';
+    document.getElementById('asset-model').value = '';
+    document.getElementById('asset-year').value = '';
+    document.getElementById('asset-rego').value = '';
+  });
+  document.getElementById('cancel-modal-btn').addEventListener('click', function() {
+    document.getElementById('add-modal').classList.remove('open');
+  });
+  document.getElementById('add-modal').addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('open');
+  });
+
+  document.getElementById('save-asset-btn').addEventListener('click', async function() {
+    var name = document.getElementById('asset-name').value.trim();
+    var type = document.getElementById('asset-type').value;
+    var fuel = document.getElementById('fuel-type').value;
+    var errEl = document.getElementById('modal-error');
+    if (!name || !type || !fuel) {
+      errEl.textContent = 'Please fill in Asset Name, Asset Type, and Fuel Type.';
+      errEl.classList.add('visible'); return;
+    }
+    this.disabled = true; this.textContent = 'Saving...';
+    var { error } = await supabase.from('assets').insert({
+      user_id: currentUser.id,
+      asset_name: name,
+      asset_type: type,
+      fuel_type: fuel,
+      make: document.getElementById('asset-make').value.trim() || null,
+      model: document.getElementById('asset-model').value.trim() || null,
+      year: parseInt(document.getElementById('asset-year').value) || null,
+      registration: document.getElementById('asset-rego').value.trim() || null
+    });
+    this.disabled = false; this.textContent = 'Add Asset';
+    if (error) { errEl.textContent = error.message; errEl.classList.add('visible'); return; }
+    document.getElementById('add-modal').classList.remove('open');
+    showToast('Asset added successfully', 'success');
+    loadAssets();
+  });
+
+  // ── Delete ──
+  function openConfirmDelete(id) {
+    pendingDeleteId = id;
+    document.getElementById('confirm-modal').classList.add('open');
+  }
+  document.getElementById('cancel-delete-btn').addEventListener('click', function() {
+    document.getElementById('confirm-modal').classList.remove('open');
+    pendingDeleteId = null;
+  });
+  document.getElementById('confirm-modal').addEventListener('click', function(e) {
+    if (e.target === this) { this.classList.remove('open'); pendingDeleteId = null; }
+  });
+  document.getElementById('confirm-delete-btn').addEventListener('click', async function() {
+    if (!pendingDeleteId) return;
+    this.disabled = true; this.textContent = 'Deleting...';
+    var { error } = await supabase.from('assets').delete().eq('id', pendingDeleteId).eq('user_id', currentUser.id);
+    this.disabled = false; this.textContent = 'Yes, Delete';
+    document.getElementById('confirm-modal').classList.remove('open');
+    pendingDeleteId = null;
+    if (error) { showToast('Failed to delete asset', 'error'); return; }
+    showToast('Asset deleted', 'success');
+    loadAssets();
+  });
+
+  // ── CSV Toggle ──
+  document.getElementById('csv-toggle-btn').addEventListener('click', function() {
+    var section = document.getElementById('csv-section');
+    section.style.display = section.style.display === 'none' ? 'flex' : 'none';
+  });
+
+  // ── Download template ──
+  document.getElementById('download-template-btn').addEventListener('click', function() {
+    var csv = 'asset_name,asset_type,make,model,year,fuel_type,registration\n' +
+      'CAT 390F Excavator,Excavator,Caterpillar,390F,2021,Diesel,\n' +
+      'Komatsu HD785 Dump Truck,Dump Truck,Komatsu,HD785,2019,Diesel,ABC123\n';
+    var blob = new Blob([csv], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'FleetMagnify_Assets_Template.csv';
+    a.click();
+  });
+
+  // ── CSV Upload ──
+  var csvInput = document.getElementById('csv-file-input');
+  var uploadZone = document.getElementById('upload-zone');
+
+  uploadZone.addEventListener('dragover', function(e) { e.preventDefault(); this.classList.add('drag-over'); });
+  uploadZone.addEventListener('dragleave', function() { this.classList.remove('drag-over'); });
+  uploadZone.addEventListener('drop', function(e) {
+    e.preventDefault(); this.classList.remove('drag-over');
+    var file = e.dataTransfer.files[0];
+    if (file) processCSV(file);
+  });
+  csvInput.addEventListener('change', function() {
+    if (this.files[0]) processCSV(this.files[0]);
+  });
+
+  function processCSV(file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var lines = e.target.result.split('\n').filter(function(l) { return l.trim(); });
+      if (lines.length < 2) { showToast('CSV appears to be empty', 'error'); return; }
+      var headers = lines[0].split(',').map(function(h) { return h.trim().toLowerCase(); });
+      csvRows = [];
+      for (var i = 1; i < lines.length; i++) {
+        var vals = lines[i].split(',').map(function(v) { return v.trim(); });
+        var row = {};
+        headers.forEach(function(h, idx) { row[h] = vals[idx] || ''; });
+        if (row.asset_name) csvRows.push(row);
+      }
+      if (csvRows.length === 0) { showToast('No valid rows found in CSV', 'error'); return; }
+      showPreview(headers, csvRows);
+    };
+    reader.readAsText(file);
+  }
+
+  function showPreview(headers, rows) {
+    var preview = document.getElementById('upload-preview');
+    var table = document.getElementById('preview-table');
+    var displayHeaders = headers.filter(function(h) { return h !== 'registration'; });
+    var thead = '<thead><tr>' + displayHeaders.map(function(h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead>';
+    var previewRows = rows.slice(0, 5);
+    var tbody = '<tbody>' + previewRows.map(function(r) {
+      return '<tr>' + displayHeaders.map(function(h) { return '<td>' + esc(r[h] || '') + '</td>'; }).join('') + '</tr>';
+    }).join('') + '</tbody>';
+    table.innerHTML = thead + tbody;
+    document.getElementById('upload-count').textContent = csvRows.length + ' asset' + (csvRows.length !== 1 ? 's' : '') + ' ready to import';
+    preview.classList.add('visible');
+  }
+
+  document.getElementById('clear-csv-btn').addEventListener('click', function() {
+    csvRows = [];
+    document.getElementById('upload-preview').classList.remove('visible');
+    document.getElementById('csv-file-input').value = '';
+  });
+
+  document.getElementById('import-csv-btn').addEventListener('click', async function() {
+    if (csvRows.length === 0) return;
+    this.disabled = true; this.textContent = 'Importing...';
+    var records = csvRows.map(function(r) {
+      return {
+        user_id: currentUser.id,
+        asset_name: r.asset_name || null,
+        asset_type: r.asset_type || null,
+        make: r.make || null,
+        model: r.model || null,
+        year: parseInt(r.year) || null,
+        fuel_type: r.fuel_type || null,
+        registration: r.registration || null
+      };
+    });
+    var { error } = await supabase.from('assets').insert(records);
+    this.disabled = false; this.textContent = 'Import All Assets';
+    if (error) { showToast('Import failed: ' + error.message, 'error'); return; }
+    document.getElementById('upload-preview').classList.remove('visible');
+    document.getElementById('csv-section').style.display = 'none';
+    csvRows = [];
+    showToast(records.length + ' assets imported successfully', 'success');
+    loadAssets();
+  });
+
+  // ── Sign out ──
+  document.getElementById('signout-btn').addEventListener('click', async function() {
+    await supabase.auth.signOut();
+    window.location.href = 'login.html';
+  });
+
+  // ── Toast ──
+  var toastTimer;
+  function showToast(msg, type) {
+    var toast = document.getElementById('toast');
+    var icon = document.getElementById('toast-icon');
+    document.getElementById('toast-msg').textContent = msg;
+    icon.textContent = type === 'success' ? '✓' : '✕';
+    toast.className = 'toast ' + (type || 'success');
+    clearTimeout(toastTimer);
+    setTimeout(function() { toast.classList.add('show'); }, 10);
+    toastTimer = setTimeout(function() { toast.classList.remove('show'); }, 3500);
+  }
+
+  // ── Utils ──
+  function esc(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  init();
+})();
+</script>
+
+</body>
+</html>
