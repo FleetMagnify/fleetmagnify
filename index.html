@@ -51,6 +51,9 @@
     border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit;
   }
   .btn-primary:hover { background: #0BC48E; }
+  a.btn-ghost, a.btn-primary, a.btn-hero-cta, a.btn-cta-main {
+    text-decoration: none; display: inline-block; text-align: center;
+  }
 
   /* ── HERO ── */
   .hero {
@@ -538,8 +541,8 @@
       <a href="#">Pricing</a>
     </div>
     <div class="nav-actions">
-      <button class="btn-ghost">Sign in</button>
-      <button class="btn-primary js-request-demo">Request Demo</button>
+      <a class="btn-ghost" href="login.html">Sign in</a>
+      <a class="btn-primary" href="signup.html">Request Demo</a>
     </div>
   </div>
 </nav>
@@ -564,7 +567,7 @@
         job by job.
       </p>
       <div class="hero-actions">
-        <button class="btn-hero-cta js-request-demo">Request Enterprise Demo</button>
+        <a class="btn-hero-cta" href="signup.html">Request Enterprise Demo</a>
         <button class="btn-hero-outline">
           <div class="play-circle">
             <svg width="9" height="10" viewBox="0 0 9 10" fill="none">
@@ -893,7 +896,7 @@
         Onboarding takes under 48 hours. No lock-in contracts.
       </p>
       <div class="cta-btns">
-        <button class="btn-cta-main js-request-demo">Request Enterprise Demo</button>
+        <a class="btn-cta-main" href="signup.html">Request Enterprise Demo</a>
         <button class="btn-cta-sec">Talk to Sales</button>
       </div>
       <p class="cta-note">No credit card required &nbsp;·&nbsp; 14-day free trial &nbsp;·&nbsp; Cancel anytime</p>
