@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upload Data | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #F0F2F5; min-height: 100vh; display: flex; }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 240px; flex-shrink: 0;
+    background: rgba(10,16,26,0.95);
+    border-right: 1px solid rgba(255,255,255,0.06);
+    display: flex; flex-direction: column;
+    position: fixed; top: 0; left: 0; height: 100vh; z-index: 50;
+  }
+  .sidebar-logo {
+    display: flex; align-items: center; gap: 10px;
+    padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.06);
+    text-decoration: none;
+  }
+  .logo-mark {
+    width: 34px; height: 34px; border-radius: 9px; background: #0EA57A;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; color: #080C12;
+  }
+  .logo-name { font-size: 16px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
+  .logo-name span { color: #0EA57A; }
+  .sidebar-nav { flex: 1; padding: 16px 12px; overflow-y: auto; }
+  .nav-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #2E3A4A;
+    padding: 0 8px; margin-bottom: 8px; margin-top: 16px;
+  }
+  .nav-label:first-child { margin-top: 0; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px; border-radius: 8px; margin-bottom: 2px;
+    text-decoration: none; font-size: 13.5px; font-weight: 500; color: #6B7785;
+    transition: all 0.2s;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.04); color: #C8D0DB; }
+  .nav-item.active { background: rgba(14,165,122,0.10); color: #0EA57A; }
+  .nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+  .sidebar-footer { padding: 16px 12px; border-top: 1px solid rgba(255,255,255,0.06); }
+  .btn-signout {
+    width: 100%; display: flex; align-items: center; gap: 8px;
+    padding: 9px 10px; border-radius: 8px; border: none; background: none;
+    font-size: 13px; font-weight: 500; color: #4A5568;
+    cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-signout:hover { background: rgba(226,75,74,0.08); color: #F0A8A7; }
+
+  /* ── MAIN ── */
+  .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar {
+    padding: 20px 36px; border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(8,12,18,0.80); backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 40;
+  }
+  .breadcrumb { font-size: 13px; color: #3A4A5C; margin-bottom: 2px; }
+  .breadcrumb a { color: #3A4A5C; text-decoration: none; }
+  .breadcrumb a:hover { color: #6B7785; }
+  .topbar-title { font-size: 18px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.4px; }
+  .user-pill {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 100px; padding: 6px 14px 6px 8px;
+  }
+  .user-avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: rgba(14,165,122,0.20); border: 1px solid rgba(14,165,122,0.30);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #0EA57A;
+  }
+  .user-name { font-size: 12.5px; font-weight: 500; color: #9BA4B0; }
+
+  /* ── PAGE ── */
+  .page-content { padding: 36px; flex: 1; }
+  .page-eyebrow {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #0EA57A; margin-bottom: 8px;
+  }
+  .page-eyebrow .dash { width: 14px; height: 1.5px; background: #0EA57A; border-radius: 2px; }
+  .page-title { font-size: 28px; font-weight: 800; letter-spacing: -1px; color: #F0F2F5; margin-bottom: 6px; }
+  .page-sub { font-size: 14px; color: #5A6474; line-height: 1.55; margin-bottom: 32px; }
+
+  /* ── INFO STRIP ── */
+  .info-strip {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: rgba(14,165,122,0.05); border: 1px solid rgba(14,165,122,0.14);
+    border-radius: 12px; padding: 16px 20px; margin-bottom: 32px;
+  }
+  .info-strip-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .info-strip p { font-size: 13.5px; color: #5A6474; line-height: 1.6; }
+  .info-strip p strong { color: #C8D0DB; font-weight: 600; }
+
+  /* ── UPLOAD GRID ── */
+  .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+
+  /* ── UPLOAD PANEL ── */
+  .upload-panel {
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px; overflow: hidden;
+  }
+  .panel-header {
+    padding: 22px 26px 18px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .panel-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #0EA57A;
+    background: rgba(14,165,122,0.09); border: 1px solid rgba(14,165,122,0.18);
+    padding: 3px 10px; border-radius: 100px; margin-bottom: 10px;
+  }
+  .panel-title { font-size: 18px; font-weight: 800; color: #D8DFE8; letter-spacing: -0.5px; margin-bottom: 5px; }
+  .panel-sub { font-size: 13px; color: #4A5568; line-height: 1.55; }
+  .panel-body { padding: 22px 26px; }
+
+  /* Template download */
+  .template-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 20px;
+  }
+  .template-info { display: flex; align-items: center; gap: 10px; }
+  .template-icon {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: rgba(14,165,122,0.10); border: 1px solid rgba(14,165,122,0.18);
+    display: flex; align-items: center; justify-content: center; font-size: 16px;
+  }
+  .template-label { font-size: 13px; font-weight: 600; color: #C8D0DB; margin-bottom: 2px; }
+  .template-desc { font-size: 11px; color: #3A4A5C; }
+  .btn-download {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(14,165,122,0.08); border: 1px solid rgba(14,165,122,0.20);
+    color: #0EA57A; font-size: 12px; font-weight: 700; padding: 7px 14px;
+    border-radius: 7px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+    white-space: nowrap;
+  }
+  .btn-download:hover { background: rgba(14,165,122,0.15); }
+
+  /* Drop zone */
+  .drop-zone {
+    border: 1.5px dashed rgba(255,255,255,0.10);
+    border-radius: 12px; padding: 28px 20px; text-align: center;
+    cursor: pointer; transition: all 0.2s; margin-bottom: 16px;
+    position: relative;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: rgba(14,165,122,0.40);
+    background: rgba(14,165,122,0.03);
+  }
+  .drop-zone input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .drop-icon { font-size: 32px; margin-bottom: 10px; opacity: 0.5; }
+  .drop-text { font-size: 13.5px; color: #5A6474; line-height: 1.6; }
+  .drop-text strong { color: #0EA57A; }
+  .drop-formats { font-size: 11px; color: #2E3A4A; margin-top: 4px; }
+  .drop-filename {
+    display: none; font-size: 12.5px; color: #0EA57A; font-weight: 600; margin-top: 8px;
+  }
+
+  /* Preview */
+  .preview-wrap {
+    display: none; margin-bottom: 16px;
+    background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px; overflow: hidden;
+  }
+  .preview-wrap.visible { display: block; }
+  .preview-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .preview-head-label { font-size: 10.5px; font-weight: 700; color: #2E3A4A; letter-spacing: 0.08em; text-transform: uppercase; }
+  .preview-head-count { font-size: 11px; color: #3A4A5C; }
+  .preview-scroll { overflow-x: auto; }
+  .preview-table { width: 100%; border-collapse: collapse; }
+  .preview-table th { padding: 8px 10px; font-size: 10.5px; font-weight: 700; color: #2E3A4A; text-align: left; letter-spacing: 0.05em; text-transform: uppercase; }
+  .preview-table td { padding: 8px 10px; font-size: 11.5px; color: #6B7785; border-top: 1px solid rgba(255,255,255,0.04); white-space: nowrap; }
+
+  /* Result box */
+  .result-box {
+    display: none; padding: 12px 16px; border-radius: 9px;
+    font-size: 13px; line-height: 1.5; margin-bottom: 16px;
+  }
+  .result-box.success { background: rgba(14,165,122,0.10); border: 1px solid rgba(14,165,122,0.25); color: #6DDBB8; display: block; }
+  .result-box.error { background: rgba(226,75,74,0.10); border: 1px solid rgba(226,75,74,0.28); color: #F0A8A7; display: block; }
+
+  /* Action row */
+  .panel-actions { display: flex; align-items: center; gap: 10px; }
+  .btn-clear {
+    background: none; border: 1px solid rgba(255,255,255,0.08);
+    color: #4A5568; font-size: 13px; font-weight: 500; padding: 10px 18px;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-clear:hover { border-color: rgba(255,255,255,0.16); color: #9BA4B0; }
+  .btn-import {
+    flex: 1; background: #0EA57A; border: none; color: #080C12;
+    font-size: 13px; font-weight: 700; padding: 10px 18px;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-import:hover:not(:disabled) { background: #0BC48E; }
+  .btn-import:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  /* ── HELP SECTION ── */
+  .help-section { margin-top: 40px; }
+  .help-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #2E3A4A;
+    display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+  }
+  .help-title::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.05); }
+  .help-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .help-card {
+    background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px; padding: 20px;
+  }
+  .help-card-icon { font-size: 20px; margin-bottom: 10px; }
+  .help-card h4 { font-size: 13px; font-weight: 700; color: #C8D0DB; margin-bottom: 6px; }
+  .help-card p { font-size: 12px; color: #3A4A5C; line-height: 1.6; }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 28px; right: 28px; z-index: 200;
+    background: rgba(10,16,26,0.98); border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 12px; padding: 14px 20px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13.5px; color: #C8D0DB;
+    transform: translateY(80px); opacity: 0;
+    transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    pointer-events: none;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: rgba(14,165,122,0.3); }
+  .toast.error { border-color: rgba(226,75,74,0.3); }
+
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
+    .upload-grid { grid-template-columns: 1fr; }
+    .help-grid { grid-template-columns: 1fr; }
+    .page-content { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <a class="sidebar-logo" href="dashboard.html">
+    <div class="logo-mark">FM</div>
+    <span class="logo-name">Fleet<span>Magnify</span></span>
+  </a>
+  <nav class="sidebar-nav">
+    <div class="nav-label">Analytics Modules</div>
+    <a class="nav-item" href="fuel-analyst.html"><span class="nav-icon">⛽</span> Fuel Analyst</a>
+    <a class="nav-item" href="idle-cost-analyst.html"><span class="nav-icon">⏱</span> Idle Cost Analyst</a>
+    <a class="nav-item" href="emissions.html"><span class="nav-icon">🌍</span> Emissions Intelligence</a>
+    <a class="nav-item" href="utilisation.html"><span class="nav-icon">📊</span> Utilisation Analyst</a>
+    <a class="nav-item" href="reports.html"><span class="nav-icon">📋</span> Reports</a>
+    <div class="nav-label">Fleet Management</div>
+    <a class="nav-item" href="assets.html"><span class="nav-icon">🚧</span> Assets</a>
+    <a class="nav-item active" href="upload.html"><span class="nav-icon">📤</span> Upload Data</a>
+  </nav>
+  <div class="sidebar-footer">
+    <button class="btn-signout" id="signout-btn">↩ Sign Out</button>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="breadcrumb"><a href="dashboard.html">Dashboard</a> / Upload Data</div>
+      <div class="topbar-title">Upload Data</div>
+    </div>
+    <div class="user-pill">
+      <div class="user-avatar" id="user-avatar">?</div>
+      <span class="user-name" id="user-name">Loading...</span>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="page-eyebrow"><div class="dash"></div> Data Import</div>
+    <h1 class="page-title">Upload Fleet Data</h1>
+    <p class="page-sub">Import your fuel supplier records and telematics data. Download the template for each, fill in your data, and upload to get started.</p>
+
+    <div class="info-strip">
+      <div class="info-strip-icon">💡</div>
+      <p><strong>Before uploading:</strong> Make sure your assets are added in the <a href="assets.html" style="color:#0EA57A;">Assets</a> page first. Asset names in your CSV must match exactly to link correctly. Dates should be in YYYY-MM-DD format (e.g. 2026-06-01).</p>
+    </div>
+
+    <div class="upload-grid">
+
+      <!-- ── FUEL UPLOAD ── -->
+      <div class="upload-panel">
+        <div class="panel-header">
+          <div class="panel-tag">⛽ Fuel Data</div>
+          <div class="panel-title">Fuel Supplier Records</div>
+          <div class="panel-sub">Import fuel delivery data from your fuel card or supplier invoices. One row per fuel delivery event.</div>
+        </div>
+        <div class="panel-body">
+          <div class="template-row">
+            <div class="template-info">
+              <div class="template-icon">📄</div>
+              <div>
+                <div class="template-label">Fuel Data Template</div>
+                <div class="template-desc">CSV with required column headers</div>
+              </div>
+            </div>
+            <button class="btn-download" id="fuel-template-btn">⬇ Download</button>
+          </div>
+
+          <div class="drop-zone" id="fuel-drop">
+            <input type="file" accept=".csv" id="fuel-file">
+            <div class="drop-icon">📂</div>
+            <div class="drop-text"><strong>Click to browse</strong> or drag and drop</div>
+            <div class="drop-formats">Accepts .csv files only</div>
+            <div class="drop-filename" id="fuel-filename"></div>
+          </div>
+
+          <div class="preview-wrap" id="fuel-preview">
+            <div class="preview-head">
+              <span class="preview-head-label">Preview</span>
+              <span class="preview-head-count" id="fuel-count"></span>
+            </div>
+            <div class="preview-scroll">
+              <table class="preview-table" id="fuel-preview-table"></table>
+            </div>
+          </div>
+
+          <div class="result-box" id="fuel-result"></div>
+
+          <div class="panel-actions">
+            <button class="btn-clear" id="fuel-clear-btn">Clear</button>
+            <button class="btn-import" id="fuel-import-btn" disabled>Import Fuel Data</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── TELEMATICS UPLOAD ── -->
+      <div class="upload-panel">
+        <div class="panel-header">
+          <div class="panel-tag">📡 Telematics Data</div>
+          <div class="panel-title">Telematics Records</div>
+          <div class="panel-sub">Import engine hours and operating data from your telematics provider. One row per asset per day.</div>
+        </div>
+        <div class="panel-body">
+          <div class="template-row">
+            <div class="template-info">
+              <div class="template-icon">📄</div>
+              <div>
+                <div class="template-label">Telematics Data Template</div>
+                <div class="template-desc">CSV with required column headers</div>
+              </div>
+            </div>
+            <button class="btn-download" id="tel-template-btn">⬇ Download</button>
+          </div>
+
+          <div class="drop-zone" id="tel-drop">
+            <input type="file" accept=".csv" id="tel-file">
+            <div class="drop-icon">📂</div>
+            <div class="drop-text"><strong>Click to browse</strong> or drag and drop</div>
+            <div class="drop-formats">Accepts .csv files only</div>
+            <div class="drop-filename" id="tel-filename"></div>
+          </div>
+
+          <div class="preview-wrap" id="tel-preview">
+            <div class="preview-head">
+              <span class="preview-head-label">Preview</span>
+              <span class="preview-head-count" id="tel-count"></span>
+            </div>
+            <div class="preview-scroll">
+              <table class="preview-table" id="tel-preview-table"></table>
+            </div>
+          </div>
+
+          <div class="result-box" id="tel-result"></div>
+
+          <div class="panel-actions">
+            <button class="btn-clear" id="tel-clear-btn">Clear</button>
+            <button class="btn-import" id="tel-import-btn" disabled>Import Telematics Data</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- HELP SECTION -->
+    <div class="help-section">
+      <div class="help-title">Column reference</div>
+      <div class="help-grid">
+        <div class="help-card">
+          <div class="help-card-icon">⛽</div>
+          <h4>Fuel CSV Columns</h4>
+          <p>asset_name · record_date · litres · cost_per_litre · total_cost · supplier</p>
+        </div>
+        <div class="help-card">
+          <div class="help-card-icon">📡</div>
+          <h4>Telematics CSV Columns</h4>
+          <p>asset_name · record_date · total_engine_hours · operating_hours · idle_hours · odometer_km</p>
+        </div>
+        <div class="help-card">
+          <div class="help-card-icon">📅</div>
+          <h4>Date Format</h4>
+          <p>All dates must use the format YYYY-MM-DD. Example: 2026-06-15. Asset names must match exactly as entered in your Assets page.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <span id="toast-icon">✓</span>
+  <span id="toast-msg"></span>
+</div>
+
+<script src="js/supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function() {
+  var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var currentUser = null;
+  var fuelRows = [];
+  var telRows = [];
+
+  // ── Auth ──
+  async function init() {
+    var { data: { session } } = await supabase.auth.getSession();
+    if (!session) { window.location.href = 'login.html'; return; }
+    currentUser = session.user;
+    var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
+      ? currentUser.user_metadata.company_name
+      : currentUser.email.split('@')[0];
+    document.getElementById('user-name').textContent = name;
+    document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+  }
+
+  // ── Asset lookup cache ──
+  var assetCache = null;
+  async function getAssets() {
+    if (assetCache) return assetCache;
+    var { data } = await supabase.from('assets').select('id, asset_name').eq('user_id', currentUser.id);
+    assetCache = data || [];
+    return assetCache;
+  }
+  function findAssetId(assets, name) {
+    var n = (name || '').trim().toLowerCase();
+    var match = assets.find(function(a) { return (a.asset_name || '').trim().toLowerCase() === n; });
+    return match ? match.id : null;
+  }
+
+  // ── CSV parser ──
+  function parseCSV(text) {
+    var lines = text.split('\n').map(function(l) { return l.trim(); }).filter(Boolean);
+    if (lines.length < 2) return { headers: [], rows: [] };
+    var headers = lines[0].split(',').map(function(h) { return h.trim().toLowerCase().replace(/\r/g,''); });
+    var rows = [];
+    for (var i = 1; i < lines.length; i++) {
+      var vals = lines[i].split(',').map(function(v) { return v.trim().replace(/\r/g,''); });
+      if (vals.every(function(v) { return !v; })) continue;
+      var row = {};
+      headers.forEach(function(h, idx) { row[h] = vals[idx] !== undefined ? vals[idx] : ''; });
+      rows.push(row);
+    }
+    return { headers: headers, rows: rows };
+  }
+
+  function readFile(file, callback) {
+    var reader = new FileReader();
+    reader.onload = function(e) { callback(e.target.result); };
+    reader.readAsText(file);
+  }
+
+  function renderPreview(tableEl, headers, rows) {
+    var displayRows = rows.slice(0, 5);
+    var thead = '<thead><tr>' + headers.map(function(h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead>';
+    var tbody = '<tbody>' + displayRows.map(function(r) {
+      return '<tr>' + headers.map(function(h) { return '<td>' + esc(r[h] || '') + '</td>'; }).join('') + '</tr>';
+    }).join('') + '</tbody>';
+    tableEl.innerHTML = thead + tbody;
+  }
+
+  // ── Templates ──
+  document.getElementById('fuel-template-btn').addEventListener('click', function() {
+    var csv = 'asset_name,record_date,litres,cost_per_litre,total_cost,supplier\n' +
+      'CAT 390F Excavator #1,2026-06-01,850.5,1.85,1573.43,BP Fleet\n' +
+      'Komatsu HD785 Dump Truck,2026-06-03,1200,1.82,2184,Caltex\n';
+    downloadCSV(csv, 'FleetMagnify_Fuel_Template.csv');
+  });
+
+  document.getElementById('tel-template-btn').addEventListener('click', function() {
+    var csv = 'asset_name,record_date,total_engine_hours,operating_hours,idle_hours,odometer_km\n' +
+      'CAT 390F Excavator #1,2026-06-01,10.5,7.2,3.3,\n' +
+      'Komatsu HD785 Dump Truck,2026-06-01,12,9.5,2.5,1245\n';
+    downloadCSV(csv, 'FleetMagnify_Telematics_Template.csv');
+  });
+
+  function downloadCSV(content, filename) {
+    var blob = new Blob([content], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+  }
+
+  // ── FUEL FILE ──
+  setupDropZone('fuel-drop', 'fuel-file', function(file) {
+    document.getElementById('fuel-filename').style.display = 'block';
+    document.getElementById('fuel-filename').textContent = '📎 ' + file.name;
+    readFile(file, function(text) {
+      var parsed = parseCSV(text);
+      fuelRows = parsed.rows;
+      if (fuelRows.length === 0) { showResult('fuel-result', 'No valid rows found. Check your file matches the template.', 'error'); return; }
+      renderPreview(document.getElementById('fuel-preview-table'), parsed.headers, fuelRows);
+      document.getElementById('fuel-count').textContent = fuelRows.length + ' row' + (fuelRows.length !== 1 ? 's' : '') + ' found';
+      document.getElementById('fuel-preview').classList.add('visible');
+      document.getElementById('fuel-import-btn').disabled = false;
+      document.getElementById('fuel-result').className = 'result-box';
+    });
+  });
+
+  document.getElementById('fuel-clear-btn').addEventListener('click', function() {
+    fuelRows = [];
+    document.getElementById('fuel-file').value = '';
+    document.getElementById('fuel-filename').style.display = 'none';
+    document.getElementById('fuel-preview').classList.remove('visible');
+    document.getElementById('fuel-import-btn').disabled = true;
+    document.getElementById('fuel-result').className = 'result-box';
+  });
+
+  document.getElementById('fuel-import-btn').addEventListener('click', async function() {
+    if (!fuelRows.length) return;
+    this.disabled = true; this.textContent = 'Importing...';
+    var assets = await getAssets();
+    var records = []; var skipped = 0;
+    fuelRows.forEach(function(r) {
+      var assetId = findAssetId(assets, r.asset_name);
+      if (!assetId) { skipped++; return; }
+      records.push({
+        user_id: currentUser.id,
+        asset_id: assetId,
+        record_date: r.record_date || null,
+        litres: parseFloat(r.litres) || null,
+        cost_per_litre: parseFloat(r.cost_per_litre) || null,
+        total_cost: parseFloat(r.total_cost) || null,
+        supplier: r.supplier || null
+      });
+    });
+    if (records.length === 0) {
+      showResult('fuel-result', 'No rows could be matched to your assets. Check that asset names in your CSV match exactly.', 'error');
+      this.disabled = false; this.textContent = 'Import Fuel Data'; return;
+    }
+    var { error } = await supabase.from('fuel_records').insert(records);
+    this.disabled = false; this.textContent = 'Import Fuel Data';
+    if (error) { showResult('fuel-result', 'Import failed: ' + error.message, 'error'); return; }
+    var msg = records.length + ' fuel record' + (records.length !== 1 ? 's' : '') + ' imported successfully.';
+    if (skipped > 0) msg += ' ' + skipped + ' row' + (skipped !== 1 ? 's' : '') + ' skipped (asset not found).';
+    showResult('fuel-result', msg, 'success');
+    showToast(records.length + ' fuel records imported', 'success');
+    fuelRows = [];
+    document.getElementById('fuel-preview').classList.remove('visible');
+    document.getElementById('fuel-file').value = '';
+    document.getElementById('fuel-filename').style.display = 'none';
+  });
+
+  // ── TELEMATICS FILE ──
+  setupDropZone('tel-drop', 'tel-file', function(file) {
+    document.getElementById('tel-filename').style.display = 'block';
+    document.getElementById('tel-filename').textContent = '📎 ' + file.name;
+    readFile(file, function(text) {
+      var parsed = parseCSV(text);
+      telRows = parsed.rows;
+      if (telRows.length === 0) { showResult('tel-result', 'No valid rows found. Check your file matches the template.', 'error'); return; }
+      renderPreview(document.getElementById('tel-preview-table'), parsed.headers, telRows);
+      document.getElementById('tel-count').textContent = telRows.length + ' row' + (telRows.length !== 1 ? 's' : '') + ' found';
+      document.getElementById('tel-preview').classList.add('visible');
+      document.getElementById('tel-import-btn').disabled = false;
+      document.getElementById('tel-result').className = 'result-box';
+    });
+  });
+
+  document.getElementById('tel-clear-btn').addEventListener('click', function() {
+    telRows = [];
+    document.getElementById('tel-file').value = '';
+    document.getElementById('tel-filename').style.display = 'none';
+    document.getElementById('tel-preview').classList.remove('visible');
+    document.getElementById('tel-import-btn').disabled = true;
+    document.getElementById('tel-result').className = 'result-box';
+  });
+
+  document.getElementById('tel-import-btn').addEventListener('click', async function() {
+    if (!telRows.length) return;
+    this.disabled = true; this.textContent = 'Importing...';
+    var assets = await getAssets();
+    var records = []; var skipped = 0;
+    telRows.forEach(function(r) {
+      var assetId = findAssetId(assets, r.asset_name);
+      if (!assetId) { skipped++; return; }
+      records.push({
+        user_id: currentUser.id,
+        asset_id: assetId,
+        record_date: r.record_date || null,
+        total_engine_hours: parseFloat(r.total_engine_hours) || null,
+        operating_hours: parseFloat(r.operating_hours) || null,
+        idle_hours: parseFloat(r.idle_hours) || null,
+        odometer_km: parseFloat(r.odometer_km) || null
+      });
+    });
+    if (records.length === 0) {
+      showResult('tel-result', 'No rows could be matched to your assets. Check that asset names in your CSV match exactly.', 'error');
+      this.disabled = false; this.textContent = 'Import Telematics Data'; return;
+    }
+    var { error } = await supabase.from('telematics_records').insert(records);
+    this.disabled = false; this.textContent = 'Import Telematics Data';
+    if (error) { showResult('tel-result', 'Import failed: ' + error.message, 'error'); return; }
+    var msg = records.length + ' telematics record' + (records.length !== 1 ? 's' : '') + ' imported successfully.';
+    if (skipped > 0) msg += ' ' + skipped + ' row' + (skipped !== 1 ? 's' : '') + ' skipped (asset not found).';
+    showResult('tel-result', msg, 'success');
+    showToast(records.length + ' telematics records imported', 'success');
+    telRows = [];
+    document.getElementById('tel-preview').classList.remove('visible');
+    document.getElementById('tel-file').value = '';
+    document.getElementById('tel-filename').style.display = 'none';
+  });
+
+  // ── Drop zone helper ──
+  function setupDropZone(zoneId, inputId, onFile) {
+    var zone = document.getElementById(zoneId);
+    var input = document.getElementById(inputId);
+    zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', function() { zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop', function(e) {
+      e.preventDefault(); zone.classList.remove('drag-over');
+      var file = e.dataTransfer.files[0];
+      if (file && file.name.endsWith('.csv')) onFile(file);
+      else showToast('Please upload a .csv file', 'error');
+    });
+    input.addEventListener('change', function() {
+      if (this.files[0]) onFile(this.files[0]);
+    });
+  }
+
+  // ── Sign out ──
+  document.getElementById('signout-btn').addEventListener('click', async function() {
+    await supabase.auth.signOut();
+    window.location.href = 'login.html';
+  });
+
+  // ── Result box ──
+  function showResult(id, msg, type) {
+    var el = document.getElementById(id);
+    el.textContent = msg;
+    el.className = 'result-box ' + type;
+  }
+
+  // ── Toast ──
+  var toastTimer;
+  function showToast(msg, type) {
+    var toast = document.getElementById('toast');
+    document.getElementById('toast-msg').textContent = msg;
+    document.getElementById('toast-icon').textContent = type === 'success' ? '✓' : '✕';
+    toast.className = 'toast ' + (type || 'success');
+    clearTimeout(toastTimer);
+    setTimeout(function() { toast.classList.add('show'); }, 10);
+    toastTimer = setTimeout(function() { toast.classList.remove('show'); }, 3500);
+  }
+
+  // ── Escape HTML ──
+  function esc(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
