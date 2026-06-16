@@ -35,6 +35,7 @@
     display: flex; flex-direction: column;
     padding: 24px 0;
     position: sticky; top: 0; height: 100vh;
+    overflow-y: auto;
   }
   .sidebar-logo {
     display: flex; align-items: center; gap: 10px;
@@ -56,7 +57,7 @@
     text-transform: uppercase; color: #2E3A4A;
     padding: 0 24px; margin-bottom: 10px;
   }
-  .sidebar-nav { display: flex; flex-direction: column; gap: 4px; padding: 0 12px; flex: 1; }
+  .sidebar-nav { display: flex; flex-direction: column; gap: 4px; padding: 0 12px; }
   .sidebar-link {
     display: flex; align-items: center; gap: 10px;
     padding: 10px 12px; border-radius: 10px;
@@ -204,6 +205,15 @@
         <span class="sidebar-icon">📋</span> Reports
       </a>
     </nav>
+    <div class="sidebar-label" style="margin-top: 24px;">Fleet Management</div>
+    <nav class="sidebar-nav">
+      <a class="sidebar-link" href="assets.html">
+        <span class="sidebar-icon">🚧</span> Assets
+      </a>
+      <a class="sidebar-link" href="upload.html">
+        <span class="sidebar-icon">📤</span> Upload Data
+      </a>
+    </nav>
   </aside>
 
   <div class="main-area">
@@ -253,6 +263,20 @@
           <h2>Reports</h2>
           <p>Schedule or generate on-demand executive and operator reports across all modules, exported as PDF or CSV in a single click.</p>
           <a class="btn-module" href="reports.html">View Module</a>
+        </article>
+
+        <article class="module-card">
+          <div class="module-icon">🚧</div>
+          <h2>Assets</h2>
+          <p>Manage your fleet of vehicles and machinery. Add assets manually or import your entire fleet in bulk via CSV.</p>
+          <a class="btn-module" href="assets.html">View Module</a>
+        </article>
+
+        <article class="module-card">
+          <div class="module-icon">📤</div>
+          <h2>Upload Data</h2>
+          <p>Import fuel supplier records and telematics data for your fleet. Download templates and bulk upload via CSV.</p>
+          <a class="btn-module" href="upload.html">View Module</a>
         </article>
       </div>
     </main>
