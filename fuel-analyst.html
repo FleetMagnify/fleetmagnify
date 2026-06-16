@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fuel Analyst | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #F0F2F5; min-height: 100vh; display: flex; }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 240px; flex-shrink: 0;
+    background: rgba(10,16,26,0.95);
+    border-right: 1px solid rgba(255,255,255,0.06);
+    display: flex; flex-direction: column;
+    position: fixed; top: 0; left: 0; height: 100vh; z-index: 50;
+    overflow-y: auto;
+  }
+  .sidebar-logo {
+    display: flex; align-items: center; gap: 10px;
+    padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.06);
+    text-decoration: none;
+  }
+  .logo-mark {
+    width: 34px; height: 34px; border-radius: 9px; background: #0EA57A;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; color: #080C12;
+  }
+  .logo-name { font-size: 16px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
+  .logo-name span { color: #0EA57A; }
+  .sidebar-nav { flex: 1; padding: 16px 12px; }
+  .nav-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #2E3A4A;
+    padding: 0 8px; margin-bottom: 8px; margin-top: 16px;
+  }
+  .nav-label:first-child { margin-top: 0; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px; border-radius: 8px; margin-bottom: 2px;
+    text-decoration: none; font-size: 13.5px; font-weight: 500; color: #6B7785;
+    transition: all 0.2s;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.04); color: #C8D0DB; }
+  .nav-item.active { background: rgba(14,165,122,0.10); color: #0EA57A; }
+  .nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+  .sidebar-footer { padding: 16px 12px; border-top: 1px solid rgba(255,255,255,0.06); }
+  .btn-signout {
+    width: 100%; display: flex; align-items: center; gap: 8px;
+    padding: 9px 10px; border-radius: 8px; border: none; background: none;
+    font-size: 13px; font-weight: 500; color: #4A5568;
+    cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-signout:hover { background: rgba(226,75,74,0.08); color: #F0A8A7; }
+
+  /* ── MAIN ── */
+  .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar {
+    padding: 20px 36px; border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(8,12,18,0.80); backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 40;
+  }
+  .breadcrumb { font-size: 13px; color: #3A4A5C; margin-bottom: 2px; }
+  .breadcrumb a { color: #3A4A5C; text-decoration: none; }
+  .breadcrumb a:hover { color: #6B7785; }
+  .topbar-title { font-size: 18px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.4px; }
+  .user-pill {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 100px; padding: 6px 14px 6px 8px;
+  }
+  .user-avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: rgba(14,165,122,0.20); border: 1px solid rgba(14,165,122,0.30);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #0EA57A;
+  }
+  .user-name { font-size: 12.5px; font-weight: 500; color: #9BA4B0; }
+
+  /* ── PAGE ── */
+  .page-content { padding: 36px; flex: 1; }
+  .page-eyebrow {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #0EA57A; margin-bottom: 8px;
+  }
+  .page-eyebrow .dash { width: 14px; height: 1.5px; background: #0EA57A; border-radius: 2px; }
+  .page-title { font-size: 28px; font-weight: 800; letter-spacing: -1px; color: #F0F2F5; margin-bottom: 6px; }
+  .page-sub { font-size: 14px; color: #5A6474; line-height: 1.55; margin-bottom: 28px; }
+
+  /* ── METHODOLOGY NOTE ── */
+  .method-note {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: rgba(14,165,122,0.05); border: 1px solid rgba(14,165,122,0.14);
+    border-radius: 12px; padding: 14px 18px; margin-bottom: 28px;
+  }
+  .method-note-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .method-note p { font-size: 12.5px; color: #5A6474; line-height: 1.6; }
+  .method-note p strong { color: #C8D0DB; font-weight: 600; }
+  .method-note a { color: #0EA57A; text-decoration: none; cursor: pointer; }
+
+  /* ── FILTER BAR ── */
+  .filter-bar {
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px; padding: 18px 22px; margin-bottom: 28px;
+    display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 6px; }
+  .filter-group label { font-size: 11px; font-weight: 600; color: #4A5568; letter-spacing: 0.02em; }
+  .filter-group select, .filter-group input {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 8px; padding: 9px 13px; color: #F0F2F5; font-size: 13px;
+    font-family: inherit; outline: none; transition: border-color 0.2s; min-width: 170px;
+  }
+  .filter-group select:focus, .filter-group input:focus { border-color: rgba(14,165,122,0.4); }
+  .filter-group select { cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%234A5568' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center; padding-right: 34px;
+  }
+  .filter-group select option { background: #0A101A; color: #F0F2F5; }
+  .filter-date-row { display: flex; gap: 10px; }
+  .filter-date-row input { min-width: 130px; }
+  .btn-apply {
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 13px; font-weight: 700; padding: 10px 24px;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-apply:hover:not(:disabled) { background: #0BC48E; }
+  .btn-apply:disabled { opacity: 0.6; cursor: not-allowed; }
+  .idle-rate-display {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .idle-rate-value {
+    background: rgba(14,165,122,0.06); border: 1px solid rgba(14,165,122,0.16);
+    border-radius: 8px; padding: 9px 13px; font-size: 13px; color: #0EA57A; font-weight: 600;
+    min-width: 170px;
+  }
+
+  /* ── KPI ROW ── */
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 28px; }
+  .kpi-card {
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px; padding: 20px 22px;
+  }
+  .kpi-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3A4A5C; margin-bottom: 10px; }
+  .kpi-value { font-size: 28px; font-weight: 800; letter-spacing: -1px; line-height: 1; margin-bottom: 4px; }
+  .kpi-value.teal { color: #0EA57A; }
+  .kpi-value.amber { color: #EF9F27; }
+  .kpi-value.white { color: #D8DFE8; }
+  .kpi-sub { font-size: 11px; color: #3A4A5C; }
+
+  /* ── CHART CARD ── */
+  .chart-card {
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px; padding: 24px; margin-bottom: 28px;
+  }
+  .chart-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  .chart-card-title { font-size: 14px; font-weight: 700; color: #C8D0DB; }
+  .chart-legend { display: flex; align-items: center; gap: 18px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #5A6474; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+  .chart-wrap { height: 280px; position: relative; }
+
+  /* ── TABLE CARD ── */
+  .table-card {
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px; overflow: hidden;
+  }
+  .table-header { padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .table-title { font-size: 14px; font-weight: 700; color: #C8D0DB; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    padding: 11px 16px; text-align: left;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #2E3A4A;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.01);
+  }
+  tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  tbody td { padding: 12px 16px; font-size: 13px; color: #9BA4B0; }
+  .cell-strong { color: #D8DFE8; font-weight: 600; }
+  .cell-teal { color: #0EA57A; font-weight: 600; }
+
+  .empty-state, .loading-state {
+    padding: 60px 24px; text-align: center; color: #3A4A5C; font-size: 13.5px;
+  }
+  .empty-state .icon, .loading-state .icon { font-size: 36px; margin-bottom: 14px; opacity: 0.4; display: block; }
+
+  @media (max-width: 1100px) {
+    .kpi-row { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
+    .page-content { padding: 20px; }
+    .filter-bar { flex-direction: column; align-items: stretch; }
+    .filter-group select, .filter-group input { min-width: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <a class="sidebar-logo" href="dashboard.html">
+    <div class="logo-mark">FM</div>
+    <span class="logo-name">Fleet<span>Magnify</span></span>
+  </a>
+  <nav class="sidebar-nav">
+    <div class="nav-label">Analytics Modules</div>
+    <a class="nav-item active" href="fuel-analyst.html"><span class="nav-icon">⛽</span> Fuel Analyst</a>
+    <a class="nav-item" href="idle-cost-analyst.html"><span class="nav-icon">⏱</span> Idle Cost Analyst</a>
+    <a class="nav-item" href="emissions-intelligence.html"><span class="nav-icon">🌍</span> Emissions Intelligence</a>
+    <a class="nav-item" href="utilisation-analyst.html"><span class="nav-icon">📊</span> Utilisation Analyst</a>
+    <a class="nav-item" href="reports.html"><span class="nav-icon">📋</span> Reports</a>
+    <div class="nav-label">Fleet Management</div>
+    <a class="nav-item" href="assets.html"><span class="nav-icon">🚧</span> Assets</a>
+    <a class="nav-item" href="upload.html"><span class="nav-icon">📤</span> Upload Data</a>
+  </nav>
+  <div class="sidebar-footer">
+    <button class="btn-signout" id="signout-btn">↩ Sign Out</button>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="breadcrumb"><a href="dashboard.html">Dashboard</a> / Fuel Analyst</div>
+      <div class="topbar-title">Fuel Analyst</div>
+    </div>
+    <div class="user-pill">
+      <div class="user-avatar" id="user-avatar">?</div>
+      <span class="user-name" id="user-name">Loading...</span>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="page-eyebrow"><div class="dash"></div> Fuel Analysis</div>
+    <h1 class="page-title">Fuel Consumption Breakdown</h1>
+    <p class="page-sub">True travel vs. idle fuel cost, calculated from your actual fuel invoices and telematics hours.</p>
+
+    <div class="method-note">
+      <div class="method-note-icon">💡</div>
+      <p><strong>How this is calculated:</strong> Total litres come directly from your fuel invoices, which is always accurate. Idle fuel is estimated using each asset's idle burn rate (litres/hour) multiplied by idle hours from telematics. Travel fuel is the remainder. Set or adjust the idle burn rate per asset on the <a href="assets.html">Assets page</a>.</p>
+    </div>
+
+    <!-- FILTER BAR -->
+    <div class="filter-bar">
+      <div class="filter-group">
+        <label for="asset-select">Asset</label>
+        <select id="asset-select">
+          <option value="">Select an asset...</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Date Range</label>
+        <div class="filter-date-row">
+          <input type="date" id="date-from">
+          <input type="date" id="date-to">
+        </div>
+      </div>
+      <div class="filter-group">
+        <label>Idle Burn Rate</label>
+        <div class="idle-rate-value" id="idle-rate-display">— select an asset —</div>
+      </div>
+      <button class="btn-apply" id="apply-filters-btn" disabled>Apply Filters</button>
+    </div>
+
+    <!-- KPI ROW -->
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Travelling Fuel Rate</div>
+        <div class="kpi-value teal" id="kpi-travel-rate">—</div>
+        <div class="kpi-sub">litres per operating hour</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Idle Fuel Rate</div>
+        <div class="kpi-value amber" id="kpi-idle-rate">—</div>
+        <div class="kpi-sub">litres per idle hour</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Fuel Cost</div>
+        <div class="kpi-value white" id="kpi-total-cost">—</div>
+        <div class="kpi-sub" id="kpi-total-litres-sub">for selected period</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Idle Fuel Cost</div>
+        <div class="kpi-value amber" id="kpi-idle-cost">—</div>
+        <div class="kpi-sub" id="kpi-idle-pct-sub">share of total cost</div>
+      </div>
+    </div>
+
+    <!-- CHART -->
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <div class="chart-card-title">Daily Fuel Consumption — Travel vs. Idle</div>
+        <div class="chart-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#0EA57A;"></div> Operating Fuel</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#EF9F27;"></div> Idle Fuel</div>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="fuel-chart"></canvas>
+        <div class="empty-state" id="chart-empty" style="display:none;">
+          <span class="icon">📊</span>
+          Select an asset and date range, then click Apply Filters to view consumption data.
+        </div>
+      </div>
+    </div>
+
+    <!-- DATA TABLE -->
+    <div class="table-card">
+      <div class="table-header">
+        <div class="table-title">Daily Breakdown</div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Total Litres</th>
+              <th>Operating Hrs</th>
+              <th>Idle Hrs</th>
+              <th>Operating Rate</th>
+              <th>Idle Rate</th>
+            </tr>
+          </thead>
+          <tbody id="data-tbody">
+            <tr><td colspan="6"><div class="empty-state"><span class="icon">⛽</span>Select an asset and apply filters to see daily fuel data.</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="js/supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var currentUser = null;
+  var assetsList = [];
+  var selectedAsset = null;
+  var fuelChart = null;
+
+  // Default idle burn rates by asset type (litres/hour) — used if asset has none set
+  var DEFAULT_IDLE_RATES = {
+    'Excavator': 4.0,
+    'Dump Truck': 5.5,
+    'Wheel Loader': 4.5,
+    'Motor Grader': 4.0,
+    'Bulldozer': 5.0,
+    'Crane': 4.5,
+    'Forklift': 1.5,
+    'Light Vehicle': 1.2,
+    'Rigid Truck': 2.5,
+    'Semi Trailer': 3.0,
+    'Water Truck': 3.5,
+    'Other': 3.0
+  };
+
+  async function init() {
+    var { data: { session } } = await supabase.auth.getSession();
+    if (!session) { window.location.href = 'login.html'; return; }
+    currentUser = session.user;
+    var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
+      ? currentUser.user_metadata.company_name
+      : currentUser.email.split('@')[0];
+    document.getElementById('user-name').textContent = name;
+    document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+
+    var today = new Date();
+    var monthAgo = new Date();
+    monthAgo.setDate(monthAgo.getDate() - 30);
+    document.getElementById('date-to').value = today.toISOString().slice(0,10);
+    document.getElementById('date-from').value = monthAgo.toISOString().slice(0,10);
+
+    await loadAssets();
+  }
+
+  async function loadAssets() {
+    var { data, error } = await supabase
+      .from('assets')
+      .select('id, asset_name, asset_type, idle_burn_rate_lph')
+      .eq('user_id', currentUser.id)
+      .order('asset_name');
+    if (error || !data) return;
+    assetsList = data;
+    var select = document.getElementById('asset-select');
+    select.innerHTML = '<option value="">Select an asset...</option>' +
+      assetsList.map(function(a) {
+        return '<option value="' + a.id + '">' + esc(a.asset_name) + '</option>';
+      }).join('');
+  }
+
+  document.getElementById('asset-select').addEventListener('change', function() {
+    var id = this.value;
+    selectedAsset = assetsList.find(function(a) { return a.id === id; }) || null;
+    var display = document.getElementById('idle-rate-display');
+    var applyBtn = document.getElementById('apply-filters-btn');
+    if (!selectedAsset) {
+      display.textContent = '— select an asset —';
+      applyBtn.disabled = true;
+      return;
+    }
+    var rate = selectedAsset.idle_burn_rate_lph;
+    var isDefault = false;
+    if (!rate) {
+      rate = DEFAULT_IDLE_RATES[selectedAsset.asset_type] || 3.0;
+      isDefault = true;
+    }
+    display.textContent = rate.toFixed(1) + ' L/hr' + (isDefault ? ' (default estimate)' : ' (set on asset)');
+    applyBtn.disabled = false;
+  });
+
+  document.getElementById('apply-filters-btn').addEventListener('click', runAnalysis);
+
+  async function runAnalysis() {
+    if (!selectedAsset) return;
+    var dateFrom = document.getElementById('date-from').value;
+    var dateTo = document.getElementById('date-to').value;
+    if (!dateFrom || !dateTo) { return; }
+
+    var btn = document.getElementById('apply-filters-btn');
+    btn.disabled = true; btn.textContent = 'Loading...';
+
+    var idleRate = selectedAsset.idle_burn_rate_lph || DEFAULT_IDLE_RATES[selectedAsset.asset_type] || 3.0;
+
+    var fuelResult = await supabase
+      .from('fuel_records')
+      .select('record_date, litres, total_cost')
+      .eq('asset_id', selectedAsset.id)
+      .eq('user_id', currentUser.id)
+      .gte('record_date', dateFrom)
+      .lte('record_date', dateTo)
+      .order('record_date');
+
+    var telResult = await supabase
+      .from('telematics_records')
+      .select('record_date, operating_hours, idle_hours, total_engine_hours')
+      .eq('asset_id', selectedAsset.id)
+      .eq('user_id', currentUser.id)
+      .gte('record_date', dateFrom)
+      .lte('record_date', dateTo)
+      .order('record_date');
+
+    btn.disabled = false; btn.textContent = 'Apply Filters';
+
+    var fuelRows = (fuelResult.data || []);
+    var telRows = (telResult.data || []);
+
+    if (fuelRows.length === 0 && telRows.length === 0) {
+      showEmpty();
+      return;
+    }
+
+    // Merge by date
+    var byDate = {};
+    fuelRows.forEach(function(r) {
+      byDate[r.record_date] = byDate[r.record_date] || {};
+      byDate[r.record_date].litres = (byDate[r.record_date].litres || 0) + (parseFloat(r.litres) || 0);
+      byDate[r.record_date].cost = (byDate[r.record_date].cost || 0) + (parseFloat(r.total_cost) || 0);
+    });
+    telRows.forEach(function(r) {
+      byDate[r.record_date] = byDate[r.record_date] || {};
+      byDate[r.record_date].operating_hours = (byDate[r.record_date].operating_hours || 0) + (parseFloat(r.operating_hours) || 0);
+      byDate[r.record_date].idle_hours = (byDate[r.record_date].idle_hours || 0) + (parseFloat(r.idle_hours) || 0);
+    });
+
+    var dates = Object.keys(byDate).sort();
+    var dailyRows = [];
+    var totalLitres = 0, totalCost = 0, totalIdleFuel = 0, totalOperatingFuel = 0;
+    var totalOperatingHours = 0, totalIdleHours = 0;
+
+    dates.forEach(function(date) {
+      var d = byDate[date];
+      var litres = d.litres || 0;
+      var cost = d.cost || 0;
+      var opHours = d.operating_hours || 0;
+      var idleHours = d.idle_hours || 0;
+
+      // Core calculation: idle fuel estimated from burn rate, operating fuel is the remainder
+      var idleFuel = idleHours * idleRate;
+      if (idleFuel > litres) idleFuel = litres; // can't exceed total litres actually delivered
+      var operatingFuel = litres - idleFuel;
+
+      totalLitres += litres;
+      totalCost += cost;
+      totalIdleFuel += idleFuel;
+      totalOperatingFuel += operatingFuel;
+      totalOperatingHours += opHours;
+      totalIdleHours += idleHours;
+
+      dailyRows.push({
+        date: date, litres: litres, opHours: opHours, idleHours: idleHours,
+        operatingFuel: operatingFuel, idleFuel: idleFuel
+      });
+    });
+
+    var travelRate = totalOperatingHours > 0 ? (totalOperatingFuel / totalOperatingHours) : 0;
+    var idleRateActual = totalIdleHours > 0 ? (totalIdleFuel / totalIdleHours) : 0;
+    var idleCost = totalLitres > 0 ? (totalCost * (totalIdleFuel / totalLitres)) : 0;
+    var idlePct = totalCost > 0 ? (idleCost / totalCost * 100) : 0;
+
+    document.getElementById('kpi-travel-rate').textContent = travelRate.toFixed(2) + ' L/hr';
+    document.getElementById('kpi-idle-rate').textContent = idleRateActual.toFixed(2) + ' L/hr';
+    document.getElementById('kpi-total-cost').textContent = '$' + totalCost.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0});
+    document.getElementById('kpi-total-litres-sub').textContent = totalLitres.toLocaleString(undefined, {maximumFractionDigits:0}) + ' litres total';
+    document.getElementById('kpi-idle-cost').textContent = '$' + idleCost.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0});
+    document.getElementById('kpi-idle-pct-sub').textContent = idlePct.toFixed(1) + '% of total fuel cost';
+
+    renderChart(dailyRows);
+    renderTable(dailyRows);
+  }
+
+  function renderChart(rows) {
+    document.getElementById('chart-empty').style.display = 'none';
+    var ctx = document.getElementById('fuel-chart').getContext('2d');
+    var labels = rows.map(function(r) { return formatDateShort(r.date); });
+    var operatingData = rows.map(function(r) { return Math.round(r.operatingFuel * 10) / 10; });
+    var idleData = rows.map(function(r) { return Math.round(r.idleFuel * 10) / 10; });
+
+    if (fuelChart) fuelChart.destroy();
+    fuelChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Operating Fuel (L)', data: operatingData, backgroundColor: '#0EA57A', borderRadius: 4 },
+          { label: 'Idle Fuel (L)', data: idleData, backgroundColor: '#EF9F27', borderRadius: 4 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4A5568', font: { size: 11 } } },
+          y: { stacked: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4A5568', font: { size: 11 } } }
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+  }
+
+  function renderTable(rows) {
+    var tbody = document.getElementById('data-tbody');
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><span class="icon">⛽</span>No data found for this asset and date range.</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(function(r) {
+      var opRate = r.opHours > 0 ? (r.operatingFuel / r.opHours) : 0;
+      var idleRateRow = r.idleHours > 0 ? (r.idleFuel / r.idleHours) : 0;
+      return '<tr>' +
+        '<td class="cell-strong">' + formatDateShort(r.date) + '</td>' +
+        '<td>' + r.litres.toFixed(1) + ' L</td>' +
+        '<td>' + r.opHours.toFixed(1) + ' hr</td>' +
+        '<td>' + r.idleHours.toFixed(1) + ' hr</td>' +
+        '<td class="cell-teal">' + opRate.toFixed(2) + ' L/hr</td>' +
+        '<td style="color:#EF9F27; font-weight:600;">' + idleRateRow.toFixed(2) + ' L/hr</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function showEmpty() {
+    document.getElementById('kpi-travel-rate').textContent = '—';
+    document.getElementById('kpi-idle-rate').textContent = '—';
+    document.getElementById('kpi-total-cost').textContent = '—';
+    document.getElementById('kpi-idle-cost').textContent = '—';
+    document.getElementById('kpi-total-litres-sub').textContent = 'for selected period';
+    document.getElementById('kpi-idle-pct-sub').textContent = 'share of total cost';
+    document.getElementById('chart-empty').style.display = 'block';
+    if (fuelChart) { fuelChart.destroy(); fuelChart = null; }
+    document.getElementById('data-tbody').innerHTML = '<tr><td colspan="6"><div class="empty-state"><span class="icon">⛽</span>No fuel or telematics data found for this asset in the selected date range.</div></td></tr>';
+  }
+
+  function formatDateShort(dateStr) {
+    var d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+  }
+
+  function esc(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  document.getElementById('signout-btn').addEventListener('click', async function() {
+    await supabase.auth.signOut();
+    window.location.href = 'login.html';
+  });
+
+  init();
+})();
+</script>
+
+</body>
+</html>
