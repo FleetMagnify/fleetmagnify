@@ -506,7 +506,10 @@
       model: document.getElementById('asset-model').value.trim() || null,
       year: parseInt(document.getElementById('asset-year').value) || null,
       registration: document.getElementById('asset-rego').value.trim() || null,
-      idle_burn_rate_lph: idleRateRaw ? parseFloat(idleRateRaw) : null
+      idle_burn_rate_lph: idleRateRaw ? parseFloat(idleRateRaw) : null,
+      purchase_price: document.getElementById('asset-purchase-price').value ? parseFloat(document.getElementById('asset-purchase-price').value) : null,
+expected_life_hours: document.getElementById('asset-life-hours').value ? parseFloat(document.getElementById('asset-life-hours').value) : null,
+service_cost_per_hour: document.getElementById('asset-service-cost').value ? parseFloat(document.getElementById('asset-service-cost').value) : null
     });
     this.disabled = false; this.textContent = 'Add Asset';
     if (error) { errEl.textContent = error.message; errEl.classList.add('visible'); return; }
