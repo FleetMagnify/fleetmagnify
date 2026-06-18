@@ -153,11 +153,12 @@
 <body>
 
 <aside class="sidebar">
-  <a class="sidebar-logo" href="dashboard.html">
+  <a class="sidebar-logo" href="home.html">
     <div class="logo-mark">FM</div>
     <span class="logo-name">Fleet<span>Magnify</span></span>
   </a>
   <nav class="sidebar-nav">
+    <a class="nav-item" href="home.html"><span class="nav-icon">🏠</span> Overview</a>
     <div class="nav-label">Analytics Modules</div>
     <a class="nav-item" href="fuel-analyst.html"><span class="nav-icon">⛽</span> Fuel Analyst</a>
     <a class="nav-item" href="idle-cost-analyst.html"><span class="nav-icon">⏱</span> Idle Cost Analyst</a>
@@ -177,7 +178,7 @@
 <div class="main">
   <div class="topbar">
     <div>
-      <div class="breadcrumb" id="breadcrumb"><a href="dashboard.html">Dashboard</a> / Job Cost Analyst</div>
+      <div class="breadcrumb" id="breadcrumb"><a href="home.html">Overview</a> / Job Cost Analyst</div>
       <div class="topbar-title" id="topbar-title">Job Cost Analyst</div>
     </div>
     <div class="user-pill">
@@ -419,7 +420,7 @@
     currentJob = null;
     document.getElementById('list-view').hidden = false;
     document.getElementById('detail-view').hidden = true;
-    document.getElementById('breadcrumb').innerHTML = '<a href="dashboard.html">Dashboard</a> / Job Cost Analyst';
+    document.getElementById('breadcrumb').innerHTML = '<a href="home.html">Overview</a> / Job Cost Analyst';
     document.getElementById('topbar-title').textContent = 'Job Cost Analyst';
     loadJobs();
   }
@@ -432,7 +433,7 @@
     document.getElementById('detail-job-name').textContent = currentJob.job_name;
     document.getElementById('detail-created').textContent = 'Created ' + formatDateLong(currentJob.created_at);
     document.getElementById('detail-status').value = currentJob.status || 'Active';
-    document.getElementById('breadcrumb').innerHTML = '<a href="dashboard.html">Dashboard</a> / <a id="bc-jobs">Job Cost Analyst</a> / ' + esc(currentJob.job_name);
+    document.getElementById('breadcrumb').innerHTML = '<a href="home.html">Overview</a> / <a id="bc-jobs">Job Cost Analyst</a> / ' + esc(currentJob.job_name);
     document.getElementById('bc-jobs').addEventListener('click', function(e) { e.preventDefault(); showListView(); });
     document.getElementById('topbar-title').textContent = currentJob.job_name;
     await refreshJobDetail();

@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Overview | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #F0F2F5; min-height: 100vh; display: flex; }
+
+  .sidebar { width: 240px; flex-shrink: 0; background: rgba(10,16,26,0.95); border-right: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 50; overflow-y: auto; }
+  .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); text-decoration: none; }
+  .logo-mark { width: 34px; height: 34px; border-radius: 9px; background: #0EA57A; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #080C12; }
+  .logo-name { font-size: 16px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
+  .logo-name span { color: #0EA57A; }
+  .sidebar-nav { flex: 1; padding: 16px 12px; }
+  .nav-label { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #2E3A4A; padding: 0 8px; margin-bottom: 8px; margin-top: 16px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; margin-bottom: 2px; text-decoration: none; font-size: 13.5px; font-weight: 500; color: #6B7785; transition: all 0.2s; }
+  .nav-item:hover { background: rgba(255,255,255,0.04); color: #C8D0DB; }
+  .nav-item.active { background: rgba(14,165,122,0.10); color: #0EA57A; }
+  .nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+  .sidebar-footer { padding: 16px 12px; border-top: 1px solid rgba(255,255,255,0.06); }
+  .btn-signout { width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 8px; border: none; background: none; font-size: 13px; font-weight: 500; color: #4A5568; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-signout:hover { background: rgba(226,75,74,0.08); color: #F0A8A7; }
+
+  .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar { padding: 20px 36px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; background: rgba(8,12,18,0.80); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 40; }
+  .topbar-title { font-size: 18px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.4px; }
+  .user-pill { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); border-radius: 100px; padding: 6px 14px 6px 8px; }
+  .user-avatar { width: 26px; height: 26px; border-radius: 50%; background: rgba(14,165,122,0.20); border: 1px solid rgba(14,165,122,0.30); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #0EA57A; }
+  .user-name { font-size: 12.5px; font-weight: 500; color: #9BA4B0; }
+
+  .page-content { padding: 36px; flex: 1; max-width: 1280px; }
+  .welcome-line { font-size: 14px; color: #5A6474; margin-bottom: 6px; }
+  .page-title { font-size: 30px; font-weight: 800; letter-spacing: -1.2px; color: #F0F2F5; margin-bottom: 28px; }
+
+  .hero-kpi { background: rgba(14,165,122,0.06); border: 1px solid rgba(14,165,122,0.18); border-radius: 18px; padding: 32px 36px; margin-bottom: 24px; }
+  .hero-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #0EA57A; margin-bottom: 12px; }
+  .hero-value { font-size: 48px; font-weight: 800; letter-spacing: -2px; color: #F0F2F5; line-height: 1; margin-bottom: 12px; }
+  .hero-compare { font-size: 13.5px; color: #5A6474; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .hero-compare .up { color: #EF9F27; font-weight: 700; }
+  .hero-compare .down { color: #0EA57A; font-weight: 700; }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .kpi-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 20px 22px; }
+  .kpi-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3A4A5C; margin-bottom: 10px; line-height: 1.35; }
+  .kpi-value { font-size: 26px; font-weight: 800; letter-spacing: -1px; color: #D8DFE8; line-height: 1; margin-bottom: 4px; }
+  .kpi-value.teal { color: #0EA57A; }
+  .kpi-value.amber { color: #EF9F27; }
+  .kpi-sub { font-size: 11px; color: #3A4A5C; }
+
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 24px; }
+  .chart-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 22px; }
+  .chart-title { font-size: 14px; font-weight: 700; color: #C8D0DB; margin-bottom: 16px; }
+  .chart-wrap { height: 260px; position: relative; }
+
+  .table-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; overflow: hidden; }
+  .table-header { padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .table-title { font-size: 14px; font-weight: 700; color: #C8D0DB; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { padding: 11px 16px; text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #2E3A4A; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.01); }
+  tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  tbody td { padding: 12px 16px; font-size: 13px; color: #9BA4B0; }
+  .cell-strong { color: #D8DFE8; font-weight: 600; }
+  .cell-teal { color: #0EA57A; font-weight: 700; }
+
+  .empty-state { text-align: center; padding: 64px 32px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; }
+  .empty-state .icon { font-size: 44px; margin-bottom: 16px; opacity: 0.45; display: block; }
+  .empty-state h2 { font-size: 20px; font-weight: 700; color: #C8D0DB; margin-bottom: 10px; }
+  .empty-state p { font-size: 14px; color: #5A6474; line-height: 1.65; max-width: 440px; margin: 0 auto 24px; }
+  .empty-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn-teal { background: #0EA57A; border: none; color: #080C12; font-size: 13px; font-weight: 700; padding: 10px 20px; border-radius: 8px; cursor: pointer; text-decoration: none; display: inline-block; font-family: inherit; }
+  .btn-teal:hover { background: #0BC48E; }
+  .btn-secondary { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); color: #C8D0DB; font-size: 13px; font-weight: 600; padding: 10px 20px; border-radius: 8px; text-decoration: none; display: inline-block; }
+  .btn-secondary:hover { border-color: rgba(14,165,122,0.35); color: #0EA57A; }
+
+  .dashboard-content[hidden] { display: none !important; }
+
+  @media (max-width: 1100px) { .kpi-row { grid-template-columns: 1fr 1fr; } .charts-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) { .sidebar { display: none; } .main { margin-left: 0; } .page-content { padding: 20px; } .hero-value { font-size: 36px; } }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <a class="sidebar-logo" href="home.html">
+    <div class="logo-mark">FM</div>
+    <span class="logo-name">Fleet<span>Magnify</span></span>
+  </a>
+  <nav class="sidebar-nav">
+    <a class="nav-item active" href="home.html"><span class="nav-icon">🏠</span> Overview</a>
+    <div class="nav-label">Analytics Modules</div>
+    <a class="nav-item" href="fuel-analyst.html"><span class="nav-icon">⛽</span> Fuel Analyst</a>
+    <a class="nav-item" href="idle-cost-analyst.html"><span class="nav-icon">⏱</span> Idle Cost Analyst</a>
+    <a class="nav-item" href="emissions-intelligence.html"><span class="nav-icon">🌍</span> Emissions Intelligence</a>
+    <a class="nav-item" href="utilisation-analyst.html"><span class="nav-icon">📊</span> Utilisation Analyst</a>
+    <a class="nav-item" href="job-cost-analyst.html"><span class="nav-icon">🏗</span> Job Cost Analyst</a>
+    <a class="nav-item" href="reports.html"><span class="nav-icon">📋</span> Reports</a>
+    <div class="nav-label">Fleet Management</div>
+    <a class="nav-item" href="assets.html"><span class="nav-icon">🚧</span> Assets</a>
+    <a class="nav-item" href="upload.html"><span class="nav-icon">📤</span> Upload Data</a>
+  </nav>
+  <div class="sidebar-footer">
+    <button class="btn-signout" id="signout-btn">↩ Sign Out</button>
+  </div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title">Fleet Overview</div>
+    <div class="user-pill">
+      <div class="user-avatar" id="user-avatar">?</div>
+      <span class="user-name" id="user-name">Loading...</span>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <p class="welcome-line">Welcome back, <strong id="company-name">—</strong></p>
+    <h1 class="page-title" id="month-title">Fleet Overview</h1>
+
+    <div id="empty-state" class="empty-state" hidden>
+      <span class="icon">📊</span>
+      <h2>Get started with FleetMagnify</h2>
+      <p>Add your fleet assets and upload fuel and telematics data to see your month-to-date cost overview, charts, and rankings.</p>
+      <div class="empty-actions">
+        <a class="btn-teal" href="assets.html">Add Assets</a>
+        <a class="btn-secondary" href="upload.html">Upload Data</a>
+      </div>
+    </div>
+
+    <div id="dashboard-content" class="dashboard-content">
+      <div class="hero-kpi">
+        <div class="hero-label">Total Fleet Cost — Month to Date</div>
+        <div class="hero-value" id="hero-total">—</div>
+        <div class="hero-compare" id="hero-compare"></div>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-label">Total Fuel Cost MTD</div><div class="kpi-value" id="kpi-fuel">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Idle Cost MTD</div><div class="kpi-value amber" id="kpi-idle">—</div><div class="kpi-sub">fuel waste + depreciation + service</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Emissions MTD</div><div class="kpi-value teal" id="kpi-emissions">—</div><div class="kpi-sub">tonnes CO₂</div></div>
+        <div class="kpi-card"><div class="kpi-label">Average Fleet Utilisation MTD</div><div class="kpi-value" id="kpi-util">—</div><div class="kpi-sub" id="kpi-util-sub">—</div></div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="chart-card"><div class="chart-title">Fuel Cost by Asset (Month to Date)</div><div class="chart-wrap"><canvas id="chart-fuel"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">Idle Cost by Asset (Month to Date)</div><div class="chart-wrap"><canvas id="chart-idle"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">Emissions by Asset (Month to Date)</div><div class="chart-wrap"><canvas id="chart-emissions"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">Utilisation by Asset (Month to Date)</div><div class="chart-wrap"><canvas id="chart-util"></canvas></div></div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-header"><div class="table-title">Top 5 Most Expensive Assets This Month</div></div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>Asset Name</th><th>Fuel Cost</th><th>Idle Cost</th><th>Total Cost</th></tr></thead>
+            <tbody id="top-assets-tbody"><tr><td colspan="4" style="text-align:center;padding:24px;color:#3A4A5C;">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var currentUser = null;
+  var companyName = '';
+  var charts = {};
+
+  var DEFAULT_IDLE_RATES = {
+    'Excavator': 4.0, 'Dump Truck': 5.5, 'Wheel Loader': 4.5, 'Motor Grader': 4.0,
+    'Bulldozer': 5.0, 'Crane': 4.5, 'Forklift': 1.5, 'Light Vehicle': 1.2,
+    'Rigid Truck': 2.5, 'Semi Trailer': 3.0, 'Water Truck': 3.5, 'Other': 3.0
+  };
+  var EMISSION_FACTORS = { 'Diesel': 2.68, 'Petrol': 2.31, 'Electric': 0, 'Hybrid': 1.5 };
+  var DEFAULT_HOURS_PER_WEEK = 40;
+
+  function fmtDate(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function getMTDRange() {
+    var now = new Date();
+    return { from: fmtDate(new Date(now.getFullYear(), now.getMonth(), 1)), to: fmtDate(now) };
+  }
+
+  function getPrevMTDRange() {
+    var now = new Date();
+    var from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    var endDay = Math.min(now.getDate(), new Date(now.getFullYear(), now.getMonth(), 0).getDate());
+    var to = new Date(now.getFullYear(), now.getMonth() - 1, endDay);
+    return { from: fmtDate(from), to: fmtDate(to) };
+  }
+
+  function daysInRange(fromStr, toStr) {
+    var start = new Date(fromStr + 'T00:00:00');
+    var end = new Date(toStr + 'T00:00:00');
+    return Math.round((end - start) / 86400000) + 1;
+  }
+
+  async function init() {
+    var sessionResult = await supabase.auth.getSession();
+    if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
+    currentUser = sessionResult.data.session.user;
+    companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name)
+      ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
+    document.getElementById('user-name').textContent = companyName;
+    document.getElementById('user-avatar').textContent = companyName.charAt(0).toUpperCase();
+    document.getElementById('company-name').textContent = companyName;
+
+    var now = new Date();
+    document.getElementById('month-title').textContent =
+      now.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' }) + ' Fleet Overview';
+
+    await loadDashboard();
+    document.getElementById('signout-btn').addEventListener('click', async function() {
+      await supabase.auth.signOut(); window.location.href = 'login.html';
+    });
+  }
+
+  function getIdleRate(a) { return a.idle_burn_rate_lph || DEFAULT_IDLE_RATES[a.asset_type] || 3.0; }
+  function getEmissionFactor(ft) { return EMISSION_FACTORS[ft] !== undefined ? EMISSION_FACTORS[ft] : EMISSION_FACTORS.Diesel; }
+  function getHoursPerWeek(a) {
+    var h = a.available_hours_per_week != null ? parseFloat(a.available_hours_per_week) : DEFAULT_HOURS_PER_WEEK;
+    return isNaN(h) ? DEFAULT_HOURS_PER_WEEK : h;
+  }
+  function fmtMoney(n) { return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+
+  function computeAssetMetrics(assets, fuelRows, telRows, dateFrom, dateTo) {
+    var weeks = daysInRange(dateFrom, dateTo) / 7;
+    var results = assets.map(function(asset) {
+      var assetFuel = fuelRows.filter(function(r) { return Number(r.asset_id) === Number(asset.id); });
+      var assetTel = telRows.filter(function(r) { return Number(r.asset_id) === Number(asset.id); });
+
+      var fuelCost = 0, litres = 0, idleHours = 0, opHours = 0;
+      assetFuel.forEach(function(r) {
+        fuelCost += parseFloat(r.total_cost) || 0;
+        litres += parseFloat(r.litres) || 0;
+      });
+      assetTel.forEach(function(r) {
+        idleHours += parseFloat(r.idle_hours) || 0;
+        opHours += parseFloat(r.operating_hours) || 0;
+      });
+
+      var avgCpl = litres > 0 ? fuelCost / litres : 0;
+      var idleRate = getIdleRate(asset);
+      var idleFuelCost = idleHours * idleRate * avgCpl;
+      var lifeHours = parseFloat(asset.expected_life_hours) || 0;
+      var purchasePrice = parseFloat(asset.purchase_price) || 0;
+      var servicePerHour = parseFloat(asset.service_cost_per_hour) || 0;
+      var deprPerHour = lifeHours > 0 ? purchasePrice / lifeHours : 0;
+      var deprCost = idleHours * deprPerHour;
+      var serviceCost = idleHours * servicePerHour;
+      var idleTotal = idleFuelCost + deprCost + serviceCost;
+      var emissionsKg = litres * getEmissionFactor(asset.fuel_type);
+      var available = getHoursPerWeek(asset) * weeks;
+      var utilRate = available > 0 ? (opHours / available) * 100 : 0;
+      var target = asset.target_utilisation_percent != null ? parseFloat(asset.target_utilisation_percent) : null;
+
+      return {
+        id: asset.id, name: asset.asset_name,
+        fuelCost: fuelCost, idleFuelCost: idleFuelCost, deprCost: deprCost, serviceCost: serviceCost,
+        idleTotal: idleTotal, totalCost: fuelCost + idleTotal,
+        emissionsKg: emissionsKg, utilRate: utilRate, target: target,
+        opHours: opHours, available: available
+      };
+    });
+
+    var totals = { fuel: 0, idle: 0, depr: 0, service: 0, emissions: 0, opHours: 0, available: 0, grand: 0 };
+    var targetSum = 0, targetCount = 0;
+    results.forEach(function(r) {
+      totals.fuel += r.fuelCost;
+      totals.idle += r.idleTotal;
+      totals.depr += r.deprCost;
+      totals.service += r.serviceCost;
+      totals.emissions += r.emissionsKg;
+      totals.opHours += r.opHours;
+      totals.available += r.available;
+      totals.grand += r.totalCost;
+      if (r.target != null && !isNaN(r.target)) { targetSum += r.target; targetCount++; }
+    });
+    totals.avgUtil = totals.available > 0 ? (totals.opHours / totals.available) * 100 : 0;
+    totals.avgTarget = targetCount > 0 ? targetSum / targetCount : null;
+    return { assets: results, totals: totals };
+  }
+
+  async function fetchData(dateFrom, dateTo) {
+    var assetsResult = await supabase.from('assets').select('*').eq('user_id', currentUser.id).order('asset_name');
+    var assets = assetsResult.data || [];
+    if (assets.length === 0) return { assets: [], fuel: [], tel: [] };
+
+    var fuelResult = await supabase.from('fuel_records').select('asset_id, litres, total_cost, record_date')
+      .eq('user_id', currentUser.id).gte('record_date', dateFrom).lte('record_date', dateTo);
+    var telResult = await supabase.from('telematics_records').select('asset_id, idle_hours, operating_hours, record_date')
+      .eq('user_id', currentUser.id).gte('record_date', dateFrom).lte('record_date', dateTo);
+
+    return { assets: assets, fuel: fuelResult.data || [], tel: telResult.data || [] };
+  }
+
+  async function loadDashboard() {
+    var mtd = getMTDRange();
+    var prev = getPrevMTDRange();
+    var current = await fetchData(mtd.from, mtd.to);
+
+    if (current.assets.length === 0 || (current.fuel.length === 0 && current.tel.length === 0)) {
+      document.getElementById('empty-state').hidden = false;
+      document.getElementById('dashboard-content').hidden = true;
+      return;
+    }
+
+    document.getElementById('empty-state').hidden = true;
+    document.getElementById('dashboard-content').hidden = false;
+
+    var curMetrics = computeAssetMetrics(current.assets, current.fuel, current.tel, mtd.from, mtd.to);
+    var prevData = await fetchData(prev.from, prev.to);
+    var prevMetrics = computeAssetMetrics(prevData.assets, prevData.fuel, prevData.tel, prev.from, prev.to);
+
+    document.getElementById('hero-total').textContent = fmtMoney(curMetrics.totals.grand);
+    var compareEl = document.getElementById('hero-compare');
+    if (prevData.fuel.length > 0 || prevData.tel.length > 0) {
+      var prevTotal = prevMetrics.totals.grand;
+      var curTotal = curMetrics.totals.grand;
+      if (prevTotal > 0) {
+        var pct = ((curTotal - prevTotal) / prevTotal) * 100;
+        var increased = pct > 0;
+        compareEl.innerHTML = '<span class="' + (increased ? 'up' : 'down') + '">' +
+          (increased ? '↑' : '↓') + ' ' + Math.abs(pct).toFixed(1) + '%</span> vs same period last month (' + fmtMoney(prevTotal) + ')';
+      } else {
+        compareEl.textContent = 'No comparable data for the same period last month.';
+      }
+    } else {
+      compareEl.textContent = 'No data available for the same period last month.';
+    }
+
+    document.getElementById('kpi-fuel').textContent = fmtMoney(curMetrics.totals.fuel);
+    document.getElementById('kpi-idle').textContent = fmtMoney(curMetrics.totals.idle);
+    document.getElementById('kpi-emissions').textContent = (curMetrics.totals.emissions / 1000).toFixed(2) + ' t';
+    document.getElementById('kpi-util').textContent = curMetrics.totals.avgUtil.toFixed(1) + '%';
+    document.getElementById('kpi-util-sub').textContent = curMetrics.totals.avgTarget != null
+      ? 'Fleet avg target: ' + curMetrics.totals.avgTarget.toFixed(0) + '%' : 'No fleet target set';
+
+    renderCharts(curMetrics.assets);
+    renderTopTable(curMetrics.assets);
+  }
+
+  function destroyCharts() {
+    Object.keys(charts).forEach(function(k) { if (charts[k]) { charts[k].destroy(); charts[k] = null; } });
+  }
+
+  function renderCharts(assets) {
+    destroyCharts();
+    var labels = assets.map(function(a) { return a.name; });
+    var gridColor = 'rgba(255,255,255,0.04)';
+    var tickColor = '#4A5568';
+
+    charts.fuel = new Chart(document.getElementById('chart-fuel'), {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{ data: assets.map(function(a) { return Math.round(a.fuelCost); }), backgroundColor: '#0EA57A', borderRadius: 4 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: tickColor, font: { size: 10 }, maxRotation: 45 } },
+          y: { grid: { color: gridColor }, ticks: { color: tickColor, callback: function(v) { return '$' + v; } } }
+        }
+      }
+    });
+
+    charts.idle = new Chart(document.getElementById('chart-idle'), {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Idle Fuel', data: assets.map(function(a) { return Math.round(a.idleFuelCost); }), backgroundColor: '#0EA57A' },
+          { label: 'Depreciation', data: assets.map(function(a) { return Math.round(a.deprCost); }), backgroundColor: '#EF9F27' },
+          { label: 'Service', data: assets.map(function(a) { return Math.round(a.serviceCost); }), backgroundColor: '#E2554A' }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#5A6474', font: { size: 10 } } } },
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { color: tickColor, font: { size: 10 }, maxRotation: 45 } },
+          y: { stacked: true, grid: { color: gridColor }, ticks: { color: tickColor, callback: function(v) { return '$' + v; } } }
+        }
+      }
+    });
+
+    charts.emissions = new Chart(document.getElementById('chart-emissions'), {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{ data: assets.map(function(a) { return Math.round(a.emissionsKg); }), backgroundColor: '#0EA57A', borderRadius: 4 }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { color: tickColor, callback: function(v) { return v + ' kg'; } } },
+          y: { grid: { display: false }, ticks: { color: tickColor, font: { size: 10 } } }
+        }
+      }
+    });
+
+    charts.util = new Chart(document.getElementById('chart-util'), {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: assets.map(function(a) { return Math.round(a.utilRate * 10) / 10; }),
+          backgroundColor: assets.map(function(a) {
+            if (a.target == null || isNaN(a.target)) return '#0EA57A';
+            return a.utilRate >= a.target ? '#0EA57A' : '#EF9F27';
+          }),
+          borderRadius: 4
+        }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { color: tickColor, callback: function(v) { return v + '%'; } }, max: 100 },
+          y: { grid: { display: false }, ticks: { color: tickColor, font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  function renderTopTable(assets) {
+    var sorted = assets.slice().sort(function(a, b) { return b.totalCost - a.totalCost; }).slice(0, 5);
+    var tbody = document.getElementById('top-assets-tbody');
+    if (sorted.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:#3A4A5C;">No cost data this month.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = sorted.map(function(a) {
+      return '<tr><td class="cell-strong">' + esc(a.name) + '</td><td>' + fmtMoney(a.fuelCost) + '</td><td>' + fmtMoney(a.idleTotal) + '</td><td class="cell-teal">' + fmtMoney(a.totalCost) + '</td></tr>';
+    }).join('');
+  }
+
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  init();
+})();
+</script>
+</body>
+</html>
