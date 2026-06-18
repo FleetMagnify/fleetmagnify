@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reports | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #F0F2F5; min-height: 100vh; display: flex; }
+
+  .sidebar {
+    width: 240px; flex-shrink: 0; background: rgba(10,16,26,0.95);
+    border-right: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column;
+    position: fixed; top: 0; left: 0; height: 100vh; z-index: 50; overflow-y: auto;
+  }
+  .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); text-decoration: none; }
+  .logo-mark { width: 34px; height: 34px; border-radius: 9px; background: #0EA57A; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #080C12; }
+  .logo-name { font-size: 16px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
+  .logo-name span { color: #0EA57A; }
+  .sidebar-nav { flex: 1; padding: 16px 12px; }
+  .nav-label { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #2E3A4A; padding: 0 8px; margin-bottom: 8px; margin-top: 16px; }
+  .nav-label:first-child { margin-top: 0; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; margin-bottom: 2px; text-decoration: none; font-size: 13.5px; font-weight: 500; color: #6B7785; transition: all 0.2s; }
+  .nav-item:hover { background: rgba(255,255,255,0.04); color: #C8D0DB; }
+  .nav-item.active { background: rgba(14,165,122,0.10); color: #0EA57A; }
+  .nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+  .sidebar-footer { padding: 16px 12px; border-top: 1px solid rgba(255,255,255,0.06); }
+  .btn-signout { width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 8px; border: none; background: none; font-size: 13px; font-weight: 500; color: #4A5568; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-signout:hover { background: rgba(226,75,74,0.08); color: #F0A8A7; }
+
+  .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar { padding: 20px 36px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; background: rgba(8,12,18,0.80); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 40; }
+  .breadcrumb { font-size: 13px; color: #3A4A5C; margin-bottom: 2px; }
+  .breadcrumb a { color: #3A4A5C; text-decoration: none; }
+  .breadcrumb a:hover { color: #6B7785; }
+  .topbar-title { font-size: 18px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.4px; }
+  .user-pill { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); border-radius: 100px; padding: 6px 14px 6px 8px; }
+  .user-avatar { width: 26px; height: 26px; border-radius: 50%; background: rgba(14,165,122,0.20); border: 1px solid rgba(14,165,122,0.30); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #0EA57A; }
+  .user-name { font-size: 12.5px; font-weight: 500; color: #9BA4B0; }
+
+  .page-content { padding: 36px; flex: 1; }
+  .page-eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #0EA57A; margin-bottom: 8px; }
+  .page-eyebrow .dash { width: 14px; height: 1.5px; background: #0EA57A; border-radius: 2px; }
+  .page-title { font-size: 28px; font-weight: 800; letter-spacing: -1px; color: #F0F2F5; margin-bottom: 6px; }
+  .page-sub { font-size: 14px; color: #5A6474; line-height: 1.55; margin-bottom: 28px; max-width: 640px; }
+
+  .reports-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 18px; }
+  .report-card {
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px;
+  }
+  .report-card.featured { grid-column: 1 / -1; max-width: 100%; }
+  .report-icon { font-size: 24px; margin-bottom: 2px; }
+  .report-card h2 { font-size: 17px; font-weight: 700; color: #D8DFE8; letter-spacing: -0.3px; }
+  .report-desc { font-size: 13px; color: #5A6474; line-height: 1.55; margin-top: -8px; }
+
+  .field-label { font-size: 11px; font-weight: 600; color: #4A5568; letter-spacing: 0.02em; margin-bottom: 6px; display: block; }
+  .scope-toggle { display: flex; gap: 6px; }
+  .scope-btn {
+    flex: 1; padding: 8px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 600;
+    border: 1px solid rgba(255,255,255,0.09); background: rgba(255,255,255,0.03);
+    color: #6B7785; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .scope-btn.active { background: rgba(14,165,122,0.12); border-color: rgba(14,165,122,0.30); color: #0EA57A; }
+  .scope-btn:hover:not(.active) { border-color: rgba(255,255,255,0.16); color: #C8D0DB; }
+
+  .report-card select, .report-card input[type="date"] {
+    width: 100%; padding: 9px 13px; background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.09); border-radius: 8px; color: #F0F2F5;
+    font-size: 13px; font-family: inherit; outline: none;
+  }
+  .report-card select:focus, .report-card input[type="date"]:focus { border-color: rgba(14,165,122,0.4); }
+  .report-card select { cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%234A5568' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center; padding-right: 34px;
+  }
+  .report-card select option { background: #0A101A; color: #F0F2F5; }
+  .date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .asset-select-wrap[hidden] { display: none; }
+
+  .export-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: auto; }
+  .btn-export-pdf, .btn-export-csv {
+    padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 700;
+    cursor: pointer; transition: all 0.2s; font-family: inherit; border: none;
+  }
+  .btn-export-pdf { background: #0EA57A; color: #080C12; }
+  .btn-export-pdf:hover:not(:disabled) { background: #0BC48E; }
+  .btn-export-csv { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); color: #C8D0DB; }
+  .btn-export-csv:hover:not(:disabled) { border-color: rgba(14,165,122,0.35); color: #0EA57A; }
+  .btn-export-pdf:disabled, .btn-export-csv:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  .toast { position: fixed; bottom: 28px; right: 28px; z-index: 200; background: rgba(10,16,26,0.98); border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; padding: 14px 20px; display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: #C8D0DB; transform: translateY(80px); opacity: 0; transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1); pointer-events: none; max-width: 360px; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: rgba(14,165,122,0.3); }
+  .toast.error { border-color: rgba(226,75,74,0.3); }
+
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
+    .page-content { padding: 20px; }
+    .report-card.featured { grid-column: auto; }
+  }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <a class="sidebar-logo" href="dashboard.html">
+    <div class="logo-mark">FM</div>
+    <span class="logo-name">Fleet<span>Magnify</span></span>
+  </a>
+  <nav class="sidebar-nav">
+    <div class="nav-label">Analytics Modules</div>
+    <a class="nav-item" href="fuel-analyst.html"><span class="nav-icon">⛽</span> Fuel Analyst</a>
+    <a class="nav-item" href="idle-cost-analyst.html"><span class="nav-icon">⏱</span> Idle Cost Analyst</a>
+    <a class="nav-item" href="emissions-intelligence.html"><span class="nav-icon">🌍</span> Emissions Intelligence</a>
+    <a class="nav-item" href="utilisation-analyst.html"><span class="nav-icon">📊</span> Utilisation Analyst</a>
+    <a class="nav-item active" href="reports.html"><span class="nav-icon">📋</span> Reports</a>
+    <div class="nav-label">Fleet Management</div>
+    <a class="nav-item" href="assets.html"><span class="nav-icon">🚧</span> Assets</a>
+    <a class="nav-item" href="upload.html"><span class="nav-icon">📤</span> Upload Data</a>
+  </nav>
+  <div class="sidebar-footer">
+    <button class="btn-signout" id="signout-btn">↩ Sign Out</button>
+  </div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="breadcrumb"><a href="dashboard.html">Dashboard</a> / Reports</div>
+      <div class="topbar-title">Reports Centre</div>
+    </div>
+    <div class="user-pill">
+      <div class="user-avatar" id="user-avatar">?</div>
+      <span class="user-name" id="user-name">Loading...</span>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="page-eyebrow"><div class="dash"></div> Export &amp; Reporting</div>
+    <h1 class="page-title">Generate Reports</h1>
+    <p class="page-sub">Export fleet intelligence as PDF or CSV — fuel, idle cost, emissions, utilisation, or a full fleet summary across all modules.</p>
+
+    <div class="reports-grid">
+
+      <div class="report-card" data-report="fuel">
+        <div class="report-icon">⛽</div>
+        <h2>Fuel Analysis Report</h2>
+        <p class="report-desc">Daily fuel consumption split into operating and idle fuel, with litres and hours.</p>
+        <div>
+          <span class="field-label">Asset Scope</span>
+          <div class="scope-toggle">
+            <button type="button" class="scope-btn" data-scope="single">Single Asset</button>
+            <button type="button" class="scope-btn active" data-scope="all">All Assets</button>
+          </div>
+        </div>
+        <div class="asset-select-wrap" hidden>
+          <label class="field-label">Asset</label>
+          <select class="asset-select"><option value="">Select an asset...</option></select>
+        </div>
+        <div>
+          <span class="field-label">Date Range</span>
+          <div class="date-row">
+            <input type="date" class="date-from">
+            <input type="date" class="date-to">
+          </div>
+        </div>
+        <div class="export-row">
+          <button type="button" class="btn-export-pdf" data-format="pdf">Export PDF</button>
+          <button type="button" class="btn-export-csv" data-format="csv">Export CSV</button>
+        </div>
+      </div>
+
+      <div class="report-card" data-report="idle">
+        <div class="report-icon">⏱</div>
+        <h2>Idle Cost Report</h2>
+        <p class="report-desc">Daily idle cost breakdown — fuel waste, depreciation, and service impact.</p>
+        <div>
+          <span class="field-label">Asset Scope</span>
+          <div class="scope-toggle">
+            <button type="button" class="scope-btn" data-scope="single">Single Asset</button>
+            <button type="button" class="scope-btn active" data-scope="all">All Assets</button>
+          </div>
+        </div>
+        <div class="asset-select-wrap" hidden>
+          <label class="field-label">Asset</label>
+          <select class="asset-select"><option value="">Select an asset...</option></select>
+        </div>
+        <div>
+          <span class="field-label">Date Range</span>
+          <div class="date-row">
+            <input type="date" class="date-from">
+            <input type="date" class="date-to">
+          </div>
+        </div>
+        <div class="export-row">
+          <button type="button" class="btn-export-pdf" data-format="pdf">Export PDF</button>
+          <button type="button" class="btn-export-csv" data-format="csv">Export CSV</button>
+        </div>
+      </div>
+
+      <div class="report-card" data-report="emissions">
+        <div class="report-icon">🌍</div>
+        <h2>Emissions Report</h2>
+        <p class="report-desc">Daily CO₂ emissions derived from fuel consumption and telematics idle hours.</p>
+        <div>
+          <span class="field-label">Asset Scope</span>
+          <div class="scope-toggle">
+            <button type="button" class="scope-btn" data-scope="single">Single Asset</button>
+            <button type="button" class="scope-btn active" data-scope="all">All Assets</button>
+          </div>
+        </div>
+        <div class="asset-select-wrap" hidden>
+          <label class="field-label">Asset</label>
+          <select class="asset-select"><option value="">Select an asset...</option></select>
+        </div>
+        <div>
+          <span class="field-label">Date Range</span>
+          <div class="date-row">
+            <input type="date" class="date-from">
+            <input type="date" class="date-to">
+          </div>
+        </div>
+        <div class="export-row">
+          <button type="button" class="btn-export-pdf" data-format="pdf">Export PDF</button>
+          <button type="button" class="btn-export-csv" data-format="csv">Export CSV</button>
+        </div>
+      </div>
+
+      <div class="report-card" data-report="utilisation">
+        <div class="report-icon">📊</div>
+        <h2>Utilisation Report</h2>
+        <p class="report-desc">Daily operating hours vs available capacity and utilisation rate.</p>
+        <div>
+          <span class="field-label">Asset Scope</span>
+          <div class="scope-toggle">
+            <button type="button" class="scope-btn" data-scope="single">Single Asset</button>
+            <button type="button" class="scope-btn active" data-scope="all">All Assets</button>
+          </div>
+        </div>
+        <div class="asset-select-wrap" hidden>
+          <label class="field-label">Asset</label>
+          <select class="asset-select"><option value="">Select an asset...</option></select>
+        </div>
+        <div>
+          <span class="field-label">Date Range</span>
+          <div class="date-row">
+            <input type="date" class="date-from">
+            <input type="date" class="date-to">
+          </div>
+        </div>
+        <div class="export-row">
+          <button type="button" class="btn-export-pdf" data-format="pdf">Export PDF</button>
+          <button type="button" class="btn-export-csv" data-format="csv">Export CSV</button>
+        </div>
+      </div>
+
+      <div class="report-card featured" data-report="fleet">
+        <div class="report-icon">📋</div>
+        <h2>Full Fleet Summary Report</h2>
+        <p class="report-desc">One-line summary per asset across fuel cost, idle cost, CO₂ emissions, and utilisation — plus fleet-wide totals.</p>
+        <div>
+          <span class="field-label">Date Range</span>
+          <div class="date-row" style="max-width:420px;">
+            <input type="date" class="date-from">
+            <input type="date" class="date-to">
+          </div>
+        </div>
+        <div class="export-row" style="max-width:420px;">
+          <button type="button" class="btn-export-pdf" data-format="pdf">Export PDF</button>
+          <button type="button" class="btn-export-csv" data-format="csv">Export CSV</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span id="toast-icon">✓</span><span id="toast-msg"></span></div>
+
+<script src="js/supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script>
+(function() {
+  var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var currentUser = null;
+  var companyName = '';
+  var allAssets = [];
+
+  var DEFAULT_IDLE_RATES = {
+    'Excavator': 4.0, 'Dump Truck': 5.5, 'Wheel Loader': 4.5, 'Motor Grader': 4.0,
+    'Bulldozer': 5.0, 'Crane': 4.5, 'Forklift': 1.5, 'Light Vehicle': 1.2,
+    'Rigid Truck': 2.5, 'Semi Trailer': 3.0, 'Water Truck': 3.5, 'Other': 3.0
+  };
+  var EMISSION_FACTORS = { 'Diesel': 2.68, 'Petrol': 2.31, 'Electric': 0, 'Hybrid': 1.5 };
+  var DEFAULT_HOURS_PER_WEEK = 40;
+
+  var REPORT_TITLES = {
+    fuel: 'Fuel Analysis Report',
+    idle: 'Idle Cost Report',
+    emissions: 'Emissions Report',
+    utilisation: 'Utilisation Report',
+    fleet: 'Full Fleet Summary Report'
+  };
+
+  async function init() {
+    var sessionResult = await supabase.auth.getSession();
+    if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
+    currentUser = sessionResult.data.session.user;
+    companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name)
+      ? currentUser.user_metadata.company_name
+      : currentUser.email.split('@')[0];
+    document.getElementById('user-name').textContent = companyName;
+    document.getElementById('user-avatar').textContent = companyName.charAt(0).toUpperCase();
+
+    var today = new Date();
+    var monthAgo = new Date();
+    monthAgo.setDate(monthAgo.getDate() - 30);
+    var fromVal = monthAgo.toISOString().slice(0, 10);
+    var toVal = today.toISOString().slice(0, 10);
+    document.querySelectorAll('.date-from').forEach(function(el) { el.value = fromVal; });
+    document.querySelectorAll('.date-to').forEach(function(el) { el.value = toVal; });
+
+    await loadAssets();
+    bindUI();
+  }
+
+  async function loadAssets() {
+    var result = await supabase.from('assets').select('*').eq('user_id', currentUser.id).order('asset_name');
+    allAssets = result.data || [];
+    var options = '<option value="">Select an asset...</option>' +
+      allAssets.map(function(a) { return '<option value="' + a.id + '">' + esc(a.asset_name) + '</option>'; }).join('');
+    document.querySelectorAll('.asset-select').forEach(function(sel) { sel.innerHTML = options; });
+  }
+
+  function bindUI() {
+    document.querySelectorAll('.report-card').forEach(function(card) {
+      card.querySelectorAll('.scope-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          card.querySelectorAll('.scope-btn').forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          var wrap = card.querySelector('.asset-select-wrap');
+          if (wrap) wrap.hidden = btn.dataset.scope !== 'single';
+        });
+      });
+      card.querySelectorAll('.btn-export-pdf, .btn-export-csv').forEach(function(btn) {
+        btn.addEventListener('click', function() { handleExport(card, btn.dataset.format, btn); });
+      });
+    });
+    document.getElementById('signout-btn').addEventListener('click', async function() {
+      await supabase.auth.signOut();
+      window.location.href = 'login.html';
+    });
+  }
+
+  function getCardConfig(card) {
+    var scopeBtn = card.querySelector('.scope-btn.active');
+    var scope = scopeBtn ? scopeBtn.dataset.scope : 'all';
+    var assetSelect = card.querySelector('.asset-select');
+    return {
+      report: card.dataset.report,
+      scope: scope,
+      assetId: assetSelect ? assetSelect.value : null,
+      dateFrom: card.querySelector('.date-from').value,
+      dateTo: card.querySelector('.date-to').value
+    };
+  }
+
+  function getScopeAssets(config) {
+    if (config.report === 'fleet') return allAssets.slice();
+    if (config.scope === 'all') return allAssets.slice();
+    if (!config.assetId) return null;
+    var asset = allAssets.find(function(a) { return a.id === Number(config.assetId); });
+    return asset ? [asset] : null;
+  }
+
+  function scopeLabel(config, assets) {
+    if (config.report === 'fleet' || config.scope === 'all') return 'All Assets (' + assets.length + ')';
+    return assets.length ? assets[0].asset_name : 'Single Asset';
+  }
+
+  async function fetchRecords(assetIds, dateFrom, dateTo) {
+    var fuelQ = supabase.from('fuel_records').select('asset_id, record_date, litres, total_cost')
+      .eq('user_id', currentUser.id).gte('record_date', dateFrom).lte('record_date', dateTo);
+    var telQ = supabase.from('telematics_records').select('asset_id, record_date, operating_hours, idle_hours')
+      .eq('user_id', currentUser.id).gte('record_date', dateFrom).lte('record_date', dateTo);
+    if (assetIds.length === 1) {
+      fuelQ = fuelQ.eq('asset_id', assetIds[0]);
+      telQ = telQ.eq('asset_id', assetIds[0]);
+    } else if (assetIds.length > 0) {
+      fuelQ = fuelQ.in('asset_id', assetIds);
+      telQ = telQ.in('asset_id', assetIds);
+    }
+    var results = await Promise.all([fuelQ, telQ]);
+    if (results[0].error) throw new Error(results[0].error.message);
+    if (results[1].error) throw new Error(results[1].error.message);
+    return { fuel: results[0].data || [], tel: results[1].data || [] };
+  }
+
+  function assetIdMatch(a, b) { return Number(a) === Number(b); }
+
+  function filterByAsset(rows, assetId) {
+    return rows.filter(function(r) { return assetIdMatch(r.asset_id, assetId); });
+  }
+
+  function getIdleRate(asset) {
+    return asset.idle_burn_rate_lph || DEFAULT_IDLE_RATES[asset.asset_type] || 3.0;
+  }
+
+  function getEmissionFactor(fuelType) {
+    return EMISSION_FACTORS[fuelType] !== undefined ? EMISSION_FACTORS[fuelType] : EMISSION_FACTORS.Diesel;
+  }
+
+  function getHoursPerWeek(asset) {
+    var h = asset.available_hours_per_week != null ? parseFloat(asset.available_hours_per_week) : DEFAULT_HOURS_PER_WEEK;
+    return isNaN(h) ? DEFAULT_HOURS_PER_WEEK : h;
+  }
+
+  function weeksInRange(dateFrom, dateTo) {
+    var start = new Date(dateFrom + 'T00:00:00');
+    var end = new Date(dateTo + 'T00:00:00');
+    var days = Math.round((end - start) / 86400000) + 1;
+    return Math.max(days, 1) / 7;
+  }
+
+  function mergeByDate(fuelRows, telRows) {
+    var byDate = {};
+    fuelRows.forEach(function(r) {
+      byDate[r.record_date] = byDate[r.record_date] || {};
+      byDate[r.record_date].litres = (byDate[r.record_date].litres || 0) + (parseFloat(r.litres) || 0);
+      byDate[r.record_date].cost = (byDate[r.record_date].cost || 0) + (parseFloat(r.total_cost) || 0);
+    });
+    telRows.forEach(function(r) {
+      byDate[r.record_date] = byDate[r.record_date] || {};
+      byDate[r.record_date].operating_hours = (byDate[r.record_date].operating_hours || 0) + (parseFloat(r.operating_hours) || 0);
+      byDate[r.record_date].idle_hours = (byDate[r.record_date].idle_hours || 0) + (parseFloat(r.idle_hours) || 0);
+    });
+    return byDate;
+  }
+
+  function buildFuelReport(assets, fuel, tel) {
+    var rows = [];
+    var totals = { litres: 0, cost: 0, idleFuel: 0, opFuel: 0, opHours: 0, idleHours: 0 };
+
+    assets.forEach(function(asset) {
+      var assetFuel = filterByAsset(fuel, asset.id);
+      var assetTel = filterByAsset(tel, asset.id);
+      var idleRate = getIdleRate(asset);
+      var byDate = mergeByDate(assetFuel, assetTel);
+      Object.keys(byDate).sort().forEach(function(date) {
+        var d = byDate[date];
+        var litres = d.litres || 0;
+        var cost = d.cost || 0;
+        var opHours = d.operating_hours || 0;
+        var idleHours = d.idle_hours || 0;
+        var idleFuel = Math.min(idleHours * idleRate, litres);
+        var opFuel = litres - idleFuel;
+        rows.push({
+          asset: asset.asset_name, date: date, litres: litres, cost: cost,
+          opHours: opHours, idleHours: idleHours, opFuel: opFuel, idleFuel: idleFuel,
+          opRate: opHours > 0 ? opFuel / opHours : 0,
+          idleRate: idleHours > 0 ? idleFuel / idleHours : 0
+        });
+        totals.litres += litres; totals.cost += cost;
+        totals.idleFuel += idleFuel; totals.opFuel += opFuel;
+        totals.opHours += opHours; totals.idleHours += idleHours;
+      });
+    });
+
+    var idleCost = totals.litres > 0 ? totals.cost * (totals.idleFuel / totals.litres) : 0;
+    return {
+      rows: rows,
+      summary: [
+        ['Total Fuel Cost', fmtMoney(totals.cost)],
+        ['Total Litres', totals.litres.toFixed(1) + ' L'],
+        ['Operating Fuel', totals.opFuel.toFixed(1) + ' L'],
+        ['Idle Fuel', totals.idleFuel.toFixed(1) + ' L'],
+        ['Idle Fuel Cost', fmtMoney(idleCost)],
+        ['Total Operating Hours', totals.opHours.toFixed(1) + ' hr'],
+        ['Total Idle Hours', totals.idleHours.toFixed(1) + ' hr']
+      ],
+      csvHeaders: ['Asset', 'Date', 'Total Litres', 'Total Cost', 'Operating Hours', 'Idle Hours', 'Operating Fuel (L)', 'Idle Fuel (L)', 'Operating Rate (L/hr)', 'Idle Rate (L/hr)'],
+      csvRow: function(r) {
+        return [r.asset, r.date, r.litres.toFixed(2), r.cost.toFixed(2), r.opHours.toFixed(2), r.idleHours.toFixed(2), r.opFuel.toFixed(2), r.idleFuel.toFixed(2), r.opRate.toFixed(2), r.idleRate.toFixed(2)];
+      },
+      pdfHeaders: ['Asset', 'Date', 'Litres', 'Cost', 'Op Hrs', 'Idle Hrs', 'Op Fuel', 'Idle Fuel'],
+      pdfRow: function(r) {
+        return [r.asset, r.date, r.litres.toFixed(1), fmtMoney(r.cost), r.opHours.toFixed(1), r.idleHours.toFixed(1), r.opFuel.toFixed(1), r.idleFuel.toFixed(1)];
+      }
+    };
+  }
+
+  function buildIdleReport(assets, fuel, tel) {
+    var rows = [];
+    var totals = { idleHours: 0, fuelCost: 0, depr: 0, service: 0, total: 0 };
+
+    assets.forEach(function(asset) {
+      var assetFuel = filterByAsset(fuel, asset.id);
+      var assetTel = filterByAsset(tel, asset.id);
+      var idleRate = getIdleRate(asset);
+      var purchasePrice = parseFloat(asset.purchase_price) || 0;
+      var lifeHours = parseFloat(asset.expected_life_hours) || 0;
+      var servicePerHour = parseFloat(asset.service_cost_per_hour) || 0;
+      var deprPerHour = lifeHours > 0 ? purchasePrice / lifeHours : 0;
+
+      var totalLitres = 0, totalFuelCost = 0;
+      assetFuel.forEach(function(r) {
+        totalLitres += parseFloat(r.litres) || 0;
+        totalFuelCost += parseFloat(r.total_cost) || 0;
+      });
+      var avgCostPerLitre = totalLitres > 0 ? totalFuelCost / totalLitres : 0;
+
+      var byDate = {};
+      assetTel.forEach(function(r) {
+        byDate[r.record_date] = (byDate[r.record_date] || 0) + (parseFloat(r.idle_hours) || 0);
+      });
+
+      Object.keys(byDate).sort().forEach(function(date) {
+        var idleHours = byDate[date];
+        var fuelCost = idleHours * idleRate * avgCostPerLitre;
+        var deprCost = idleHours * deprPerHour;
+        var serviceCost = idleHours * servicePerHour;
+        var totalCost = fuelCost + deprCost + serviceCost;
+        rows.push({ asset: asset.asset_name, date: date, idleHours: idleHours, fuelCost: fuelCost, deprCost: deprCost, serviceCost: serviceCost, totalCost: totalCost });
+        totals.idleHours += idleHours; totals.fuelCost += fuelCost;
+        totals.depr += deprCost; totals.service += serviceCost; totals.total += totalCost;
+      });
+    });
+
+    return {
+      rows: rows,
+      summary: [
+        ['Total Idle Hours', totals.idleHours.toFixed(1) + ' hr'],
+        ['Idle Fuel Cost', fmtMoney(totals.fuelCost)],
+        ['Depreciation Cost', fmtMoney(totals.depr)],
+        ['Service Cost Impact', fmtMoney(totals.service)],
+        ['Total Idle Cost', fmtMoney(totals.total)]
+      ],
+      csvHeaders: ['Asset', 'Date', 'Idle Hours', 'Idle Fuel Cost', 'Depreciation Cost', 'Service Cost', 'Total Idle Cost'],
+      csvRow: function(r) {
+        return [r.asset, r.date, r.idleHours.toFixed(2), r.fuelCost.toFixed(2), r.deprCost.toFixed(2), r.serviceCost.toFixed(2), r.totalCost.toFixed(2)];
+      },
+      pdfHeaders: ['Asset', 'Date', 'Idle Hrs', 'Fuel $', 'Depr $', 'Service $', 'Total $'],
+      pdfRow: function(r) {
+        return [r.asset, r.date, r.idleHours.toFixed(1), r.fuelCost.toFixed(0), r.deprCost.toFixed(0), r.serviceCost.toFixed(0), r.totalCost.toFixed(0)];
+      }
+    };
+  }
+
+  function buildEmissionsReport(assets, fuel, tel) {
+    var rows = [];
+    var totals = { litres: 0, co2: 0, opCo2: 0, idleCo2: 0 };
+
+    assets.forEach(function(asset) {
+      var assetFuel = filterByAsset(fuel, asset.id);
+      var assetTel = filterByAsset(tel, asset.id);
+      var idleRate = getIdleRate(asset);
+      var factor = getEmissionFactor(asset.fuel_type);
+      var byDate = mergeByDate(assetFuel, assetTel);
+
+      Object.keys(byDate).sort().forEach(function(date) {
+        var d = byDate[date];
+        var litres = d.litres || 0;
+        var idleHours = d.idle_hours || 0;
+        var idleFuel = Math.min(idleHours * idleRate, litres);
+        var opFuel = litres - idleFuel;
+        var dailyCo2 = litres * factor;
+        var opCo2 = opFuel * factor;
+        var idleCo2 = idleFuel * factor;
+        rows.push({ asset: asset.asset_name, date: date, litres: litres, opFuel: opFuel, idleFuel: idleFuel, dailyCo2: dailyCo2, opCo2: opCo2, idleCo2: idleCo2 });
+        totals.litres += litres; totals.co2 += dailyCo2;
+        totals.opCo2 += opCo2; totals.idleCo2 += idleCo2;
+      });
+    });
+
+    return {
+      rows: rows,
+      summary: [
+        ['Total Fuel Consumed', totals.litres.toFixed(1) + ' L'],
+        ['Total CO₂ Emissions', (totals.co2 / 1000).toFixed(2) + ' t'],
+        ['Operating Emissions', (totals.opCo2 / 1000).toFixed(2) + ' t'],
+        ['Idle Emissions', (totals.idleCo2 / 1000).toFixed(2) + ' t']
+      ],
+      csvHeaders: ['Asset', 'Date', 'Litres Consumed', 'Operating Fuel (L)', 'Idle Fuel (L)', 'Daily CO2 (kg)', 'Operating CO2 (kg)', 'Idle CO2 (kg)'],
+      csvRow: function(r) {
+        return [r.asset, r.date, r.litres.toFixed(2), r.opFuel.toFixed(2), r.idleFuel.toFixed(2), r.dailyCo2.toFixed(2), r.opCo2.toFixed(2), r.idleCo2.toFixed(2)];
+      },
+      pdfHeaders: ['Asset', 'Date', 'Litres', 'Op Fuel', 'Idle Fuel', 'CO₂ kg'],
+      pdfRow: function(r) {
+        return [r.asset, r.date, r.litres.toFixed(1), r.opFuel.toFixed(1), r.idleFuel.toFixed(1), r.dailyCo2.toFixed(1)];
+      }
+    };
+  }
+
+  function buildUtilisationReport(assets, fuel, tel, dateFrom, dateTo) {
+    var rows = [];
+    var totals = { available: 0, actual: 0 };
+
+    assets.forEach(function(asset) {
+      var assetTel = filterByAsset(tel, asset.id);
+      var hoursPerWeek = getHoursPerWeek(asset);
+      var dailyAvailable = hoursPerWeek / 7;
+      var byDate = {};
+      assetTel.forEach(function(r) {
+        byDate[r.record_date] = (byDate[r.record_date] || 0) + (parseFloat(r.operating_hours) || 0);
+      });
+
+      Object.keys(byDate).sort().forEach(function(date) {
+        var actual = byDate[date];
+        var rate = dailyAvailable > 0 ? (actual / dailyAvailable) * 100 : 0;
+        rows.push({ asset: asset.asset_name, date: date, available: dailyAvailable, actual: actual, rate: rate });
+        totals.available += dailyAvailable; totals.actual += actual;
+      });
+    });
+
+    var fleetRate = totals.available > 0 ? (totals.actual / totals.available) * 100 : 0;
+    return {
+      rows: rows,
+      summary: [
+        ['Total Available Hours', totals.available.toFixed(1) + ' hr'],
+        ['Total Operating Hours', totals.actual.toFixed(1) + ' hr'],
+        ['Fleet Utilisation Rate', fleetRate.toFixed(1) + '%'],
+        ['Period', weeksInRange(dateFrom, dateTo).toFixed(2) + ' weeks']
+      ],
+      csvHeaders: ['Asset', 'Date', 'Available Hours', 'Actual Operating Hours', 'Utilisation Rate (%)'],
+      csvRow: function(r) {
+        return [r.asset, r.date, r.available.toFixed(2), r.actual.toFixed(2), r.rate.toFixed(2)];
+      },
+      pdfHeaders: ['Asset', 'Date', 'Available Hrs', 'Actual Hrs', 'Rate %'],
+      pdfRow: function(r) {
+        return [r.asset, r.date, r.available.toFixed(2), r.actual.toFixed(1), r.rate.toFixed(1)];
+      }
+    };
+  }
+
+  function buildFleetSummary(assets, fuel, tel, dateFrom, dateTo) {
+    var rows = [];
+    var fleet = { fuelCost: 0, idleCost: 0, co2: 0, actualHours: 0, availableHours: 0 };
+    var weeks = weeksInRange(dateFrom, dateTo);
+
+    assets.forEach(function(asset) {
+      var assetFuel = filterByAsset(fuel, asset.id);
+      var assetTel = filterByAsset(tel, asset.id);
+      var idleRate = getIdleRate(asset);
+      var factor = getEmissionFactor(asset.fuel_type);
+      var hoursPerWeek = getHoursPerWeek(asset);
+      var periodAvailable = hoursPerWeek * weeks;
+
+      var totalLitres = 0, totalFuelCost = 0, totalOpHours = 0, totalIdleHours = 0;
+      assetFuel.forEach(function(r) {
+        totalLitres += parseFloat(r.litres) || 0;
+        totalFuelCost += parseFloat(r.total_cost) || 0;
+      });
+      assetTel.forEach(function(r) {
+        totalOpHours += parseFloat(r.operating_hours) || 0;
+        totalIdleHours += parseFloat(r.idle_hours) || 0;
+      });
+
+      var avgCostPerLitre = totalLitres > 0 ? totalFuelCost / totalLitres : 0;
+      var purchasePrice = parseFloat(asset.purchase_price) || 0;
+      var lifeHours = parseFloat(asset.expected_life_hours) || 0;
+      var servicePerHour = parseFloat(asset.service_cost_per_hour) || 0;
+      var deprPerHour = lifeHours > 0 ? purchasePrice / lifeHours : 0;
+      var idleFuelCost = totalIdleHours * idleRate * avgCostPerLitre;
+      var deprCost = totalIdleHours * deprPerHour;
+      var serviceCost = totalIdleHours * servicePerHour;
+      var totalIdleCost = idleFuelCost + deprCost + serviceCost;
+      var totalCo2 = totalLitres * factor;
+      var utilRate = periodAvailable > 0 ? (totalOpHours / periodAvailable) * 100 : 0;
+
+      rows.push({
+        asset: asset.asset_name,
+        fuelCost: totalFuelCost,
+        idleCost: totalIdleCost,
+        co2: totalCo2,
+        utilRate: utilRate
+      });
+
+      fleet.fuelCost += totalFuelCost;
+      fleet.idleCost += totalIdleCost;
+      fleet.co2 += totalCo2;
+      fleet.actualHours += totalOpHours;
+      fleet.availableHours += periodAvailable;
+    });
+
+    var fleetUtil = fleet.availableHours > 0 ? (fleet.actualHours / fleet.availableHours) * 100 : 0;
+    var fleetRow = {
+      asset: 'FLEET TOTAL',
+      fuelCost: fleet.fuelCost,
+      idleCost: fleet.idleCost,
+      co2: fleet.co2,
+      utilRate: fleetUtil
+    };
+
+    return {
+      rows: rows,
+      fleetRow: fleetRow,
+      summary: [
+        ['Total Fleet Fuel Cost', fmtMoney(fleet.fuelCost)],
+        ['Total Fleet Idle Cost', fmtMoney(fleet.idleCost)],
+        ['Total Fleet CO₂ Emissions', (fleet.co2 / 1000).toFixed(2) + ' t'],
+        ['Fleet Utilisation Rate', fleetUtil.toFixed(1) + '%'],
+        ['Assets Included', String(assets.length)]
+      ],
+      csvHeaders: ['Asset', 'Total Fuel Cost', 'Total Idle Cost', 'Total CO2 (kg)', 'Utilisation Rate (%)'],
+      csvRow: function(r) {
+        return [r.asset, r.fuelCost.toFixed(2), r.idleCost.toFixed(2), r.co2.toFixed(2), r.utilRate.toFixed(2)];
+      },
+      pdfHeaders: ['Asset', 'Fuel Cost', 'Idle Cost', 'CO₂ (kg)', 'Utilisation %'],
+      pdfRow: function(r) {
+        return [r.asset, fmtMoney(r.fuelCost), fmtMoney(r.idleCost), r.co2.toFixed(1), r.utilRate.toFixed(1) + '%'];
+      }
+    };
+  }
+
+  function buildReport(type, assets, records, dateFrom, dateTo) {
+    switch (type) {
+      case 'fuel': return buildFuelReport(assets, records.fuel, records.tel);
+      case 'idle': return buildIdleReport(assets, records.fuel, records.tel);
+      case 'emissions': return buildEmissionsReport(assets, records.fuel, records.tel);
+      case 'utilisation': return buildUtilisationReport(assets, records.fuel, records.tel, dateFrom, dateTo);
+      case 'fleet': return buildFleetSummary(assets, records.fuel, records.tel, dateFrom, dateTo);
+      default: throw new Error('Unknown report type');
+    }
+  }
+
+  function downloadCsv(report, config, filename) {
+    var lines = [report.csvHeaders.join(',')];
+    report.rows.forEach(function(r) { lines.push(report.csvRow(r).join(',')); });
+    if (report.fleetRow) lines.push(report.csvRow(report.fleetRow).join(','));
+    var blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function downloadPdf(report, config, assets, title) {
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({ orientation: report.fleetRow ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+    var pageW = doc.internal.pageSize.getWidth();
+    var margin = 14;
+
+    doc.setFillColor(14, 165, 122);
+    doc.rect(0, 0, pageW, 28, 'F');
+    doc.setTextColor(8, 12, 18);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('FleetMagnify', margin, 12);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(title, margin, 19);
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9);
+    doc.text(companyName, pageW - margin, 12, { align: 'right' });
+    doc.text(config.dateFrom + '  to  ' + config.dateTo, pageW - margin, 19, { align: 'right' });
+
+    doc.setTextColor(60, 70, 85);
+    doc.setFontSize(9);
+    doc.text('Scope: ' + scopeLabel(config, assets), margin, 36);
+
+    doc.setTextColor(30, 40, 55);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Summary', margin, 46);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    var y = 52;
+    report.summary.forEach(function(item) {
+      doc.setTextColor(90, 100, 115);
+      doc.text(item[0] + ':', margin, y);
+      doc.setTextColor(30, 40, 55);
+      doc.setFont('helvetica', 'bold');
+      doc.text(String(item[1]), margin + 52, y);
+      doc.setFont('helvetica', 'normal');
+      y += 6;
+    });
+
+    var tableBody = report.rows.map(report.pdfRow);
+    if (report.fleetRow) tableBody.push(report.pdfRow(report.fleetRow));
+
+    doc.autoTable({
+      startY: y + 6,
+      head: [report.pdfHeaders],
+      body: tableBody,
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 8, cellPadding: 2.5, textColor: [40, 50, 65] },
+      headStyles: { fillColor: [14, 165, 122], textColor: [8, 12, 18], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [245, 247, 250] },
+      didParseCell: function(data) {
+        if (report.fleetRow && data.row.index === tableBody.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [230, 245, 240];
+        }
+      }
+    });
+
+    doc.setFontSize(8);
+    doc.setTextColor(150, 160, 175);
+    doc.text('Generated by FleetMagnify · ' + new Date().toLocaleString('en-AU'), margin, doc.internal.pageSize.getHeight() - 8);
+    doc.save(title.replace(/\s+/g, '_').toLowerCase() + '.pdf');
+  }
+
+  async function handleExport(card, format, btn) {
+    var config = getCardConfig(card);
+    if (!config.dateFrom || !config.dateTo) {
+      showToast('Please select a date range.', 'error');
+      return;
+    }
+    if (config.scope === 'single' && config.report !== 'fleet' && !config.assetId) {
+      showToast('Please select an asset.', 'error');
+      return;
+    }
+    if (allAssets.length === 0) {
+      showToast('No assets found. Add assets first.', 'error');
+      return;
+    }
+
+    var assets = getScopeAssets(config);
+    if (!assets || assets.length === 0) {
+      showToast('No matching assets found.', 'error');
+      return;
+    }
+
+    var originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+    card.querySelectorAll('.btn-export-pdf, .btn-export-csv').forEach(function(b) { b.disabled = true; });
+
+    try {
+      var records = await fetchRecords(assets.map(function(a) { return a.id; }), config.dateFrom, config.dateTo);
+      var report = buildReport(config.report, assets, records, config.dateFrom, config.dateTo);
+
+      if (report.rows.length === 0) {
+        throw new Error('No data found for the selected scope and date range.');
+      }
+
+      var title = REPORT_TITLES[config.report];
+      if (format === 'csv') {
+        downloadCsv(report, config, title.replace(/\s+/g, '_').toLowerCase() + '.csv');
+      } else {
+        downloadPdf(report, config, assets, title);
+      }
+      showToast(title + ' exported successfully.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Export failed.', 'error');
+    } finally {
+      btn.textContent = originalText;
+      card.querySelectorAll('.btn-export-pdf, .btn-export-csv').forEach(function(b) { b.disabled = false; });
+    }
+  }
+
+  function fmtMoney(n) {
+    return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+
+  var toastTimer;
+  function showToast(msg, type) {
+    var toast = document.getElementById('toast');
+    document.getElementById('toast-msg').textContent = msg;
+    document.getElementById('toast-icon').textContent = type === 'success' ? '✓' : '✕';
+    toast.className = 'toast ' + (type || 'success');
+    clearTimeout(toastTimer);
+    setTimeout(function() { toast.classList.add('show'); }, 10);
+    toastTimer = setTimeout(function() { toast.classList.remove('show'); }, 3500);
+  }
+
+  function esc(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  init();
+})();
+</script>
+
+</body>
+</html>
