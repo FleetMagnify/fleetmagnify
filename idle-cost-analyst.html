@@ -408,9 +408,19 @@
 
   document.getElementById('asset-select').addEventListener('change', function() {
     var id = this.value;
-    selectedAsset = assetsList.find(function(a) { return a.id === id; }) || null;
     var display = document.getElementById('asset-meta-display');
     var applyBtn = document.getElementById('apply-filters-btn');
+
+    if (!id) {
+      selectedAsset = null;
+      display.textContent = '— select an asset —';
+      applyBtn.disabled = true;
+      return;
+    }
+
+    // select.value is always a string; asset ids from Supabase are integers (int8)
+    selectedAsset = assetsList.find(function(a) { return a.id === Number(id); }) || null;
+
     if (!selectedAsset) {
       display.textContent = '— select an asset —';
       applyBtn.disabled = true;
