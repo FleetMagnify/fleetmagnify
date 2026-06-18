@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Job Cost Analyst | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #F0F2F5; min-height: 100vh; display: flex; }
+
+  .sidebar { width: 240px; flex-shrink: 0; background: rgba(10,16,26,0.95); border-right: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 50; overflow-y: auto; }
+  .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); text-decoration: none; }
+  .logo-mark { width: 34px; height: 34px; border-radius: 9px; background: #0EA57A; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #080C12; }
+  .logo-name { font-size: 16px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
+  .logo-name span { color: #0EA57A; }
+  .sidebar-nav { flex: 1; padding: 16px 12px; }
+  .nav-label { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #2E3A4A; padding: 0 8px; margin-bottom: 8px; margin-top: 16px; }
+  .nav-label:first-child { margin-top: 0; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; margin-bottom: 2px; text-decoration: none; font-size: 13.5px; font-weight: 500; color: #6B7785; transition: all 0.2s; }
+  .nav-item:hover { background: rgba(255,255,255,0.04); color: #C8D0DB; }
+  .nav-item.active { background: rgba(14,165,122,0.10); color: #0EA57A; }
+  .nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+  .sidebar-footer { padding: 16px 12px; border-top: 1px solid rgba(255,255,255,0.06); }
+  .btn-signout { width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 8px; border: none; background: none; font-size: 13px; font-weight: 500; color: #4A5568; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-signout:hover { background: rgba(226,75,74,0.08); color: #F0A8A7; }
+
+  .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar { padding: 20px 36px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; background: rgba(8,12,18,0.80); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 40; }
+  .breadcrumb { font-size: 13px; color: #3A4A5C; margin-bottom: 2px; }
+  .breadcrumb a { color: #3A4A5C; text-decoration: none; cursor: pointer; }
+  .breadcrumb a:hover { color: #6B7785; }
+  .topbar-title { font-size: 18px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.4px; }
+  .user-pill { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); border-radius: 100px; padding: 6px 14px 6px 8px; }
+  .user-avatar { width: 26px; height: 26px; border-radius: 50%; background: rgba(14,165,122,0.20); border: 1px solid rgba(14,165,122,0.30); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #0EA57A; }
+  .user-name { font-size: 12.5px; font-weight: 500; color: #9BA4B0; }
+
+  .page-content { padding: 36px; flex: 1; }
+  .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+  .page-eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #0EA57A; margin-bottom: 8px; }
+  .page-eyebrow .dash { width: 14px; height: 1.5px; background: #0EA57A; border-radius: 2px; }
+  .page-title { font-size: 28px; font-weight: 800; letter-spacing: -1px; color: #F0F2F5; margin-bottom: 6px; }
+  .page-sub { font-size: 14px; color: #5A6474; line-height: 1.55; }
+
+  .btn-teal { display: inline-flex; align-items: center; gap: 7px; background: #0EA57A; border: none; color: #080C12; font-size: 13px; font-weight: 700; padding: 10px 20px; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-teal:hover { background: #0BC48E; }
+  .btn-teal:disabled { opacity: 0.6; cursor: not-allowed; }
+  .btn-secondary { display: inline-flex; align-items: center; gap: 7px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); color: #C8D0DB; font-size: 13px; font-weight: 600; padding: 9px 18px; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-secondary:hover { border-color: rgba(14,165,122,0.35); color: #0EA57A; }
+  .btn-secondary:disabled { opacity: 0.55; cursor: not-allowed; }
+  .btn-ghost-sm { background: none; border: none; color: #EF9F27; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; padding: 4px 0; }
+  .btn-ghost-sm:hover { color: #F0A8A7; }
+  .btn-link { background: none; border: none; color: #0EA57A; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; padding: 0; }
+  .btn-link:hover { color: #0BC48E; }
+
+  .jobs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .job-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 14px; }
+  .job-card h3 { font-size: 17px; font-weight: 700; color: #D8DFE8; letter-spacing: -0.3px; }
+  .job-meta { font-size: 13px; color: #5A6474; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 100px; letter-spacing: 0.02em; }
+  .badge.active { background: rgba(14,165,122,0.12); color: #0EA57A; border: 1px solid rgba(14,165,122,0.22); }
+  .badge.completed { background: rgba(255,255,255,0.06); color: #9BA4B0; border: 1px solid rgba(255,255,255,0.10); }
+  .badge.archived { background: rgba(239,159,39,0.12); color: #EF9F27; border: 1px solid rgba(239,159,39,0.22); }
+
+  .detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+  .detail-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .status-select { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09); border-radius: 8px; padding: 9px 13px; color: #F0F2F5; font-size: 13px; font-family: inherit; outline: none; cursor: pointer; }
+
+  .section-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 22px; margin-bottom: 24px; }
+  .section-title { font-size: 15px; font-weight: 700; color: #C8D0DB; margin-bottom: 16px; }
+
+  .assigned-list { display: flex; flex-direction: column; gap: 10px; }
+  .assigned-item { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 14px 16px; }
+  .assigned-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .assigned-name { font-size: 14px; font-weight: 600; color: #D8DFE8; }
+  .assigned-days { font-size: 12.5px; color: #5A6474; margin-top: 4px; }
+  .date-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .date-chip { font-size: 11px; font-weight: 600; color: #0EA57A; background: rgba(14,165,122,0.08); border: 1px solid rgba(14,165,122,0.16); padding: 3px 8px; border-radius: 6px; }
+  .expand-toggle { font-size: 12px; color: #0EA57A; cursor: pointer; font-weight: 600; margin-top: 8px; display: inline-block; }
+  .expand-toggle:hover { color: #0BC48E; }
+  .assigned-dates[hidden] { display: none; }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 14px; }
+  .kpi-row.grand { grid-template-columns: 1fr; margin-bottom: 24px; }
+  .kpi-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 18px 20px; }
+  .kpi-card.grand { background: rgba(14,165,122,0.06); border-color: rgba(14,165,122,0.18); padding: 24px; }
+  .kpi-label { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #3A4A5C; margin-bottom: 9px; line-height: 1.3; }
+  .kpi-value { font-size: 22px; font-weight: 800; letter-spacing: -0.8px; line-height: 1; color: #D8DFE8; }
+  .kpi-card.grand .kpi-value { font-size: 32px; color: #0EA57A; }
+  .kpi-value.amber { color: #EF9F27; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th { padding: 11px 14px; text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #2E3A4A; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.01); white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  tbody td { padding: 12px 14px; font-size: 13px; color: #9BA4B0; }
+  .cell-strong { color: #D8DFE8; font-weight: 600; }
+  .cell-teal { color: #0EA57A; font-weight: 700; }
+
+  .table-header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .export-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .empty-state { padding: 48px 24px; text-align: center; color: #3A4A5C; font-size: 13.5px; }
+  .empty-state .icon { font-size: 36px; margin-bottom: 12px; opacity: 0.4; display: block; }
+
+  .view-panel[hidden] { display: none !important; }
+
+  .modal-overlay { display: none; position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: 24px; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: #0A101A; border: 1px solid rgba(255,255,255,0.10); border-radius: 18px; padding: 32px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; box-shadow: 0 32px 80px rgba(0,0,0,0.5); }
+  .modal.wide { max-width: 520px; }
+  .modal h2 { font-size: 20px; font-weight: 800; color: #F0F2F5; margin-bottom: 6px; letter-spacing: -0.5px; }
+  .modal-sub { font-size: 13px; color: #5A6474; margin-bottom: 22px; line-height: 1.55; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 12px; font-weight: 600; color: #9BA4B0; margin-bottom: 6px; }
+  .form-group input, .form-group select { width: 100%; padding: 11px 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09); border-radius: 9px; color: #F0F2F5; font-size: 13.5px; font-family: inherit; outline: none; }
+  .form-group select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%234A5568' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+  .form-group select option { background: #0A101A; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .btn-cancel { flex: 1; background: none; border: 1px solid rgba(255,255,255,0.09); color: #6B7785; font-size: 14px; font-weight: 500; padding: 12px; border-radius: 9px; cursor: pointer; font-family: inherit; }
+  .btn-save { flex: 2; background: #0EA57A; border: none; color: #080C12; font-size: 14px; font-weight: 700; padding: 12px; border-radius: 9px; cursor: pointer; font-family: inherit; }
+  .form-error { display: none; background: rgba(226,75,74,0.10); border: 1px solid rgba(226,75,74,0.28); color: #F0A8A7; font-size: 13px; padding: 11px 14px; border-radius: 9px; margin-bottom: 14px; }
+  .form-error.visible { display: block; }
+
+  .calendar { user-select: none; }
+  .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .cal-header span { font-size: 14px; font-weight: 700; color: #C8D0DB; }
+  .cal-nav { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); color: #9BA4B0; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 16px; }
+  .cal-nav:hover { border-color: rgba(14,165,122,0.3); color: #0EA57A; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-dow { font-size: 10px; font-weight: 700; color: #3A4A5C; text-align: center; padding: 6px 0; text-transform: uppercase; }
+  .cal-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 500; color: #6B7785; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
+  .cal-day:hover:not(.empty):not(.other-month) { background: rgba(255,255,255,0.04); color: #C8D0DB; }
+  .cal-day.empty { cursor: default; }
+  .cal-day.other-month { opacity: 0.25; cursor: default; }
+  .cal-day.selected { background: rgba(14,165,122,0.18); border-color: rgba(14,165,122,0.35); color: #0EA57A; font-weight: 700; }
+  .cal-hint { font-size: 11.5px; color: #4A5568; margin-top: 10px; line-height: 1.5; }
+
+  .toast { position: fixed; bottom: 28px; right: 28px; z-index: 200; background: rgba(10,16,26,0.98); border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; padding: 14px 20px; font-size: 13.5px; color: #C8D0DB; transform: translateY(80px); opacity: 0; transition: all 0.3s; pointer-events: none; max-width: 360px; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: rgba(14,165,122,0.3); }
+  .toast.error { border-color: rgba(226,75,74,0.3); }
+
+  @media (max-width: 1200px) { .kpi-row { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 900px) {
+    .sidebar { display: none; } .main { margin-left: 0; } .page-content { padding: 20px; }
+    .kpi-row { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <a class="sidebar-logo" href="dashboard.html">
+    <div class="logo-mark">FM</div>
+    <span class="logo-name">Fleet<span>Magnify</span></span>
+  </a>
+  <nav class="sidebar-nav">
+    <div class="nav-label">Analytics Modules</div>
+    <a class="nav-item" href="fuel-analyst.html"><span class="nav-icon">⛽</span> Fuel Analyst</a>
+    <a class="nav-item" href="idle-cost-analyst.html"><span class="nav-icon">⏱</span> Idle Cost Analyst</a>
+    <a class="nav-item" href="emissions-intelligence.html"><span class="nav-icon">🌍</span> Emissions Intelligence</a>
+    <a class="nav-item" href="utilisation-analyst.html"><span class="nav-icon">📊</span> Utilisation Analyst</a>
+    <a class="nav-item active" href="job-cost-analyst.html"><span class="nav-icon">🏗</span> Job Cost Analyst</a>
+    <a class="nav-item" href="reports.html"><span class="nav-icon">📋</span> Reports</a>
+    <div class="nav-label">Fleet Management</div>
+    <a class="nav-item" href="assets.html"><span class="nav-icon">🚧</span> Assets</a>
+    <a class="nav-item" href="upload.html"><span class="nav-icon">📤</span> Upload Data</a>
+  </nav>
+  <div class="sidebar-footer">
+    <button class="btn-signout" id="signout-btn">↩ Sign Out</button>
+  </div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="breadcrumb" id="breadcrumb"><a href="dashboard.html">Dashboard</a> / Job Cost Analyst</div>
+      <div class="topbar-title" id="topbar-title">Job Cost Analyst</div>
+    </div>
+    <div class="user-pill">
+      <div class="user-avatar" id="user-avatar">?</div>
+      <span class="user-name" id="user-name">Loading...</span>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <!-- LIST VIEW -->
+    <div id="list-view" class="view-panel">
+      <div class="page-header">
+        <div>
+          <div class="page-eyebrow"><div class="dash"></div> Job Cost Analysis</div>
+          <h1 class="page-title">Your Jobs</h1>
+          <p class="page-sub">Assign assets to jobs by work day and see the true cost of each project — fuel, idle, depreciation, service, and emissions.</p>
+        </div>
+        <button type="button" class="btn-teal" id="create-job-btn">+ Create New Job</button>
+      </div>
+      <div class="jobs-grid" id="jobs-grid">
+        <div class="empty-state"><span class="icon">🏗</span>Loading jobs...</div>
+      </div>
+    </div>
+
+    <!-- DETAIL VIEW -->
+    <div id="detail-view" class="view-panel" hidden>
+      <div class="detail-header">
+        <div>
+          <div class="page-eyebrow"><div class="dash"></div> Job Detail</div>
+          <h1 class="page-title" id="detail-job-name">—</h1>
+          <p class="page-sub" id="detail-created">—</p>
+        </div>
+        <div class="detail-actions">
+          <select class="status-select" id="detail-status">
+            <option>Active</option><option>Completed</option><option>Archived</option>
+          </select>
+          <button type="button" class="btn-teal" id="add-asset-btn">+ Add Asset to Job</button>
+          <button type="button" class="btn-secondary" id="back-to-list">← All Jobs</button>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <div class="section-title">Assigned Assets</div>
+        <div class="assigned-list" id="assigned-list">
+          <div class="empty-state">No assets assigned yet.</div>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <div class="section-title">Job Cost Summary</div>
+        <div class="kpi-row">
+          <div class="kpi-card"><div class="kpi-label">Total Fuel Cost</div><div class="kpi-value" id="kpi-fuel">—</div></div>
+          <div class="kpi-card"><div class="kpi-label">Total Idle Cost</div><div class="kpi-value amber" id="kpi-idle">—</div></div>
+          <div class="kpi-card"><div class="kpi-label">Total Depreciation Cost</div><div class="kpi-value" id="kpi-depr">—</div></div>
+          <div class="kpi-card"><div class="kpi-label">Total Service Cost</div><div class="kpi-value" id="kpi-service">—</div></div>
+          <div class="kpi-card"><div class="kpi-label">Total Emissions</div><div class="kpi-value" id="kpi-emissions">—</div></div>
+        </div>
+        <div class="kpi-row grand">
+          <div class="kpi-card grand">
+            <div class="kpi-label">Grand Total Job Cost</div>
+            <div class="kpi-value" id="kpi-grand">—</div>
+          </div>
+        </div>
+
+        <div class="table-header-row">
+          <div class="section-title" style="margin:0;">Asset Breakdown</div>
+          <div class="export-row">
+            <button type="button" class="btn-secondary" id="export-csv-btn">Export CSV</button>
+            <button type="button" class="btn-teal" id="export-pdf-btn">Export Job Report</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Asset Name</th><th>Days Worked</th><th>Fuel Cost</th><th>Idle Cost</th>
+                <th>Depreciation Cost</th><th>Service Cost</th><th>Asset Total</th>
+              </tr>
+            </thead>
+            <tbody id="breakdown-tbody">
+              <tr><td colspan="7" class="empty-state">Assign assets and work days to see cost breakdown.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Create Job Modal -->
+<div class="modal-overlay" id="create-job-modal">
+  <div class="modal">
+    <h2>Create New Job</h2>
+    <p class="modal-sub">Add a new job or project to track asset costs by work day.</p>
+    <div id="create-job-error" class="form-error"></div>
+    <div class="form-group">
+      <label for="new-job-name">Job Name</label>
+      <input type="text" id="new-job-name" placeholder="e.g. Eastfield Project">
+    </div>
+    <div class="form-group">
+      <label for="new-job-status">Status</label>
+      <select id="new-job-status"><option selected>Active</option><option>Completed</option><option>Archived</option></select>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel" id="cancel-create-job">Cancel</button>
+      <button type="button" class="btn-save" id="save-create-job">Create Job</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Asset Modal -->
+<div class="modal-overlay" id="add-asset-modal">
+  <div class="modal wide">
+    <h2>Add Asset to Job</h2>
+    <p class="modal-sub">Select an asset and click individual days on the calendar to assign work dates.</p>
+    <div id="add-asset-error" class="form-error"></div>
+    <div class="form-group">
+      <label for="add-asset-select">Asset</label>
+      <select id="add-asset-select"><option value="">Select an asset...</option></select>
+    </div>
+    <div class="form-group">
+      <label>Work Days</label>
+      <div class="calendar" id="work-calendar"></div>
+      <p class="cal-hint">Click days to toggle them on or off. Selected days will be saved for this asset on this job.</p>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel" id="cancel-add-asset">Cancel</button>
+      <button type="button" class="btn-save" id="save-add-asset">Save Days</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span id="toast-msg"></span></div>
+
+<script src="js/supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script>
+(function() {
+  var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var currentUser = null;
+  var companyName = '';
+  var allAssets = [];
+  var allJobs = [];
+  var currentJob = null;
+  var jobAssignments = [];
+  var costBreakdown = [];
+  var costTotals = null;
+  var calMonth = new Date();
+  var selectedDates = new Set();
+  var addAssetId = null;
+
+  var DEFAULT_IDLE_RATES = {
+    'Excavator': 4.0, 'Dump Truck': 5.5, 'Wheel Loader': 4.5, 'Motor Grader': 4.0,
+    'Bulldozer': 5.0, 'Crane': 4.5, 'Forklift': 1.5, 'Light Vehicle': 1.2,
+    'Rigid Truck': 2.5, 'Semi Trailer': 3.0, 'Water Truck': 3.5, 'Other': 3.0
+  };
+  var EMISSION_FACTORS = { 'Diesel': 2.68, 'Petrol': 2.31, 'Electric': 0, 'Hybrid': 1.5 };
+
+  async function init() {
+    var sessionResult = await supabase.auth.getSession();
+    if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
+    currentUser = sessionResult.data.session.user;
+    companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name)
+      ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
+    document.getElementById('user-name').textContent = companyName;
+    document.getElementById('user-avatar').textContent = companyName.charAt(0).toUpperCase();
+    await Promise.all([loadJobs(), loadAssets()]);
+    bindUI();
+  }
+
+  async function loadAssets() {
+    var result = await supabase.from('assets').select('*').eq('user_id', currentUser.id).order('asset_name');
+    allAssets = result.data || [];
+    var opts = '<option value="">Select an asset...</option>' +
+      allAssets.map(function(a) { return '<option value="' + a.id + '">' + esc(a.asset_name) + '</option>'; }).join('');
+    document.getElementById('add-asset-select').innerHTML = opts;
+  }
+
+  async function loadJobs() {
+    var result = await supabase.from('jobs').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
+    allJobs = result.data || [];
+    await renderJobsList();
+  }
+
+  async function renderJobsList() {
+    var grid = document.getElementById('jobs-grid');
+    if (allJobs.length === 0) {
+      grid.innerHTML = '<div class="empty-state"><span class="icon">🏗</span>No jobs yet. Create your first job to start tracking project costs.</div>';
+      return;
+    }
+
+    var counts = {};
+    var countResult = await supabase.from('job_assets').select('job_id, asset_id').eq('user_id', currentUser.id);
+    (countResult.data || []).forEach(function(r) {
+      counts[r.job_id] = counts[r.job_id] || new Set();
+      counts[r.job_id].add(r.asset_id);
+    });
+
+    grid.innerHTML = allJobs.map(function(job) {
+      var assetCount = counts[job.id] ? counts[job.id].size : 0;
+      var statusClass = (job.status || 'Active').toLowerCase();
+      return '<div class="job-card">' +
+        '<div><span class="badge ' + statusClass + '">' + esc(job.status || 'Active') + '</span></div>' +
+        '<h3>' + esc(job.job_name) + '</h3>' +
+        '<div class="job-meta">' + assetCount + ' asset' + (assetCount !== 1 ? 's' : '') + ' assigned</div>' +
+        '<button type="button" class="btn-secondary view-job-btn" data-id="' + job.id + '">View Job</button>' +
+      '</div>';
+    }).join('');
+
+    grid.querySelectorAll('.view-job-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() { openJobDetail(Number(btn.dataset.id)); });
+    });
+  }
+
+  function bindUI() {
+    document.getElementById('create-job-btn').addEventListener('click', openCreateModal);
+    document.getElementById('cancel-create-job').addEventListener('click', closeCreateModal);
+    document.getElementById('save-create-job').addEventListener('click', saveNewJob);
+    document.getElementById('create-job-modal').addEventListener('click', function(e) { if (e.target === this) closeCreateModal(); });
+
+    document.getElementById('back-to-list').addEventListener('click', showListView);
+    document.getElementById('detail-status').addEventListener('change', updateJobStatus);
+    document.getElementById('add-asset-btn').addEventListener('click', openAddAssetModal);
+    document.getElementById('cancel-add-asset').addEventListener('click', closeAddAssetModal);
+    document.getElementById('save-add-asset').addEventListener('click', saveAssetDays);
+    document.getElementById('add-asset-modal').addEventListener('click', function(e) { if (e.target === this) closeAddAssetModal(); });
+    document.getElementById('add-asset-select').addEventListener('change', onAddAssetSelectChange);
+
+    document.getElementById('export-csv-btn').addEventListener('click', exportCsv);
+    document.getElementById('export-pdf-btn').addEventListener('click', exportPdf);
+    document.getElementById('signout-btn').addEventListener('click', async function() {
+      await supabase.auth.signOut(); window.location.href = 'login.html';
+    });
+  }
+
+  function showListView() {
+    currentJob = null;
+    document.getElementById('list-view').hidden = false;
+    document.getElementById('detail-view').hidden = true;
+    document.getElementById('breadcrumb').innerHTML = '<a href="dashboard.html">Dashboard</a> / Job Cost Analyst';
+    document.getElementById('topbar-title').textContent = 'Job Cost Analyst';
+    loadJobs();
+  }
+
+  async function openJobDetail(jobId) {
+    currentJob = allJobs.find(function(j) { return j.id === jobId; });
+    if (!currentJob) return;
+    document.getElementById('list-view').hidden = true;
+    document.getElementById('detail-view').hidden = false;
+    document.getElementById('detail-job-name').textContent = currentJob.job_name;
+    document.getElementById('detail-created').textContent = 'Created ' + formatDateLong(currentJob.created_at);
+    document.getElementById('detail-status').value = currentJob.status || 'Active';
+    document.getElementById('breadcrumb').innerHTML = '<a href="dashboard.html">Dashboard</a> / <a id="bc-jobs">Job Cost Analyst</a> / ' + esc(currentJob.job_name);
+    document.getElementById('bc-jobs').addEventListener('click', function(e) { e.preventDefault(); showListView(); });
+    document.getElementById('topbar-title').textContent = currentJob.job_name;
+    await refreshJobDetail();
+  }
+
+  async function refreshJobDetail() {
+    if (!currentJob) return;
+    var result = await supabase.from('job_assets').select('*').eq('job_id', currentJob.id).eq('user_id', currentUser.id).order('work_date');
+    jobAssignments = result.data || [];
+    renderAssignedAssets();
+    await calculateCosts();
+  }
+
+  function renderAssignedAssets() {
+    var list = document.getElementById('assigned-list');
+    var byAsset = {};
+    jobAssignments.forEach(function(row) {
+      byAsset[row.asset_id] = byAsset[row.asset_id] || [];
+      byAsset[row.asset_id].push(row.work_date);
+    });
+    var assetIds = Object.keys(byAsset);
+    if (assetIds.length === 0) {
+      list.innerHTML = '<div class="empty-state">No assets assigned yet. Click "Add Asset to Job" to get started.</div>';
+      return;
+    }
+
+    list.innerHTML = assetIds.map(function(assetId) {
+      var asset = allAssets.find(function(a) { return a.id === Number(assetId); });
+      var name = asset ? asset.asset_name : 'Asset #' + assetId;
+      var dates = byAsset[assetId].sort();
+      var uid = 'dates-' + assetId;
+      return '<div class="assigned-item">' +
+        '<div class="assigned-top">' +
+          '<div><div class="assigned-name">' + esc(name) + '</div><div class="assigned-days">' + dates.length + ' day' + (dates.length !== 1 ? 's' : '') + ' assigned</div></div>' +
+          '<button type="button" class="btn-ghost-sm remove-asset-btn" data-asset-id="' + assetId + '">Remove from Job</button>' +
+        '</div>' +
+        '<span class="expand-toggle" data-target="' + uid + '">Show dates ▾</span>' +
+        '<div class="assigned-dates" id="' + uid + '" hidden><div class="date-chips">' +
+          dates.map(function(d) { return '<span class="date-chip">' + formatDateShort(d) + '</span>'; }).join('') +
+        '</div></div>' +
+      '</div>';
+    }).join('');
+
+    list.querySelectorAll('.expand-toggle').forEach(function(el) {
+      el.addEventListener('click', function() {
+        var panel = document.getElementById(el.dataset.target);
+        var open = panel.hidden;
+        panel.hidden = !open;
+        el.textContent = open ? 'Hide dates ▴' : 'Show dates ▾';
+      });
+    });
+    list.querySelectorAll('.remove-asset-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() { removeAssetFromJob(Number(btn.dataset.assetId)); });
+    });
+  }
+
+  async function removeAssetFromJob(assetId) {
+    if (!currentJob || !confirm('Remove this asset and all its assigned days from this job?')) return;
+    var result = await supabase.from('job_assets').delete().eq('job_id', currentJob.id).eq('asset_id', assetId).eq('user_id', currentUser.id);
+    if (result.error) { showToast(result.error.message, 'error'); return; }
+    showToast('Asset removed from job.', 'success');
+    await refreshJobDetail();
+  }
+
+  async function updateJobStatus() {
+    if (!currentJob) return;
+    var status = document.getElementById('detail-status').value;
+    var result = await supabase.from('jobs').update({ status: status }).eq('id', currentJob.id).eq('user_id', currentUser.id);
+    if (result.error) { showToast(result.error.message, 'error'); return; }
+    currentJob.status = status;
+    showToast('Job status updated.', 'success');
+  }
+
+  function getIdleRate(asset) { return asset.idle_burn_rate_lph || DEFAULT_IDLE_RATES[asset.asset_type] || 3.0; }
+  function getEmissionFactor(ft) { return EMISSION_FACTORS[ft] !== undefined ? EMISSION_FACTORS[ft] : EMISSION_FACTORS.Diesel; }
+
+  async function calculateCosts() {
+    if (!currentJob || jobAssignments.length === 0) {
+      costBreakdown = []; costTotals = null;
+      setKpisEmpty();
+      document.getElementById('breakdown-tbody').innerHTML = '<tr><td colspan="7" class="empty-state">Assign assets and work days to see cost breakdown.</td></tr>';
+      return;
+    }
+
+    var pairs = jobAssignments.map(function(r) { return { asset_id: r.asset_id, work_date: r.work_date }; });
+    var assetIds = Array.from(new Set(jobAssignments.map(function(r) { return r.asset_id; })));
+    var dates = Array.from(new Set(jobAssignments.map(function(r) { return r.work_date; })));
+
+    var fuelResult = await supabase.from('fuel_records').select('asset_id, record_date, litres, total_cost')
+      .eq('user_id', currentUser.id).in('asset_id', assetIds).in('record_date', dates);
+    var telResult = await supabase.from('telematics_records').select('asset_id, record_date, idle_hours')
+      .eq('user_id', currentUser.id).in('asset_id', assetIds).in('record_date', dates);
+
+    var fuelMap = {};
+    (fuelResult.data || []).forEach(function(r) {
+      var key = r.asset_id + '|' + r.record_date;
+      fuelMap[key] = fuelMap[key] || { litres: 0, cost: 0 };
+      fuelMap[key].litres += parseFloat(r.litres) || 0;
+      fuelMap[key].cost += parseFloat(r.total_cost) || 0;
+    });
+    var telMap = {};
+    (telResult.data || []).forEach(function(r) {
+      var key = r.asset_id + '|' + r.record_date;
+      telMap[key] = (telMap[key] || 0) + (parseFloat(r.idle_hours) || 0);
+    });
+
+    var byAsset = {};
+    var totals = { fuel: 0, idle: 0, depr: 0, service: 0, emissions: 0 };
+
+    jobAssignments.forEach(function(row) {
+      var asset = allAssets.find(function(a) { return a.id === row.asset_id; });
+      if (!asset) return;
+      var key = row.asset_id + '|' + row.work_date;
+      var fuel = fuelMap[key] || { litres: 0, cost: 0 };
+      var idleHours = telMap[key] || 0;
+      var idleRate = getIdleRate(asset);
+      var costPerLitre = fuel.litres > 0 ? fuel.cost / fuel.litres : 0;
+      var idleFuelCost = idleHours * idleRate * costPerLitre;
+      var purchasePrice = parseFloat(asset.purchase_price) || 0;
+      var lifeHours = parseFloat(asset.expected_life_hours) || 0;
+      var servicePerHour = parseFloat(asset.service_cost_per_hour) || 0;
+      var deprPerHour = lifeHours > 0 ? purchasePrice / lifeHours : 0;
+      var deprCost = idleHours * deprPerHour;
+      var serviceCost = idleHours * servicePerHour;
+      var emissionsKg = fuel.litres * getEmissionFactor(asset.fuel_type);
+
+      byAsset[row.asset_id] = byAsset[row.asset_id] || { asset: asset, days: 0, fuel: 0, idle: 0, depr: 0, service: 0, emissions: 0 };
+      byAsset[row.asset_id].days += 1;
+      byAsset[row.asset_id].fuel += fuel.cost;
+      byAsset[row.asset_id].idle += idleFuelCost;
+      byAsset[row.asset_id].depr += deprCost;
+      byAsset[row.asset_id].service += serviceCost;
+      byAsset[row.asset_id].emissions += emissionsKg;
+
+      totals.fuel += fuel.cost;
+      totals.idle += idleFuelCost;
+      totals.depr += deprCost;
+      totals.service += serviceCost;
+      totals.emissions += emissionsKg;
+    });
+
+    costBreakdown = Object.keys(byAsset).map(function(id) {
+      var b = byAsset[id];
+      return {
+        name: b.asset.asset_name,
+        days: b.days,
+        fuel: b.fuel, idle: b.idle, depr: b.depr, service: b.service,
+        total: b.fuel + b.idle + b.depr + b.service,
+        emissions: b.emissions
+      };
+    });
+    costTotals = totals;
+    totals.grand = totals.fuel + totals.idle + totals.depr + totals.service;
+
+    document.getElementById('kpi-fuel').textContent = fmtMoney(totals.fuel);
+    document.getElementById('kpi-idle').textContent = fmtMoney(totals.idle);
+    document.getElementById('kpi-depr').textContent = fmtMoney(totals.depr);
+    document.getElementById('kpi-service').textContent = fmtMoney(totals.service);
+    document.getElementById('kpi-emissions').textContent = (totals.emissions / 1000).toFixed(2) + ' t';
+    document.getElementById('kpi-grand').textContent = fmtMoney(totals.grand);
+
+    if (costBreakdown.length === 0) {
+      document.getElementById('breakdown-tbody').innerHTML = '<tr><td colspan="7" class="empty-state">No cost data available.</td></tr>';
+      return;
+    }
+    document.getElementById('breakdown-tbody').innerHTML = costBreakdown.map(function(r) {
+      return '<tr><td class="cell-strong">' + esc(r.name) + '</td><td>' + r.days + '</td>' +
+        '<td>' + fmtMoney(r.fuel) + '</td><td>' + fmtMoney(r.idle) + '</td><td>' + fmtMoney(r.depr) + '</td>' +
+        '<td>' + fmtMoney(r.service) + '</td><td class="cell-teal">' + fmtMoney(r.total) + '</td></tr>';
+    }).join('');
+  }
+
+  function setKpisEmpty() {
+    ['kpi-fuel','kpi-idle','kpi-depr','kpi-service','kpi-emissions','kpi-grand'].forEach(function(id) {
+      document.getElementById(id).textContent = '—';
+    });
+  }
+
+  function openCreateModal() {
+    document.getElementById('new-job-name').value = '';
+    document.getElementById('new-job-status').value = 'Active';
+    document.getElementById('create-job-error').classList.remove('visible');
+    document.getElementById('create-job-modal').classList.add('open');
+  }
+  function closeCreateModal() { document.getElementById('create-job-modal').classList.remove('open'); }
+
+  async function saveNewJob() {
+    var name = document.getElementById('new-job-name').value.trim();
+    var status = document.getElementById('new-job-status').value;
+    var errEl = document.getElementById('create-job-error');
+    if (!name) { errEl.textContent = 'Please enter a job name.'; errEl.classList.add('visible'); return; }
+    var btn = document.getElementById('save-create-job');
+    btn.disabled = true; btn.textContent = 'Creating...';
+    var result = await supabase.from('jobs').insert({ user_id: currentUser.id, job_name: name, status: status }).select().single();
+    btn.disabled = false; btn.textContent = 'Create Job';
+    if (result.error) { errEl.textContent = result.error.message; errEl.classList.add('visible'); return; }
+    closeCreateModal();
+    showToast('Job created successfully.', 'success');
+    await loadJobs();
+    openJobDetail(result.data.id);
+  }
+
+  function openAddAssetModal() {
+    addAssetId = null;
+    selectedDates = new Set();
+    calMonth = new Date();
+    document.getElementById('add-asset-select').value = '';
+    document.getElementById('add-asset-error').classList.remove('visible');
+    renderCalendar();
+    document.getElementById('add-asset-modal').classList.add('open');
+  }
+  function closeAddAssetModal() { document.getElementById('add-asset-modal').classList.remove('open'); }
+
+  async function onAddAssetSelectChange() {
+    var id = document.getElementById('add-asset-select').value;
+    addAssetId = id ? Number(id) : null;
+    selectedDates = new Set();
+    if (addAssetId && currentJob) {
+      jobAssignments.filter(function(r) { return r.asset_id === addAssetId; }).forEach(function(r) {
+        selectedDates.add(r.work_date);
+      });
+    }
+    renderCalendar();
+  }
+
+  function renderCalendar() {
+    var el = document.getElementById('work-calendar');
+    var year = calMonth.getFullYear();
+    var month = calMonth.getMonth();
+    var firstDay = new Date(year, month, 1);
+    var startDow = firstDay.getDay();
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+    var monthLabel = firstDay.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
+
+    var html = '<div class="cal-header"><button type="button" class="cal-nav" id="cal-prev">‹</button><span>' + monthLabel + '</span><button type="button" class="cal-nav" id="cal-next">›</button></div>';
+    html += '<div class="cal-grid">';
+    ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(function(d) { html += '<div class="cal-dow">' + d + '</div>'; });
+    for (var i = 0; i < startDow; i++) html += '<div class="cal-day empty"></div>';
+    for (var day = 1; day <= daysInMonth; day++) {
+      var dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+      var sel = selectedDates.has(dateStr) ? ' selected' : '';
+      html += '<div class="cal-day' + sel + '" data-date="' + dateStr + '">' + day + '</div>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
+
+    document.getElementById('cal-prev').addEventListener('click', function() { calMonth.setMonth(calMonth.getMonth() - 1); renderCalendar(); });
+    document.getElementById('cal-next').addEventListener('click', function() { calMonth.setMonth(calMonth.getMonth() + 1); renderCalendar(); });
+    el.querySelectorAll('.cal-day[data-date]').forEach(function(cell) {
+      cell.addEventListener('click', function() {
+        var d = cell.dataset.date;
+        if (selectedDates.has(d)) selectedDates.delete(d); else selectedDates.add(d);
+        renderCalendar();
+      });
+    });
+  }
+
+  async function saveAssetDays() {
+    var errEl = document.getElementById('add-asset-error');
+    if (!addAssetId) { errEl.textContent = 'Please select an asset.'; errEl.classList.add('visible'); return; }
+    if (selectedDates.size === 0) { errEl.textContent = 'Please select at least one work day.'; errEl.classList.add('visible'); return; }
+
+    var btn = document.getElementById('save-add-asset');
+    btn.disabled = true; btn.textContent = 'Saving...';
+
+    await supabase.from('job_assets').delete().eq('job_id', currentJob.id).eq('asset_id', addAssetId).eq('user_id', currentUser.id);
+
+    var rows = Array.from(selectedDates).map(function(d) {
+      return { job_id: currentJob.id, asset_id: addAssetId, user_id: currentUser.id, work_date: d };
+    });
+    var result = await supabase.from('job_assets').insert(rows);
+
+    btn.disabled = false; btn.textContent = 'Save Days';
+    if (result.error) { errEl.textContent = result.error.message; errEl.classList.add('visible'); return; }
+    closeAddAssetModal();
+    showToast('Work days saved.', 'success');
+    await refreshJobDetail();
+  }
+
+  function exportCsv() {
+    if (!currentJob || !costBreakdown.length) { showToast('No data to export.', 'error'); return; }
+    var headers = ['Asset Name','Days Worked','Fuel Cost','Idle Cost','Depreciation Cost','Service Cost','Asset Total','Emissions (kg)'];
+    var lines = [headers.join(',')];
+    costBreakdown.forEach(function(r) {
+      lines.push([r.name, r.days, r.fuel.toFixed(2), r.idle.toFixed(2), r.depr.toFixed(2), r.service.toFixed(2), r.total.toFixed(2), r.emissions.toFixed(2)].join(','));
+    });
+    lines.push(['FLEET TOTAL','', costTotals.fuel.toFixed(2), costTotals.idle.toFixed(2), costTotals.depr.toFixed(2), costTotals.service.toFixed(2), costTotals.grand.toFixed(2), costTotals.emissions.toFixed(2)].join(','));
+    var blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'job_' + currentJob.job_name.replace(/[^a-z0-9]+/gi, '_').toLowerCase() + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('CSV exported successfully.', 'success');
+  }
+
+  function exportPdf() {
+    if (!currentJob || !costBreakdown.length) { showToast('No data to export.', 'error'); return; }
+    var btn = document.getElementById('export-pdf-btn');
+    btn.disabled = true; btn.textContent = 'Generating...';
+    try {
+      var doc = new window.jspdf.jsPDF();
+      var pageW = doc.internal.pageSize.getWidth();
+      var margin = 14;
+      doc.setFillColor(14, 165, 122);
+      doc.rect(0, 0, pageW, 30, 'F');
+      doc.setTextColor(8, 12, 18);
+      doc.setFontSize(16); doc.setFont('helvetica', 'bold');
+      doc.text('FleetMagnify', margin, 13);
+      doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+      doc.text('Job Cost Report', margin, 20);
+      doc.setTextColor(255, 255, 255);
+      doc.text(companyName, pageW - margin, 13, { align: 'right' });
+      doc.text(formatDateLong(currentJob.created_at), pageW - margin, 20, { align: 'right' });
+
+      doc.setTextColor(30, 40, 55);
+      doc.setFontSize(14); doc.setFont('helvetica', 'bold');
+      doc.text(currentJob.job_name, margin, 42);
+      doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+      doc.setTextColor(90, 100, 115);
+      doc.text('Status: ' + (currentJob.status || 'Active'), margin, 49);
+
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 40, 55); doc.setFontSize(11);
+      doc.text('Summary', margin, 60);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+      var summary = [
+        ['Total Fuel Cost', fmtMoney(costTotals.fuel)],
+        ['Total Idle Cost', fmtMoney(costTotals.idle)],
+        ['Total Depreciation', fmtMoney(costTotals.depr)],
+        ['Total Service Cost', fmtMoney(costTotals.service)],
+        ['Total Emissions', (costTotals.emissions / 1000).toFixed(2) + ' t CO₂'],
+        ['Grand Total Job Cost', fmtMoney(costTotals.grand)]
+      ];
+      var y = 66;
+      summary.forEach(function(s) {
+        doc.setTextColor(90, 100, 115); doc.text(s[0] + ':', margin, y);
+        doc.setTextColor(30, 40, 55); doc.setFont('helvetica', 'bold'); doc.text(s[1], margin + 52, y);
+        doc.setFont('helvetica', 'normal'); y += 6;
+      });
+
+      var body = costBreakdown.map(function(r) {
+        return [r.name, String(r.days), fmtMoney(r.fuel), fmtMoney(r.idle), fmtMoney(r.depr), fmtMoney(r.service), fmtMoney(r.total)];
+      });
+      body.push(['GRAND TOTAL', '', fmtMoney(costTotals.fuel), fmtMoney(costTotals.idle), fmtMoney(costTotals.depr), fmtMoney(costTotals.service), fmtMoney(costTotals.grand)]);
+
+      doc.autoTable({
+        startY: y + 4,
+        head: [['Asset', 'Days', 'Fuel', 'Idle', 'Depr', 'Service', 'Total']],
+        body: body,
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 8, cellPadding: 2.5 },
+        headStyles: { fillColor: [14, 165, 122], textColor: [8, 12, 18], fontStyle: 'bold' },
+        didParseCell: function(data) {
+          if (data.row.index === body.length - 1) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [230, 245, 240]; }
+        }
+      });
+
+      doc.save('job_report_' + currentJob.job_name.replace(/[^a-z0-9]+/gi, '_').toLowerCase() + '.pdf');
+      showToast('Job report exported successfully.', 'success');
+    } catch (e) {
+      showToast('PDF export failed.', 'error');
+    }
+    btn.disabled = false; btn.textContent = 'Export Job Report';
+  }
+
+  function fmtMoney(n) { return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+  function formatDateShort(d) { return new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }); }
+  function formatDateLong(d) {
+    if (!d) return '—';
+    return new Date(d).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+  var toastTimer;
+  function showToast(msg, type) {
+    var toast = document.getElementById('toast');
+    document.getElementById('toast-msg').textContent = msg;
+    toast.className = 'toast ' + (type || 'success');
+    clearTimeout(toastTimer);
+    setTimeout(function() { toast.classList.add('show'); }, 10);
+    toastTimer = setTimeout(function() { toast.classList.remove('show'); }, 3500);
+  }
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  init();
+})();
+</script>
+</body>
+</html>
