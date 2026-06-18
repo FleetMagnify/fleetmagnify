@@ -103,6 +103,9 @@
   .idle-rate-save-btn { display: none; background: rgba(14,165,122,0.12); border: 1px solid rgba(14,165,122,0.25); color: #0EA57A; font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
   .idle-rate-save-btn.visible { display: inline-block; }
   .idle-rate-save-btn:hover { background: rgba(14,165,122,0.20); }
+  .actions-cell { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .btn-edit { background: none; border: 1px solid transparent; color: #3A4A5C; font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-edit:hover { border-color: rgba(14,165,122,0.35); color: #0EA57A; background: rgba(14,165,122,0.08); }
   .btn-delete { background: none; border: 1px solid transparent; color: #3A4A5C; font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
   .btn-delete:hover { border-color: rgba(226,75,74,0.3); color: #F0A8A7; background: rgba(226,75,74,0.08); }
   .empty-state { padding: 60px 24px; text-align: center; }
@@ -268,7 +271,7 @@
           <table id="assets-table">
             <thead>
               <tr>
-                <th>Asset Name</th><th>Type</th><th>Make</th><th>Model</th><th>Year</th><th>Fuel Type</th><th>Idle Burn Rate</th><th></th>
+                <th>Asset Name</th><th>Type</th><th>Make</th><th>Model</th><th>Year</th><th>Fuel Type</th><th>Idle Burn Rate</th><th>Actions</th>
               </tr>
             </thead>
             <tbody id="assets-tbody">
@@ -284,8 +287,8 @@
 <div class="modal-overlay" id="add-modal">
   <div class="modal">
     <div class="modal-eyebrow">Fleet Assets</div>
-    <h2>Add New Asset</h2>
-    <p class="modal-sub">Enter the details for this asset. You can add fuel and telematics data from the Upload Data page.</p>
+    <h2 id="asset-modal-title">Add New Asset</h2>
+    <p class="modal-sub" id="asset-modal-sub">Enter the details for this asset. You can add fuel and telematics data from the Upload Data page.</p>
     <div id="modal-error" class="form-error"></div>
     <div class="form-group">
       <label for="asset-name">Asset Name *</label>
@@ -390,6 +393,7 @@
   var currentUser = null;
   var allAssets = [];
   var pendingDeleteId = null;
+  var editingAssetId = null;
   var csvRows = [];
 
   var DEFAULT_IDLE_RATES = {
@@ -443,10 +447,16 @@
           (!hasCustomRate ? '<span class="idle-rate-default-tag">default</span>' : '') +
           '<button class="idle-rate-save-btn" data-id="' + a.id + '">Save</button>' +
         '</div></td>' +
-        '<td><button class="btn-delete" data-id="' + a.id + '">Delete</button></td>' +
+        '<td><div class="actions-cell">' +
+          '<button class="btn-edit" data-id="' + a.id + '">Edit</button>' +
+          '<button class="btn-delete" data-id="' + a.id + '">Delete</button>' +
+        '</div></td>' +
       '</tr>';
     }).join('');
 
+    tbody.querySelectorAll('.btn-edit').forEach(function(btn) {
+      btn.addEventListener('click', function() { openEditModal(btn.dataset.id); });
+    });
     tbody.querySelectorAll('.btn-delete').forEach(function(btn) {
       btn.addEventListener('click', function() { openConfirmDelete(btn.dataset.id); });
     });
@@ -486,18 +496,58 @@
     }));
   });
 
-  document.getElementById('add-asset-btn').addEventListener('click', function() {
-    document.getElementById('add-modal').classList.add('open');
+  var ASSET_FIELD_IDS = ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-purchase-price','asset-life-hours','asset-service-cost','asset-available-hours','asset-target-utilisation'];
+
+  function resetAssetForm() {
+    ASSET_FIELD_IDS.forEach(function(id) { document.getElementById(id).value = ''; });
+    document.getElementById('asset-type').selectedIndex = 0;
+    document.getElementById('fuel-type').selectedIndex = 0;
+  }
+
+  function openAddModal() {
+    editingAssetId = null;
+    document.getElementById('asset-modal-title').textContent = 'Add New Asset';
+    document.getElementById('asset-modal-sub').textContent = 'Enter the details for this asset. You can add fuel and telematics data from the Upload Data page.';
+    document.getElementById('save-asset-btn').textContent = 'Add Asset';
     document.getElementById('modal-error').classList.remove('visible');
     document.getElementById('modal-error').textContent = '';
-    ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-purchase-price','asset-life-hours','asset-service-cost','asset-available-hours','asset-target-utilisation'].forEach(function(id) {
-      document.getElementById(id).value = '';
-    });
-  });
-  document.getElementById('cancel-modal-btn').addEventListener('click', function() {
+    resetAssetForm();
+    document.getElementById('add-modal').classList.add('open');
+  }
+
+  function openEditModal(id) {
+    var asset = allAssets.find(function(a) { return Number(a.id) === Number(id); });
+    if (!asset) { showToast('Asset not found', 'error'); return; }
+    editingAssetId = asset.id;
+    document.getElementById('asset-modal-title').textContent = 'Edit Asset';
+    document.getElementById('asset-modal-sub').textContent = 'Update the details for ' + (asset.asset_name || 'this asset') + '.';
+    document.getElementById('save-asset-btn').textContent = 'Save Changes';
+    document.getElementById('modal-error').classList.remove('visible');
+    document.getElementById('modal-error').textContent = '';
+    document.getElementById('asset-name').value = asset.asset_name || '';
+    document.getElementById('asset-type').value = asset.asset_type || '';
+    document.getElementById('fuel-type').value = asset.fuel_type || '';
+    document.getElementById('asset-make').value = asset.make || '';
+    document.getElementById('asset-model').value = asset.model || '';
+    document.getElementById('asset-year').value = asset.year != null ? asset.year : '';
+    document.getElementById('asset-rego').value = asset.registration || '';
+    document.getElementById('asset-idle-rate').value = asset.idle_burn_rate_lph != null ? asset.idle_burn_rate_lph : '';
+    document.getElementById('asset-purchase-price').value = asset.purchase_price != null ? asset.purchase_price : '';
+    document.getElementById('asset-life-hours').value = asset.expected_life_hours != null ? asset.expected_life_hours : '';
+    document.getElementById('asset-service-cost').value = asset.service_cost_per_hour != null ? asset.service_cost_per_hour : '';
+    document.getElementById('asset-available-hours').value = asset.available_hours_per_week != null ? asset.available_hours_per_week : '';
+    document.getElementById('asset-target-utilisation').value = asset.target_utilisation_percent != null ? asset.target_utilisation_percent : '';
+    document.getElementById('add-modal').classList.add('open');
+  }
+
+  function closeAssetModal() {
     document.getElementById('add-modal').classList.remove('open');
-  });
-  document.getElementById('add-modal').addEventListener('click', function(e) { if (e.target === this) this.classList.remove('open'); });
+    editingAssetId = null;
+  }
+
+  document.getElementById('add-asset-btn').addEventListener('click', openAddModal);
+  document.getElementById('cancel-modal-btn').addEventListener('click', closeAssetModal);
+  document.getElementById('add-modal').addEventListener('click', function(e) { if (e.target === this) closeAssetModal(); });
 
   document.getElementById('save-asset-btn').addEventListener('click', async function() {
     var name = document.getElementById('asset-name').value.trim();
@@ -509,9 +559,8 @@
       errEl.textContent = 'Please fill in Asset Name, Asset Type, and Fuel Type.';
       errEl.classList.add('visible'); return;
     }
-    this.disabled = true; this.textContent = 'Saving...';
-    var { error } = await supabase.from('assets').insert({
-      user_id: currentUser.id, asset_name: name, asset_type: type, fuel_type: fuel,
+    var payload = {
+      asset_name: name, asset_type: type, fuel_type: fuel,
       make: document.getElementById('asset-make').value.trim() || null,
       model: document.getElementById('asset-model').value.trim() || null,
       year: parseInt(document.getElementById('asset-year').value) || null,
@@ -522,11 +571,25 @@
       service_cost_per_hour: document.getElementById('asset-service-cost').value ? parseFloat(document.getElementById('asset-service-cost').value) : null,
       available_hours_per_week: document.getElementById('asset-available-hours').value ? parseFloat(document.getElementById('asset-available-hours').value) : null,
       target_utilisation_percent: document.getElementById('asset-target-utilisation').value ? parseFloat(document.getElementById('asset-target-utilisation').value) : null
-    });
-    this.disabled = false; this.textContent = 'Add Asset';
+    };
+
+    this.disabled = true;
+    this.textContent = 'Saving...';
+    var isEditing = !!editingAssetId;
+    var error;
+    if (isEditing) {
+      var result = await supabase.from('assets').update(payload).eq('id', editingAssetId).eq('user_id', currentUser.id);
+      error = result.error;
+    } else {
+      payload.user_id = currentUser.id;
+      var insertResult = await supabase.from('assets').insert(payload);
+      error = insertResult.error;
+    }
+    this.disabled = false;
+    this.textContent = isEditing ? 'Save Changes' : 'Add Asset';
     if (error) { errEl.textContent = error.message; errEl.classList.add('visible'); return; }
-    document.getElementById('add-modal').classList.remove('open');
-    showToast('Asset added successfully', 'success');
+    closeAssetModal();
+    showToast(isEditing ? 'Asset updated successfully' : 'Asset added successfully', 'success');
     loadAssets();
   });
 
