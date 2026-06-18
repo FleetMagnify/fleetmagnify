@@ -348,6 +348,14 @@
         <input type="number" id="asset-service-cost" placeholder="e.g. 7.20" step="0.01" min="0">
         <div class="form-hint">Your blended average service cost per operating hour, calculated from your own service history.</div>
       </div>
+      <div class="form-group">
+        <label for="asset-available-hours">Available Hours Per Week</label>
+        <input type="number" id="asset-available-hours" placeholder="e.g. 40, leave blank to default to 40" step="0.5" min="0">
+      </div>
+      <div class="form-group">
+        <label for="asset-target-utilisation">Target Utilisation Percent</label>
+        <input type="number" id="asset-target-utilisation" placeholder="e.g. 75" step="1" min="0" max="100">
+      </div>
     <div class="modal-actions">
       <button class="btn-cancel" id="cancel-modal-btn">Cancel</button>
       <button class="btn-save" id="save-asset-btn">Add Asset</button>
@@ -480,7 +488,7 @@
     document.getElementById('add-modal').classList.add('open');
     document.getElementById('modal-error').classList.remove('visible');
     document.getElementById('modal-error').textContent = '';
-    ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-purchase-price','asset-life-hours','asset-service-cost'].forEach(function(id) {
+    ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-purchase-price','asset-life-hours','asset-service-cost','asset-available-hours','asset-target-utilisation'].forEach(function(id) {
       document.getElementById(id).value = '';
     });
   });
@@ -508,8 +516,10 @@
       registration: document.getElementById('asset-rego').value.trim() || null,
       idle_burn_rate_lph: idleRateRaw ? parseFloat(idleRateRaw) : null,
       purchase_price: document.getElementById('asset-purchase-price').value ? parseFloat(document.getElementById('asset-purchase-price').value) : null,
-expected_life_hours: document.getElementById('asset-life-hours').value ? parseFloat(document.getElementById('asset-life-hours').value) : null,
-service_cost_per_hour: document.getElementById('asset-service-cost').value ? parseFloat(document.getElementById('asset-service-cost').value) : null
+      expected_life_hours: document.getElementById('asset-life-hours').value ? parseFloat(document.getElementById('asset-life-hours').value) : null,
+      service_cost_per_hour: document.getElementById('asset-service-cost').value ? parseFloat(document.getElementById('asset-service-cost').value) : null,
+      available_hours_per_week: document.getElementById('asset-available-hours').value ? parseFloat(document.getElementById('asset-available-hours').value) : null,
+      target_utilisation_percent: document.getElementById('asset-target-utilisation').value ? parseFloat(document.getElementById('asset-target-utilisation').value) : null
     });
     this.disabled = false; this.textContent = 'Add Asset';
     if (error) { errEl.textContent = error.message; errEl.classList.add('visible'); return; }
@@ -543,9 +553,9 @@ service_cost_per_hour: document.getElementById('asset-service-cost').value ? par
   });
 
   document.getElementById('download-template-btn').addEventListener('click', function() {
-    var csv = 'asset_name,asset_type,make,model,year,fuel_type,registration,idle_burn_rate_lph\n' +
-      'CAT 390F Excavator,Excavator,Caterpillar,390F,2021,Diesel,,4.0\n' +
-      'Komatsu HD785 Dump Truck,Dump Truck,Komatsu,HD785,2019,Diesel,ABC123,5.5\n';
+    var csv = 'asset_name,asset_type,make,model,year,fuel_type,registration,idle_burn_rate_lph,purchase_price,expected_life_hours,service_cost_per_hour,available_hours_per_week,target_utilisation_percent\n' +
+      'CAT 390F Excavator,Excavator,Caterpillar,390F,2021,Diesel,,4.0,285000,20000,7.20,40,75\n' +
+      'Komatsu HD785 Dump Truck,Dump Truck,Komatsu,HD785,2019,Diesel,ABC123,5.5,420000,25000,8.50,40,80\n';
     var blob = new Blob([csv], { type: 'text/csv' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'FleetMagnify_Assets_Template.csv'; a.click();
@@ -608,7 +618,12 @@ service_cost_per_hour: document.getElementById('asset-service-cost').value ? par
         user_id: currentUser.id, asset_name: r.asset_name || null, asset_type: r.asset_type || null,
         make: r.make || null, model: r.model || null, year: parseInt(r.year) || null,
         fuel_type: r.fuel_type || null, registration: r.registration || null,
-        idle_burn_rate_lph: r.idle_burn_rate_lph ? parseFloat(r.idle_burn_rate_lph) : null
+        idle_burn_rate_lph: r.idle_burn_rate_lph ? parseFloat(r.idle_burn_rate_lph) : null,
+        purchase_price: r.purchase_price ? parseFloat(r.purchase_price) : null,
+        expected_life_hours: r.expected_life_hours ? parseFloat(r.expected_life_hours) : null,
+        service_cost_per_hour: r.service_cost_per_hour ? parseFloat(r.service_cost_per_hour) : null,
+        available_hours_per_week: r.available_hours_per_week ? parseFloat(r.available_hours_per_week) : null,
+        target_utilisation_percent: r.target_utilisation_percent ? parseFloat(r.target_utilisation_percent) : null
       };
     });
     var { error } = await supabase.from('assets').insert(records);
