@@ -290,6 +290,7 @@
     <h2 id="asset-modal-title">Add New Asset</h2>
     <p class="modal-sub" id="asset-modal-sub">Enter the details for this asset. You can add fuel and telematics data from the Upload Data page.</p>
     <div id="modal-error" class="form-error"></div>
+    <form id="asset-form" novalidate>
     <div class="form-group">
       <label for="asset-name">Asset Name *</label>
       <input type="text" id="asset-name" placeholder="e.g. CAT 390F Excavator #1">
@@ -362,9 +363,10 @@
         <input type="number" id="asset-target-utilisation" placeholder="e.g. 75" step="1" min="0" max="100">
       </div>
     <div class="modal-actions">
-      <button class="btn-cancel" id="cancel-modal-btn">Cancel</button>
-      <button class="btn-save" id="save-asset-btn">Add Asset</button>
+      <button type="button" class="btn-cancel" id="cancel-modal-btn">Cancel</button>
+      <button type="submit" class="btn-save" id="save-asset-btn">Add Asset</button>
     </div>
+    </form>
   </div>
 </div>
 
@@ -448,8 +450,8 @@
           '<button class="idle-rate-save-btn" data-id="' + a.id + '">Save</button>' +
         '</div></td>' +
         '<td><div class="actions-cell">' +
-          '<button class="btn-edit" data-id="' + a.id + '">Edit</button>' +
-          '<button class="btn-delete" data-id="' + a.id + '">Delete</button>' +
+          '<button type="button" class="btn-edit" data-id="' + a.id + '">Edit</button>' +
+          '<button type="button" class="btn-delete" data-id="' + a.id + '">Delete</button>' +
         '</div></td>' +
       '</tr>';
     }).join('');
@@ -472,7 +474,7 @@
         var newRate = parseFloat(input.value);
         if (isNaN(newRate) || newRate < 0) { showToast('Please enter a valid rate', 'error'); return; }
         this.disabled = true; this.textContent = '...';
-        var { error } = await supabase.from('assets').update({ idle_burn_rate_lph: newRate }).eq('id', id).eq('user_id', currentUser.id);
+        var { error } = await supabase.from('assets').update({ idle_burn_rate_lph: newRate }).eq('id', Number(id)).eq('user_id', currentUser.id);
         this.disabled = false; this.textContent = 'Save';
         if (error) { showToast('Failed to update idle rate', 'error'); return; }
         showToast('Idle burn rate updated', 'success');
@@ -497,6 +499,61 @@
   });
 
   var ASSET_FIELD_IDS = ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-purchase-price','asset-life-hours','asset-service-cost','asset-available-hours','asset-target-utilisation'];
+
+  function parseOptionalFloat(raw) {
+    if (raw === '' || raw == null) return null;
+    var n = parseFloat(raw);
+    return isNaN(n) ? null : n;
+  }
+
+  function parseOptionalInt(raw) {
+    if (raw === '' || raw == null) return null;
+    var n = parseInt(raw, 10);
+    return isNaN(n) ? null : n;
+  }
+
+  function buildAssetPayload() {
+    var idleRateRaw = document.getElementById('asset-idle-rate').value;
+    return {
+      asset_name: document.getElementById('asset-name').value.trim(),
+      asset_type: document.getElementById('asset-type').value,
+      fuel_type: document.getElementById('fuel-type').value,
+      make: document.getElementById('asset-make').value.trim() || null,
+      model: document.getElementById('asset-model').value.trim() || null,
+      year: parseOptionalInt(document.getElementById('asset-year').value),
+      registration: document.getElementById('asset-rego').value.trim() || null,
+      idle_burn_rate_lph: parseOptionalFloat(idleRateRaw),
+      purchase_price: parseOptionalFloat(document.getElementById('asset-purchase-price').value),
+      expected_life_hours: parseOptionalFloat(document.getElementById('asset-life-hours').value),
+      service_cost_per_hour: parseOptionalFloat(document.getElementById('asset-service-cost').value),
+      available_hours_per_week: parseOptionalFloat(document.getElementById('asset-available-hours').value),
+      target_utilisation_percent: parseOptionalFloat(document.getElementById('asset-target-utilisation').value)
+    };
+  }
+
+  async function persistAsset(assetId, payload) {
+    if (assetId != null) {
+      return supabase.from('assets')
+        .update(payload)
+        .eq('id', Number(assetId))
+        .eq('user_id', currentUser.id)
+        .select('*');
+    }
+    payload.user_id = currentUser.id;
+    return supabase.from('assets').insert(payload).select('*');
+  }
+
+  function setSelectValue(selectId, value) {
+    var select = document.getElementById(selectId);
+    select.value = value || '';
+    if (!select.value && value) {
+      var option = document.createElement('option');
+      option.value = value;
+      option.textContent = value;
+      option.selected = true;
+      select.appendChild(option);
+    }
+  }
 
   function resetAssetForm() {
     ASSET_FIELD_IDS.forEach(function(id) { document.getElementById(id).value = ''; });
@@ -525,8 +582,8 @@
     document.getElementById('modal-error').classList.remove('visible');
     document.getElementById('modal-error').textContent = '';
     document.getElementById('asset-name').value = asset.asset_name || '';
-    document.getElementById('asset-type').value = asset.asset_type || '';
-    document.getElementById('fuel-type').value = asset.fuel_type || '';
+    setSelectValue('asset-type', asset.asset_type);
+    setSelectValue('fuel-type', asset.fuel_type);
     document.getElementById('asset-make').value = asset.make || '';
     document.getElementById('asset-model').value = asset.model || '';
     document.getElementById('asset-year').value = asset.year != null ? asset.year : '';
@@ -549,45 +606,43 @@
   document.getElementById('cancel-modal-btn').addEventListener('click', closeAssetModal);
   document.getElementById('add-modal').addEventListener('click', function(e) { if (e.target === this) closeAssetModal(); });
 
-  document.getElementById('save-asset-btn').addEventListener('click', async function() {
-    var name = document.getElementById('asset-name').value.trim();
-    var type = document.getElementById('asset-type').value;
-    var fuel = document.getElementById('fuel-type').value;
-    var idleRateRaw = document.getElementById('asset-idle-rate').value;
+  document.getElementById('asset-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
     var errEl = document.getElementById('modal-error');
-    if (!name || !type || !fuel) {
-      errEl.textContent = 'Please fill in Asset Name, Asset Type, and Fuel Type.';
-      errEl.classList.add('visible'); return;
-    }
-    var payload = {
-      asset_name: name, asset_type: type, fuel_type: fuel,
-      make: document.getElementById('asset-make').value.trim() || null,
-      model: document.getElementById('asset-model').value.trim() || null,
-      year: parseInt(document.getElementById('asset-year').value) || null,
-      registration: document.getElementById('asset-rego').value.trim() || null,
-      idle_burn_rate_lph: idleRateRaw ? parseFloat(idleRateRaw) : null,
-      purchase_price: document.getElementById('asset-purchase-price').value ? parseFloat(document.getElementById('asset-purchase-price').value) : null,
-      expected_life_hours: document.getElementById('asset-life-hours').value ? parseFloat(document.getElementById('asset-life-hours').value) : null,
-      service_cost_per_hour: document.getElementById('asset-service-cost').value ? parseFloat(document.getElementById('asset-service-cost').value) : null,
-      available_hours_per_week: document.getElementById('asset-available-hours').value ? parseFloat(document.getElementById('asset-available-hours').value) : null,
-      target_utilisation_percent: document.getElementById('asset-target-utilisation').value ? parseFloat(document.getElementById('asset-target-utilisation').value) : null
-    };
+    var saveBtn = document.getElementById('save-asset-btn');
+    var assetId = editingAssetId;
+    var isEditing = assetId != null;
+    var payload = buildAssetPayload();
 
-    this.disabled = true;
-    this.textContent = 'Saving...';
-    var isEditing = !!editingAssetId;
-    var error;
-    if (isEditing) {
-      var result = await supabase.from('assets').update(payload).eq('id', editingAssetId).eq('user_id', currentUser.id);
-      error = result.error;
-    } else {
-      payload.user_id = currentUser.id;
-      var insertResult = await supabase.from('assets').insert(payload);
-      error = insertResult.error;
+    if (!payload.asset_name || !payload.asset_type || !payload.fuel_type) {
+      errEl.textContent = 'Please fill in Asset Name, Asset Type, and Fuel Type.';
+      errEl.classList.add('visible');
+      return;
     }
-    this.disabled = false;
-    this.textContent = isEditing ? 'Save Changes' : 'Add Asset';
-    if (error) { errEl.textContent = error.message; errEl.classList.add('visible'); return; }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    errEl.classList.remove('visible');
+    errEl.textContent = '';
+
+    var result = await persistAsset(assetId, payload);
+
+    saveBtn.disabled = false;
+    saveBtn.textContent = isEditing ? 'Save Changes' : 'Add Asset';
+
+    if (result.error) {
+      errEl.textContent = result.error.message || 'Failed to save asset.';
+      errEl.classList.add('visible');
+      return;
+    }
+    if (!result.data || result.data.length === 0) {
+      errEl.textContent = isEditing
+        ? 'Update failed — asset not found or you do not have permission to edit it.'
+        : 'Failed to create asset.';
+      errEl.classList.add('visible');
+      return;
+    }
+
     closeAssetModal();
     showToast(isEditing ? 'Asset updated successfully' : 'Asset added successfully', 'success');
     loadAssets();
@@ -603,7 +658,7 @@
   document.getElementById('confirm-delete-btn').addEventListener('click', async function() {
     if (!pendingDeleteId) return;
     this.disabled = true; this.textContent = 'Deleting...';
-    var { error } = await supabase.from('assets').delete().eq('id', pendingDeleteId).eq('user_id', currentUser.id);
+    var { error } = await supabase.from('assets').delete().eq('id', Number(pendingDeleteId)).eq('user_id', currentUser.id);
     this.disabled = false; this.textContent = 'Yes, Delete';
     document.getElementById('confirm-modal').classList.remove('open');
     pendingDeleteId = null;
