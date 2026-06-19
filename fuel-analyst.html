@@ -407,7 +407,7 @@
 
   document.getElementById('asset-select').addEventListener('change', function() {
     var id = this.value;
-    selectedAsset = assetsList.find(function(a) { return a.id === id; }) || null;
+    selectedAsset = assetsList.find(function(a) { return Number(a.id) === Number(id); }) || null;
     var display = document.getElementById('idle-rate-display');
     var applyBtn = document.getElementById('apply-filters-btn');
     if (!selectedAsset) {
