@@ -148,15 +148,16 @@
   .form-error.visible { display: block; }
   .type-select-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .type-select-row select { flex: 1; min-width: 160px; }
-  .asset-category-badge {
-    display: none; font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
-    text-transform: uppercase; padding: 5px 10px; border-radius: 100px; white-space: nowrap;
+  .primary-metric-banner {
+    display: none; font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em;
+    padding: 10px 14px; border-radius: 10px; margin-bottom: 14px;
+    line-height: 1.4;
   }
-  .asset-category-badge.visible { display: inline-flex; align-items: center; }
-  .asset-category-badge.on-road {
+  .primary-metric-banner.visible { display: block; }
+  .primary-metric-banner.on-road {
     color: #0EA57A; background: rgba(14,165,122,0.10); border: 1px solid rgba(14,165,122,0.22);
   }
-  .asset-category-badge.construction {
+  .primary-metric-banner.construction {
     color: #EF9F27; background: rgba(239,159,39,0.10); border: 1px solid rgba(239,159,39,0.22);
   }
   .form-context-note {
@@ -332,7 +333,6 @@
             <option>Forklift</option><option>Light Vehicle</option><option>Rigid Truck</option>
             <option>Semi Trailer</option><option>Water Truck</option><option>Other</option>
           </select>
-          <span id="asset-category-badge" class="asset-category-badge"></span>
         </div>
       </div>
       <div class="form-group" style="margin-bottom:0;">
@@ -342,6 +342,9 @@
           <option>Diesel</option><option>Petrol</option><option>Electric</option><option>Hybrid</option>
         </select>
       </div>
+    </div>
+    <div class="primary-metric-banner" id="primary-metric-banner">
+      <span id="primary-metric-text"></span>
     </div>
     <div class="form-context-note" id="form-context-note">
       <span class="note-icon" id="form-context-icon">🚛</span>
@@ -558,41 +561,55 @@
   function updateFormForAssetType() {
     var assetType = document.getElementById('asset-type').value;
     var onRoad = isOnRoadType(assetType);
-    var badge = document.getElementById('asset-category-badge');
+    var metricBanner = document.getElementById('primary-metric-banner');
+    var metricText = document.getElementById('primary-metric-text');
     var contextNote = document.getElementById('form-context-note');
     var contextIcon = document.getElementById('form-context-icon');
     var contextText = document.getElementById('form-context-text');
     var regoInput = document.getElementById('asset-rego');
+    var serviceInput = document.getElementById('asset-service-cost');
 
     if (!assetType) {
-      badge.className = 'asset-category-badge';
-      badge.textContent = '';
+      metricBanner.className = 'primary-metric-banner';
+      metricText.textContent = '';
       contextNote.classList.remove('visible', 'construction');
+      document.getElementById('label-rego').textContent = 'Registration / ID';
+      regoInput.placeholder = 'e.g. ABC123';
+      document.getElementById('hint-rego').textContent = 'Optional identifier for this asset.';
+      document.getElementById('hint-idle-rate').textContent = 'Leave blank to use a default estimate based on asset type. You can update this anytime once you know your actual idle fuel usage.';
+      document.getElementById('label-life-hours').textContent = 'Expected Total Life (hours)';
+      document.getElementById('hint-life-hours').textContent = 'Total operating hours expected over the asset\'s useful life — used for depreciation cost per hour.';
+      document.getElementById('label-service-cost').textContent = 'Service Cost Per Hour ($)';
+      serviceInput.placeholder = 'e.g. 7.20';
+      document.getElementById('hint-service-cost').textContent = 'Your blended average service cost per operating hour, calculated from your own service history.';
       return;
     }
 
-    badge.className = 'asset-category-badge visible ' + (onRoad ? 'on-road' : 'construction');
-    badge.textContent = onRoad ? 'On-Road Vehicle' : 'Construction Equipment';
+    metricBanner.className = 'primary-metric-banner visible ' + (onRoad ? 'on-road' : 'construction');
+    metricText.textContent = onRoad
+      ? 'ON-ROAD VEHICLE • Primary metric: Kilometres'
+      : 'CONSTRUCTION EQUIPMENT • Primary metric: Operating Hours';
     contextNote.classList.add('visible');
     contextNote.classList.toggle('construction', !onRoad);
     contextIcon.textContent = onRoad ? '🚛' : '🚧';
 
     if (onRoad) {
-      contextText.innerHTML = '<strong>On-road vehicle.</strong> Fuel Analyst uses odometer readings from telematics to calculate <strong>cost per KM</strong>. Accurate registration and odometer data (via eRoad or upload) are essential for distance-based reporting.';
+      contextText.innerHTML = '<strong>Distance-first asset.</strong> Fuel Analyst calculates fuel efficiency and cost <strong>per kilometre</strong> from odometer telematics. Idling remains measured in hours using the idle burn rate below.';
       document.getElementById('label-rego').textContent = 'Registration / Plate Number';
       regoInput.placeholder = 'e.g. ABC123 — matches eRoad / telematics';
       document.getElementById('hint-rego').innerHTML = '<span class="emphasis">Important for on-road assets.</span> Used to match fuel invoices and telematics odometer data. Keep this aligned with your eRoad integration plate number.';
-      document.getElementById('hint-idle-rate').textContent = 'Still used to estimate idle fuel cost while stationary (e.g. loading, traffic). Leave blank for a default based on vehicle type.';
+      document.getElementById('hint-idle-rate').textContent = 'Used to calculate idle fuel waste while stationary (e.g. traffic, loading). On-road fuel efficiency is calculated per KM from odometer data.';
       document.getElementById('label-purchase-price').textContent = 'Purchase Price ($)';
       document.getElementById('hint-purchase-price').textContent = 'Supports depreciation calculations. Combined with odometer distance data for total cost per KM in Fuel Analyst.';
       document.getElementById('label-life-hours').textContent = 'Expected Total Life (hours)';
-      document.getElementById('hint-life-hours').textContent = 'Used for idle-time depreciation in Idle Cost Analyst. Distance-based fuel metrics rely primarily on odometer readings from telematics.';
-      document.getElementById('label-service-cost').textContent = 'Service Cost Per Hour ($)';
-      document.getElementById('hint-service-cost').textContent = 'Blended service cost per operating hour — used in idle and operating cost modules alongside KM-based fuel metrics.';
+      document.getElementById('hint-life-hours').textContent = 'Used mainly for idle-time depreciation. Distance-based calculations in Fuel Analyst rely primarily on odometer readings.';
+      document.getElementById('label-service-cost').textContent = 'Service Cost Per KM ($)';
+      serviceInput.placeholder = 'e.g. 0.15';
+      document.getElementById('hint-service-cost').textContent = 'Blended average service cost per kilometre. Used in Fuel Analyst and Idle Cost Analyst alongside idle hour calculations.';
       document.getElementById('hint-available-hours').textContent = 'Typical weekly availability for utilisation tracking. Leave blank to default to 40 hours.';
       document.getElementById('hint-target-utilisation').textContent = 'Target utilisation percentage — compared against actual operating hours in Utilisation Analyst.';
     } else {
-      contextText.innerHTML = '<strong>Construction equipment.</strong> Fuel Analyst splits invoiced fuel into <strong>operating vs idle</strong> using telematics hours and idle burn rate. Accurate idle burn rate and cost-per-operating-hour settings drive the most reliable results.';
+      contextText.innerHTML = '<strong>Hours-based asset.</strong> Fuel Analyst splits invoiced fuel into <strong>operating vs idle</strong> using telematics hours and idle burn rate. Accurate idle burn rate and cost-per-operating-hour settings drive the most reliable results.';
       document.getElementById('label-rego').textContent = 'Registration / ID';
       regoInput.placeholder = 'e.g. site ID or rego (optional)';
       document.getElementById('hint-rego').textContent = 'Optional internal or site identifier. Less critical than for on-road vehicles.';
@@ -602,6 +619,7 @@
       document.getElementById('label-life-hours').textContent = 'Expected Total Life (hours)';
       document.getElementById('hint-life-hours').innerHTML = '<span class="emphasis">Key for cost per operating hour.</span> Total operating hours over the asset\'s useful life — divides purchase price into an hourly depreciation rate.';
       document.getElementById('label-service-cost').textContent = 'Service Cost Per Hour ($)';
+      serviceInput.placeholder = 'e.g. 7.20';
       document.getElementById('hint-service-cost').innerHTML = '<span class="emphasis">Key for cost per operating hour.</span> Your blended average service cost per operating hour from your own service history.';
       document.getElementById('hint-available-hours').textContent = 'Hours per week the asset is available to work. Leave blank to default to 40 in Utilisation Analyst.';
       document.getElementById('hint-target-utilisation').textContent = 'Target operating utilisation percentage — compared against actual hours in Utilisation Analyst.';
