@@ -151,7 +151,8 @@
   .kpi-value.teal { color: #0EA57A; }
   .kpi-value.amber { color: #EF9F27; }
   .kpi-value.white { color: #D8DFE8; }
-  .kpi-sub { font-size: 11px; color: #3A4A5C; }
+  .kpi-sub.message { font-size: 12px; color: #5A6474; line-height: 1.45; font-weight: 500; text-transform: none; letter-spacing: 0; }
+  .kpi-value.message-text { font-size: 13px; font-weight: 600; color: #5A6474; line-height: 1.45; letter-spacing: 0; }
 
   /* ── CHART CARD ── */
   .chart-card {
@@ -275,8 +276,8 @@
       <button class="btn-apply" id="apply-filters-btn" disabled>Apply Filters</button>
     </div>
 
-    <!-- KPI ROW -->
-    <div class="kpi-row">
+    <!-- KPI ROW — Construction Equipment -->
+    <div class="kpi-row" id="kpi-row-construction">
       <div class="kpi-card">
         <div class="kpi-label">Travelling Fuel Rate</div>
         <div class="kpi-value teal" id="kpi-travel-rate">—</div>
@@ -299,13 +300,38 @@
       </div>
     </div>
 
+    <!-- KPI ROW — On-Road Vehicles -->
+    <div class="kpi-row" id="kpi-row-onroad" style="display:none;">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Kilometres</div>
+        <div class="kpi-value teal" id="kpi-total-km">—</div>
+        <div class="kpi-sub" id="kpi-total-km-sub">for selected period</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Fuel Cost</div>
+        <div class="kpi-value white" id="kpi-onroad-total-cost">—</div>
+        <div class="kpi-sub" id="kpi-onroad-total-litres-sub">for selected period</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Cost per KM</div>
+        <div class="kpi-value teal" id="kpi-cost-per-km">—</div>
+        <div class="kpi-sub" id="kpi-cost-per-km-sub">fuel cost per kilometre</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Idle Fuel Cost</div>
+        <div class="kpi-value amber" id="kpi-onroad-idle-cost">—</div>
+        <div class="kpi-sub" id="kpi-onroad-idle-pct-sub">share of total cost</div>
+      </div>
+    </div>
+
     <!-- CHART -->
     <div class="chart-card">
       <div class="chart-card-header">
-        <div class="chart-card-title">Daily Fuel Consumption — Travel vs. Idle</div>
-        <div class="chart-legend">
-          <div class="legend-item"><div class="legend-dot" style="background:#0EA57A;"></div> Operating Fuel</div>
-          <div class="legend-item"><div class="legend-dot" style="background:#EF9F27;"></div> Idle Fuel</div>
+        <div class="chart-card-title" id="chart-title">Daily Fuel Consumption — Travel vs. Idle</div>
+        <div class="chart-legend" id="chart-legend">
+          <div class="legend-item" id="legend-operating"><div class="legend-dot" style="background:#0EA57A;"></div> Operating Fuel</div>
+          <div class="legend-item" id="legend-idle"><div class="legend-dot" style="background:#EF9F27;"></div> Idle Fuel</div>
+          <div class="legend-item" id="legend-cost-per-km" style="display:none;"><div class="legend-dot" style="background:#0EA57A;"></div> Cost per KM</div>
         </div>
       </div>
       <div class="chart-wrap">
@@ -320,11 +346,11 @@
     <!-- DATA TABLE -->
     <div class="table-card">
       <div class="table-header">
-        <div class="table-title">Daily Breakdown</div>
+        <div class="table-title" id="table-title">Daily Breakdown</div>
       </div>
       <div style="overflow-x:auto;">
         <table>
-          <thead>
+          <thead id="table-head-construction">
             <tr>
               <th>Date</th>
               <th>Total Litres</th>
@@ -332,6 +358,16 @@
               <th>Idle Hrs</th>
               <th>Operating Rate</th>
               <th>Idle Rate</th>
+            </tr>
+          </thead>
+          <thead id="table-head-onroad" style="display:none;">
+            <tr>
+              <th>Date</th>
+              <th>KM Travelled</th>
+              <th>Total Fuel Cost</th>
+              <th>Cost per KM</th>
+              <th>Idle Hours</th>
+              <th>Idle Fuel Cost</th>
             </tr>
           </thead>
           <tbody id="data-tbody">
@@ -355,7 +391,127 @@
   var selectedAsset = null;
   var fuelChart = null;
 
-  // Default idle burn rates by asset type (litres/hour) — used if asset has none set
+  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
+  var NO_ODOMETER_MSG = 'No odometer data available yet — this will populate automatically once your eRoad integration is connected';
+
+  function isOnRoadAsset(asset) {
+    return asset && ON_ROAD_TYPES.indexOf(asset.asset_type) !== -1;
+  }
+
+  function setViewMode(onRoad) {
+    document.getElementById('kpi-row-construction').style.display = onRoad ? 'none' : '';
+    document.getElementById('kpi-row-onroad').style.display = onRoad ? '' : 'none';
+    document.getElementById('chart-title').textContent = onRoad
+      ? 'Daily Fuel Cost per KM'
+      : 'Daily Fuel Consumption — Travel vs. Idle';
+    document.getElementById('legend-operating').style.display = onRoad ? 'none' : '';
+    document.getElementById('legend-idle').style.display = onRoad ? 'none' : '';
+    document.getElementById('legend-cost-per-km').style.display = onRoad ? '' : 'none';
+    document.getElementById('table-head-construction').style.display = onRoad ? 'none' : '';
+    document.getElementById('table-head-onroad').style.display = onRoad ? '' : 'none';
+    document.getElementById('table-title').textContent = onRoad ? 'Daily Breakdown — On-Road' : 'Daily Breakdown';
+  }
+
+  function resetKpis(onRoad) {
+    if (onRoad) {
+      document.getElementById('kpi-total-km').textContent = '—';
+      document.getElementById('kpi-total-km').className = 'kpi-value teal';
+      document.getElementById('kpi-total-km-sub').textContent = 'for selected period';
+      document.getElementById('kpi-total-km-sub').className = 'kpi-sub';
+      document.getElementById('kpi-onroad-total-cost').textContent = '—';
+      document.getElementById('kpi-onroad-total-litres-sub').textContent = 'for selected period';
+      document.getElementById('kpi-cost-per-km').textContent = '—';
+      document.getElementById('kpi-cost-per-km').className = 'kpi-value teal';
+      document.getElementById('kpi-cost-per-km-sub').textContent = 'fuel cost per kilometre';
+      document.getElementById('kpi-cost-per-km-sub').className = 'kpi-sub';
+      document.getElementById('kpi-onroad-idle-cost').textContent = '—';
+      document.getElementById('kpi-onroad-idle-pct-sub').textContent = 'share of total cost';
+    } else {
+      document.getElementById('kpi-travel-rate').textContent = '—';
+      document.getElementById('kpi-idle-rate').textContent = '—';
+      document.getElementById('kpi-total-cost').textContent = '—';
+      document.getElementById('kpi-idle-cost').textContent = '—';
+      document.getElementById('kpi-total-litres-sub').textContent = 'for selected period';
+      document.getElementById('kpi-idle-pct-sub').textContent = 'share of total cost';
+    }
+  }
+
+  function showNoOdometerKpis() {
+    document.getElementById('kpi-total-km').textContent = '';
+    document.getElementById('kpi-total-km').className = 'kpi-value message-text';
+    document.getElementById('kpi-total-km-sub').textContent = NO_ODOMETER_MSG;
+    document.getElementById('kpi-total-km-sub').className = 'kpi-sub message';
+    document.getElementById('kpi-cost-per-km').textContent = '—';
+    document.getElementById('kpi-cost-per-km').className = 'kpi-value teal';
+    document.getElementById('kpi-cost-per-km-sub').textContent = 'requires odometer data';
+    document.getElementById('kpi-cost-per-km-sub').className = 'kpi-sub';
+  }
+
+  function computeOdometerKmByDate(telRows) {
+    var odoByDate = {};
+    telRows.forEach(function(r) {
+      var odo = parseFloat(r.odometer_km);
+      if (isNaN(odo) || odo <= 0) return;
+      if (!odoByDate[r.record_date] || odo > odoByDate[r.record_date]) {
+        odoByDate[r.record_date] = odo;
+      }
+    });
+    var odoDates = Object.keys(odoByDate).sort();
+    var dailyKm = {};
+    var totalKm = 0;
+    var prevOdo = null;
+    odoDates.forEach(function(date) {
+      var odo = odoByDate[date];
+      var km = 0;
+      if (prevOdo !== null && odo >= prevOdo) {
+        km = odo - prevOdo;
+        totalKm += km;
+      }
+      dailyKm[date] = km;
+      prevOdo = odo;
+    });
+    return { dailyKm: dailyKm, totalKm: totalKm, hasOdometerData: odoDates.length > 0 };
+  }
+
+  function mergeFuelAndTelematics(fuelRows, telRows) {
+    var byDate = {};
+    fuelRows.forEach(function(r) {
+      byDate[r.record_date] = byDate[r.record_date] || {};
+      byDate[r.record_date].litres = (byDate[r.record_date].litres || 0) + (parseFloat(r.litres) || 0);
+      byDate[r.record_date].cost = (byDate[r.record_date].cost || 0) + (parseFloat(r.total_cost) || 0);
+    });
+    telRows.forEach(function(r) {
+      byDate[r.record_date] = byDate[r.record_date] || {};
+      byDate[r.record_date].operating_hours = (byDate[r.record_date].operating_hours || 0) + (parseFloat(r.operating_hours) || 0);
+      byDate[r.record_date].idle_hours = (byDate[r.record_date].idle_hours || 0) + (parseFloat(r.idle_hours) || 0);
+    });
+    return byDate;
+  }
+
+  function buildConstructionDailyRows(byDate, idleRate) {
+    var dates = Object.keys(byDate).sort();
+    var dailyRows = [];
+    dates.forEach(function(date) {
+      var d = byDate[date];
+      var litres = d.litres || 0;
+      var cost = d.cost || 0;
+      var opHours = d.operating_hours || 0;
+      var idleHours = d.idle_hours || 0;
+      var idleFuel = idleHours * idleRate;
+      if (idleFuel > litres) idleFuel = litres;
+      var operatingFuel = litres - idleFuel;
+      dailyRows.push({
+        date: date, litres: litres, cost: cost, opHours: opHours, idleHours: idleHours,
+        operatingFuel: operatingFuel, idleFuel: idleFuel
+      });
+    });
+    return dailyRows;
+  }
+
+  function fmtMoney(n) {
+    return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+
   var DEFAULT_IDLE_RATES = {
     'Excavator': 4.0,
     'Dump Truck': 5.5,
@@ -413,8 +569,12 @@
     if (!selectedAsset) {
       display.textContent = '— select an asset —';
       applyBtn.disabled = true;
+      setViewMode(false);
+      resetKpis(false);
       return;
     }
+    setViewMode(isOnRoadAsset(selectedAsset));
+    resetKpis(isOnRoadAsset(selectedAsset));
     var rate = selectedAsset.idle_burn_rate_lph;
     var isDefault = false;
     if (!rate) {
@@ -449,7 +609,7 @@
 
     var telResult = await supabase
       .from('telematics_records')
-      .select('record_date, operating_hours, idle_hours, total_engine_hours')
+      .select('record_date, operating_hours, idle_hours, total_engine_hours, odometer_km')
       .eq('asset_id', selectedAsset.id)
       .eq('user_id', currentUser.id)
       .gte('record_date', dateFrom)
@@ -462,51 +622,32 @@
     var telRows = (telResult.data || []);
 
     if (fuelRows.length === 0 && telRows.length === 0) {
-      showEmpty();
+      showEmpty(isOnRoadAsset(selectedAsset));
       return;
     }
 
-    // Merge by date
-    var byDate = {};
-    fuelRows.forEach(function(r) {
-      byDate[r.record_date] = byDate[r.record_date] || {};
-      byDate[r.record_date].litres = (byDate[r.record_date].litres || 0) + (parseFloat(r.litres) || 0);
-      byDate[r.record_date].cost = (byDate[r.record_date].cost || 0) + (parseFloat(r.total_cost) || 0);
-    });
-    telRows.forEach(function(r) {
-      byDate[r.record_date] = byDate[r.record_date] || {};
-      byDate[r.record_date].operating_hours = (byDate[r.record_date].operating_hours || 0) + (parseFloat(r.operating_hours) || 0);
-      byDate[r.record_date].idle_hours = (byDate[r.record_date].idle_hours || 0) + (parseFloat(r.idle_hours) || 0);
-    });
+    if (isOnRoadAsset(selectedAsset)) {
+      runOnRoadAnalysis(fuelRows, telRows, idleRate);
+    } else {
+      runConstructionAnalysis(fuelRows, telRows, idleRate);
+    }
+  }
 
-    var dates = Object.keys(byDate).sort();
-    var dailyRows = [];
+  function runConstructionAnalysis(fuelRows, telRows, idleRate) {
+    setViewMode(false);
+    var byDate = mergeFuelAndTelematics(fuelRows, telRows);
+    var dailyRows = buildConstructionDailyRows(byDate, idleRate);
+
     var totalLitres = 0, totalCost = 0, totalIdleFuel = 0, totalOperatingFuel = 0;
     var totalOperatingHours = 0, totalIdleHours = 0;
 
-    dates.forEach(function(date) {
-      var d = byDate[date];
-      var litres = d.litres || 0;
-      var cost = d.cost || 0;
-      var opHours = d.operating_hours || 0;
-      var idleHours = d.idle_hours || 0;
-
-      // Core calculation: idle fuel estimated from burn rate, operating fuel is the remainder
-      var idleFuel = idleHours * idleRate;
-      if (idleFuel > litres) idleFuel = litres; // can't exceed total litres actually delivered
-      var operatingFuel = litres - idleFuel;
-
-      totalLitres += litres;
-      totalCost += cost;
-      totalIdleFuel += idleFuel;
-      totalOperatingFuel += operatingFuel;
-      totalOperatingHours += opHours;
-      totalIdleHours += idleHours;
-
-      dailyRows.push({
-        date: date, litres: litres, opHours: opHours, idleHours: idleHours,
-        operatingFuel: operatingFuel, idleFuel: idleFuel
-      });
+    dailyRows.forEach(function(r) {
+      totalLitres += r.litres;
+      totalCost += r.cost;
+      totalIdleFuel += r.idleFuel;
+      totalOperatingFuel += r.operatingFuel;
+      totalOperatingHours += r.opHours;
+      totalIdleHours += r.idleHours;
     });
 
     var travelRate = totalOperatingHours > 0 ? (totalOperatingFuel / totalOperatingHours) : 0;
@@ -516,16 +657,60 @@
 
     document.getElementById('kpi-travel-rate').textContent = travelRate.toFixed(2) + ' L/hr';
     document.getElementById('kpi-idle-rate').textContent = idleRateActual.toFixed(2) + ' L/hr';
-    document.getElementById('kpi-total-cost').textContent = '$' + totalCost.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0});
+    document.getElementById('kpi-total-cost').textContent = fmtMoney(totalCost);
     document.getElementById('kpi-total-litres-sub').textContent = totalLitres.toLocaleString(undefined, {maximumFractionDigits:0}) + ' litres total';
-    document.getElementById('kpi-idle-cost').textContent = '$' + idleCost.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0});
+    document.getElementById('kpi-idle-cost').textContent = fmtMoney(idleCost);
     document.getElementById('kpi-idle-pct-sub').textContent = idlePct.toFixed(1) + '% of total fuel cost';
 
-    renderChart(dailyRows);
-    renderTable(dailyRows);
+    renderConstructionChart(dailyRows);
+    renderConstructionTable(dailyRows);
   }
 
-  function renderChart(rows) {
+  function runOnRoadAnalysis(fuelRows, telRows, idleRate) {
+    setViewMode(true);
+    var byDate = mergeFuelAndTelematics(fuelRows, telRows);
+    var odo = computeOdometerKmByDate(telRows);
+    var dailyRows = buildConstructionDailyRows(byDate, idleRate);
+
+    var totalLitres = 0, totalCost = 0, totalIdleFuel = 0;
+    dailyRows.forEach(function(r) {
+      totalLitres += r.litres;
+      totalCost += r.cost;
+      totalIdleFuel += r.idleFuel;
+      r.kmTravelled = odo.dailyKm[r.date] || 0;
+      r.idleFuelCost = r.litres > 0 ? (r.cost * (r.idleFuel / r.litres)) : 0;
+      r.costPerKm = r.kmTravelled > 0 ? (r.cost / r.kmTravelled) : null;
+    });
+
+    var idleCost = totalLitres > 0 ? (totalCost * (totalIdleFuel / totalLitres)) : 0;
+    var idlePct = totalCost > 0 ? (idleCost / totalCost * 100) : 0;
+
+    document.getElementById('kpi-onroad-total-cost').textContent = fmtMoney(totalCost);
+    document.getElementById('kpi-onroad-total-litres-sub').textContent = totalLitres.toLocaleString(undefined, {maximumFractionDigits:0}) + ' litres total';
+    document.getElementById('kpi-onroad-idle-cost').textContent = fmtMoney(idleCost);
+    document.getElementById('kpi-onroad-idle-pct-sub').textContent = idlePct.toFixed(1) + '% of total fuel cost';
+
+    if (!odo.hasOdometerData) {
+      showNoOdometerKpis();
+      renderOnRoadChartNoOdometer();
+    } else {
+      document.getElementById('kpi-total-km').textContent = odo.totalKm.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' km';
+      document.getElementById('kpi-total-km').className = 'kpi-value teal';
+      document.getElementById('kpi-total-km-sub').textContent = 'for selected period';
+      document.getElementById('kpi-total-km-sub').className = 'kpi-sub';
+      document.getElementById('kpi-cost-per-km').textContent = odo.totalKm > 0
+        ? '$' + (totalCost / odo.totalKm).toFixed(2) : '—';
+      document.getElementById('kpi-cost-per-km').className = 'kpi-value teal';
+      document.getElementById('kpi-cost-per-km-sub').textContent = odo.totalKm > 0
+        ? 'fuel cost per kilometre' : 'no kilometres recorded in period';
+      document.getElementById('kpi-cost-per-km-sub').className = 'kpi-sub';
+      renderOnRoadChart(dailyRows);
+    }
+
+    renderOnRoadTable(dailyRows, !odo.hasOdometerData);
+  }
+
+  function renderConstructionChart(rows) {
     document.getElementById('chart-empty').style.display = 'none';
     var ctx = document.getElementById('fuel-chart').getContext('2d');
     var labels = rows.map(function(r) { return formatDateShort(r.date); });
@@ -553,7 +738,46 @@
     });
   }
 
-  function renderTable(rows) {
+  function renderOnRoadChart(rows) {
+    document.getElementById('chart-empty').style.display = 'none';
+    var ctx = document.getElementById('fuel-chart').getContext('2d');
+    var chartRows = rows.filter(function(r) { return r.costPerKm != null; });
+    var labels = chartRows.map(function(r) { return formatDateShort(r.date); });
+    var costPerKmData = chartRows.map(function(r) { return Math.round(r.costPerKm * 100) / 100; });
+
+    if (fuelChart) fuelChart.destroy();
+    if (chartRows.length === 0) {
+      document.getElementById('chart-empty').style.display = 'block';
+      document.getElementById('chart-empty').innerHTML = '<span class="icon">📊</span>No daily cost per km data for days with recorded travel in this period.';
+      fuelChart = null;
+      return;
+    }
+    fuelChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Cost per KM ($)', data: costPerKmData, backgroundColor: '#0EA57A', borderRadius: 4 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4A5568', font: { size: 11 } } },
+          y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4A5568', font: { size: 11 }, callback: function(v) { return '$' + v; } } }
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+  }
+
+  function renderOnRoadChartNoOdometer() {
+    document.getElementById('chart-empty').style.display = 'block';
+    document.getElementById('chart-empty').innerHTML = '<span class="icon">📊</span>' + NO_ODOMETER_MSG;
+    if (fuelChart) { fuelChart.destroy(); fuelChart = null; }
+  }
+
+  function renderConstructionTable(rows) {
     var tbody = document.getElementById('data-tbody');
     if (rows.length === 0) {
       tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><span class="icon">⛽</span>No data found for this asset and date range.</div></td></tr>';
@@ -573,14 +797,31 @@
     }).join('');
   }
 
-  function showEmpty() {
-    document.getElementById('kpi-travel-rate').textContent = '—';
-    document.getElementById('kpi-idle-rate').textContent = '—';
-    document.getElementById('kpi-total-cost').textContent = '—';
-    document.getElementById('kpi-idle-cost').textContent = '—';
-    document.getElementById('kpi-total-litres-sub').textContent = 'for selected period';
-    document.getElementById('kpi-idle-pct-sub').textContent = 'share of total cost';
+  function renderOnRoadTable(rows, noOdometer) {
+    var tbody = document.getElementById('data-tbody');
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><span class="icon">⛽</span>No data found for this asset and date range.</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(function(r) {
+      var kmCell = noOdometer ? '—' : (r.kmTravelled > 0 ? r.kmTravelled.toFixed(1) + ' km' : '0 km');
+      var costPerKmCell = (!noOdometer && r.costPerKm != null) ? '$' + r.costPerKm.toFixed(2) : '—';
+      return '<tr>' +
+        '<td class="cell-strong">' + formatDateShort(r.date) + '</td>' +
+        '<td>' + kmCell + '</td>' +
+        '<td>' + fmtMoney(r.cost) + '</td>' +
+        '<td class="cell-teal">' + costPerKmCell + '</td>' +
+        '<td>' + r.idleHours.toFixed(1) + ' hr</td>' +
+        '<td style="color:#EF9F27; font-weight:600;">' + fmtMoney(r.idleFuelCost) + '</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function showEmpty(onRoad) {
+    setViewMode(!!onRoad);
+    resetKpis(!!onRoad);
     document.getElementById('chart-empty').style.display = 'block';
+    document.getElementById('chart-empty').innerHTML = '<span class="icon">📊</span>Select an asset and date range, then click Apply Filters to view consumption data.';
     if (fuelChart) { fuelChart.destroy(); fuelChart = null; }
     document.getElementById('data-tbody').innerHTML = '<tr><td colspan="6"><div class="empty-state"><span class="icon">⛽</span>No fuel or telematics data found for this asset in the selected date range.</div></td></tr>';
   }
