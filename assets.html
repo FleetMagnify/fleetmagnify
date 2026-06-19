@@ -146,32 +146,6 @@
   .btn-danger:hover { background: rgba(226,75,74,0.25); }
   .form-error { display: none; background: rgba(226,75,74,0.10); border: 1px solid rgba(226,75,74,0.28); color: #F0A8A7; font-size: 13px; line-height: 1.5; padding: 11px 14px; border-radius: 9px; margin-bottom: 16px; }
   .form-error.visible { display: block; }
-  .type-select-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .type-select-row select { flex: 1; min-width: 160px; }
-  .asset-category-badge {
-    display: none; font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
-    text-transform: uppercase; padding: 5px 10px; border-radius: 100px; white-space: nowrap;
-  }
-  .asset-category-badge.visible { display: inline-flex; align-items: center; }
-  .asset-category-badge.on-road {
-    color: #0EA57A; background: rgba(14,165,122,0.10); border: 1px solid rgba(14,165,122,0.22);
-  }
-  .asset-category-badge.construction {
-    color: #EF9F27; background: rgba(239,159,39,0.10); border: 1px solid rgba(239,159,39,0.22);
-  }
-  .form-context-note {
-    display: none; align-items: flex-start; gap: 10px;
-    background: rgba(14,165,122,0.05); border: 1px solid rgba(14,165,122,0.14);
-    border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
-  }
-  .form-context-note.visible { display: flex; }
-  .form-context-note.construction {
-    background: rgba(239,159,39,0.05); border-color: rgba(239,159,39,0.16);
-  }
-  .form-context-note .note-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
-  .form-context-note p { font-size: 12px; color: #5A6474; line-height: 1.55; }
-  .form-context-note p strong { color: #C8D0DB; font-weight: 600; }
-  .form-hint.emphasis { color: #6B7785; }
   @media (max-width: 900px) {
     .sidebar { display: none; } .main { margin-left: 0; } .page-content { padding: 20px; }
     .stats-row { grid-template-columns: 1fr 1fr; } .upload-card { flex-direction: column; align-items: flex-start; } .form-row { grid-template-columns: 1fr; }
@@ -322,30 +296,23 @@
       <input type="text" id="asset-name" placeholder="e.g. CAT 390F Excavator #1">
     </div>
     <div class="form-row">
-      <div class="form-group" style="margin-bottom:0;">
+      <div class="form-group">
         <label for="asset-type">Asset Type *</label>
-        <div class="type-select-row">
-          <select id="asset-type">
-            <option value="" disabled selected>Select type</option>
-            <option>Excavator</option><option>Dump Truck</option><option>Wheel Loader</option>
-            <option>Motor Grader</option><option>Bulldozer</option><option>Crane</option>
-            <option>Forklift</option><option>Light Vehicle</option><option>Rigid Truck</option>
-            <option>Semi Trailer</option><option>Water Truck</option><option>Other</option>
-          </select>
-          <span id="asset-category-badge" class="asset-category-badge"></span>
-        </div>
+        <select id="asset-type">
+          <option value="" disabled selected>Select type</option>
+          <option>Excavator</option><option>Dump Truck</option><option>Wheel Loader</option>
+          <option>Motor Grader</option><option>Bulldozer</option><option>Crane</option>
+          <option>Forklift</option><option>Light Vehicle</option><option>Rigid Truck</option>
+          <option>Semi Trailer</option><option>Water Truck</option><option>Other</option>
+        </select>
       </div>
-      <div class="form-group" style="margin-bottom:0;">
+      <div class="form-group">
         <label for="fuel-type">Fuel Type *</label>
         <select id="fuel-type">
           <option value="" disabled selected>Select fuel type</option>
           <option>Diesel</option><option>Petrol</option><option>Electric</option><option>Hybrid</option>
         </select>
       </div>
-    </div>
-    <div class="form-context-note" id="form-context-note">
-      <span class="note-icon" id="form-context-icon">🚛</span>
-      <p id="form-context-text"></p>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -363,41 +330,38 @@
         <input type="number" id="asset-year" placeholder="e.g. 2021" min="1990" max="2030">
       </div>
       <div class="form-group">
-        <label for="asset-rego" id="label-rego">Registration / ID</label>
+        <label for="asset-rego">Registration / ID</label>
         <input type="text" id="asset-rego" placeholder="e.g. ABC123">
-        <div class="form-hint" id="hint-rego">Optional identifier for this asset.</div>
       </div>
     </div>
     <div class="form-group">
       <label for="asset-idle-rate">Idle Burn Rate (litres per hour)</label>
       <input type="number" id="asset-idle-rate" placeholder="e.g. 4.0" step="0.1" min="0">
-      <div class="form-hint" id="hint-idle-rate">Leave blank to use a default estimate based on asset type. You can update this anytime once you know your actual idle fuel usage.</div>
+      <div class="form-hint">Leave blank to use a default estimate based on asset type. You can update this anytime once you know your actual idle fuel usage.</div>
     </div>
     <div class="form-group">
-      <label for="asset-purchase-price" id="label-purchase-price">Purchase Price ($)</label>
-      <input type="number" id="asset-purchase-price" placeholder="e.g. 285000" step="0.01" min="0">
-      <div class="form-hint" id="hint-purchase-price">Used for depreciation and total cost calculations across FleetMagnify modules.</div>
-    </div>
-    <div class="form-group">
-      <label for="asset-life-hours" id="label-life-hours">Expected Total Life (hours)</label>
-      <input type="number" id="asset-life-hours" placeholder="e.g. 20000" step="1" min="0">
-      <div class="form-hint" id="hint-life-hours">Total operating hours expected over the asset's useful life — used for depreciation cost per hour.</div>
-    </div>
-    <div class="form-group">
-      <label for="asset-service-cost" id="label-service-cost">Service Cost Per Hour ($)</label>
-      <input type="number" id="asset-service-cost" placeholder="e.g. 7.20" step="0.01" min="0">
-      <div class="form-hint" id="hint-service-cost">Your blended average service cost per operating hour, calculated from your own service history.</div>
-    </div>
-    <div class="form-group">
-      <label for="asset-available-hours">Available Hours Per Week</label>
-      <input type="number" id="asset-available-hours" placeholder="e.g. 40, leave blank to default to 40" step="0.5" min="0">
-      <div class="form-hint" id="hint-available-hours">Leave blank to default to 40 hours per week in Utilisation Analyst.</div>
-    </div>
-    <div class="form-group">
-      <label for="asset-target-utilisation">Target Utilisation Percent</label>
-      <input type="number" id="asset-target-utilisation" placeholder="e.g. 75" step="1" min="0" max="100">
-      <div class="form-hint" id="hint-target-utilisation">Target percentage for utilisation reporting — compared against actual operating hours.</div>
-    </div>
+        <label for="asset-purchase-price">Purchase Price ($)</label>
+        <input type="number" id="asset-purchase-price" placeholder="e.g. 285000" step="0.01" min="0">
+      </div>
+      
+      <div class="form-group">
+        <label for="asset-life-hours">Expected Total Life (hours)</label>
+        <input type="number" id="asset-life-hours" placeholder="e.g. 20000" step="1" min="0">
+      </div>
+      
+      <div class="form-group">
+        <label for="asset-service-cost">Service Cost Per Hour ($)</label>
+        <input type="number" id="asset-service-cost" placeholder="e.g. 7.20" step="0.01" min="0">
+        <div class="form-hint">Your blended average service cost per operating hour, calculated from your own service history.</div>
+      </div>
+      <div class="form-group">
+        <label for="asset-available-hours">Available Hours Per Week</label>
+        <input type="number" id="asset-available-hours" placeholder="e.g. 40, leave blank to default to 40" step="0.5" min="0">
+      </div>
+      <div class="form-group">
+        <label for="asset-target-utilisation">Target Utilisation Percent</label>
+        <input type="number" id="asset-target-utilisation" placeholder="e.g. 75" step="1" min="0" max="100">
+      </div>
     <div class="modal-actions">
       <button type="button" class="btn-cancel" id="cancel-modal-btn">Cancel</button>
       <button type="submit" class="btn-save" id="save-asset-btn">Add Asset</button>
@@ -433,9 +397,6 @@
   var pendingDeleteId = null;
   var editingAssetId = null;
   var csvRows = [];
-
-  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
-  var supportsIsOnRoad = true;
 
   var DEFAULT_IDLE_RATES = {
     'Excavator': 4.0, 'Dump Truck': 5.5, 'Wheel Loader': 4.5, 'Motor Grader': 4.0,
@@ -551,69 +512,11 @@
     return isNaN(n) ? null : n;
   }
 
-  function isOnRoadType(assetType) {
-    return ON_ROAD_TYPES.indexOf(assetType) !== -1;
-  }
-
-  function updateFormForAssetType() {
-    var assetType = document.getElementById('asset-type').value;
-    var onRoad = isOnRoadType(assetType);
-    var badge = document.getElementById('asset-category-badge');
-    var contextNote = document.getElementById('form-context-note');
-    var contextIcon = document.getElementById('form-context-icon');
-    var contextText = document.getElementById('form-context-text');
-    var regoInput = document.getElementById('asset-rego');
-
-    if (!assetType) {
-      badge.className = 'asset-category-badge';
-      badge.textContent = '';
-      contextNote.classList.remove('visible', 'construction');
-      return;
-    }
-
-    badge.className = 'asset-category-badge visible ' + (onRoad ? 'on-road' : 'construction');
-    badge.textContent = onRoad ? 'On-Road Vehicle' : 'Construction Equipment';
-    contextNote.classList.add('visible');
-    contextNote.classList.toggle('construction', !onRoad);
-    contextIcon.textContent = onRoad ? '🚛' : '🚧';
-
-    if (onRoad) {
-      contextText.innerHTML = '<strong>On-road vehicle.</strong> Fuel Analyst uses odometer readings from telematics to calculate <strong>cost per KM</strong>. Accurate registration and odometer data (via eRoad or upload) are essential for distance-based reporting.';
-      document.getElementById('label-rego').textContent = 'Registration / Plate Number';
-      regoInput.placeholder = 'e.g. ABC123 — matches eRoad / telematics';
-      document.getElementById('hint-rego').innerHTML = '<span class="emphasis">Important for on-road assets.</span> Used to match fuel invoices and telematics odometer data. Keep this aligned with your eRoad integration plate number.';
-      document.getElementById('hint-idle-rate').textContent = 'Still used to estimate idle fuel cost while stationary (e.g. loading, traffic). Leave blank for a default based on vehicle type.';
-      document.getElementById('label-purchase-price').textContent = 'Purchase Price ($)';
-      document.getElementById('hint-purchase-price').textContent = 'Supports depreciation calculations. Combined with odometer distance data for total cost per KM in Fuel Analyst.';
-      document.getElementById('label-life-hours').textContent = 'Expected Total Life (hours)';
-      document.getElementById('hint-life-hours').textContent = 'Used for idle-time depreciation in Idle Cost Analyst. Distance-based fuel metrics rely primarily on odometer readings from telematics.';
-      document.getElementById('label-service-cost').textContent = 'Service Cost Per Hour ($)';
-      document.getElementById('hint-service-cost').textContent = 'Blended service cost per operating hour — used in idle and operating cost modules alongside KM-based fuel metrics.';
-      document.getElementById('hint-available-hours').textContent = 'Typical weekly availability for utilisation tracking. Leave blank to default to 40 hours.';
-      document.getElementById('hint-target-utilisation').textContent = 'Target utilisation percentage — compared against actual operating hours in Utilisation Analyst.';
-    } else {
-      contextText.innerHTML = '<strong>Construction equipment.</strong> Fuel Analyst splits invoiced fuel into <strong>operating vs idle</strong> using telematics hours and idle burn rate. Accurate idle burn rate and cost-per-operating-hour settings drive the most reliable results.';
-      document.getElementById('label-rego').textContent = 'Registration / ID';
-      regoInput.placeholder = 'e.g. site ID or rego (optional)';
-      document.getElementById('hint-rego').textContent = 'Optional internal or site identifier. Less critical than for on-road vehicles.';
-      document.getElementById('hint-idle-rate').innerHTML = '<span class="emphasis">Critical for construction assets.</span> Litres per idle hour — drives Fuel Analyst and Idle Cost Analyst split between travelling and idle fuel. Leave blank to use a default by asset type.';
-      document.getElementById('label-purchase-price').textContent = 'Purchase Price ($)';
-      document.getElementById('hint-purchase-price').textContent = 'Used with expected life hours to calculate depreciation cost per operating hour in Idle Cost Analyst.';
-      document.getElementById('label-life-hours').textContent = 'Expected Total Life (hours)';
-      document.getElementById('hint-life-hours').innerHTML = '<span class="emphasis">Key for cost per operating hour.</span> Total operating hours over the asset\'s useful life — divides purchase price into an hourly depreciation rate.';
-      document.getElementById('label-service-cost').textContent = 'Service Cost Per Hour ($)';
-      document.getElementById('hint-service-cost').innerHTML = '<span class="emphasis">Key for cost per operating hour.</span> Your blended average service cost per operating hour from your own service history.';
-      document.getElementById('hint-available-hours').textContent = 'Hours per week the asset is available to work. Leave blank to default to 40 in Utilisation Analyst.';
-      document.getElementById('hint-target-utilisation').textContent = 'Target operating utilisation percentage — compared against actual hours in Utilisation Analyst.';
-    }
-  }
-
   function buildAssetPayload() {
     var idleRateRaw = document.getElementById('asset-idle-rate').value;
-    var assetType = document.getElementById('asset-type').value;
-    var payload = {
+    return {
       asset_name: document.getElementById('asset-name').value.trim(),
-      asset_type: assetType,
+      asset_type: document.getElementById('asset-type').value,
       fuel_type: document.getElementById('fuel-type').value,
       make: document.getElementById('asset-make').value.trim() || null,
       model: document.getElementById('asset-model').value.trim() || null,
@@ -626,10 +529,6 @@
       available_hours_per_week: parseOptionalFloat(document.getElementById('asset-available-hours').value),
       target_utilisation_percent: parseOptionalFloat(document.getElementById('asset-target-utilisation').value)
     };
-    if (supportsIsOnRoad) {
-      payload.is_on_road = isOnRoadType(assetType);
-    }
-    return payload;
   }
 
   async function persistAsset(assetId, payload) {
@@ -660,7 +559,6 @@
     ASSET_FIELD_IDS.forEach(function(id) { document.getElementById(id).value = ''; });
     document.getElementById('asset-type').selectedIndex = 0;
     document.getElementById('fuel-type').selectedIndex = 0;
-    updateFormForAssetType();
   }
 
   function openAddModal() {
@@ -696,7 +594,6 @@
     document.getElementById('asset-service-cost').value = asset.service_cost_per_hour != null ? asset.service_cost_per_hour : '';
     document.getElementById('asset-available-hours').value = asset.available_hours_per_week != null ? asset.available_hours_per_week : '';
     document.getElementById('asset-target-utilisation').value = asset.target_utilisation_percent != null ? asset.target_utilisation_percent : '';
-    updateFormForAssetType();
     document.getElementById('add-modal').classList.add('open');
   }
 
@@ -708,8 +605,6 @@
   document.getElementById('add-asset-btn').addEventListener('click', openAddModal);
   document.getElementById('cancel-modal-btn').addEventListener('click', closeAssetModal);
   document.getElementById('add-modal').addEventListener('click', function(e) { if (e.target === this) closeAssetModal(); });
-
-  document.getElementById('asset-type').addEventListener('change', updateFormForAssetType);
 
   document.getElementById('asset-form').addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -731,12 +626,6 @@
     errEl.textContent = '';
 
     var result = await persistAsset(assetId, payload);
-
-    if (result.error && supportsIsOnRoad && result.error.message && result.error.message.indexOf('is_on_road') !== -1) {
-      supportsIsOnRoad = false;
-      delete payload.is_on_road;
-      result = await persistAsset(assetId, payload);
-    }
 
     saveBtn.disabled = false;
     saveBtn.textContent = isEditing ? 'Save Changes' : 'Add Asset';
@@ -845,7 +734,7 @@
     if (csvRows.length === 0) return;
     this.disabled = true; this.textContent = 'Importing...';
     var records = csvRows.map(function(r) {
-      var rec = {
+      return {
         user_id: currentUser.id, asset_name: r.asset_name || null, asset_type: r.asset_type || null,
         make: r.make || null, model: r.model || null, year: parseInt(r.year) || null,
         fuel_type: r.fuel_type || null, registration: r.registration || null,
@@ -856,30 +745,8 @@
         available_hours_per_week: r.available_hours_per_week ? parseFloat(r.available_hours_per_week) : null,
         target_utilisation_percent: r.target_utilisation_percent ? parseFloat(r.target_utilisation_percent) : null
       };
-      if (supportsIsOnRoad && r.asset_type) {
-        rec.is_on_road = isOnRoadType(r.asset_type);
-      }
-      return rec;
     });
     var { error } = await supabase.from('assets').insert(records);
-    if (error && supportsIsOnRoad && error.message && error.message.indexOf('is_on_road') !== -1) {
-      supportsIsOnRoad = false;
-      records = csvRows.map(function(r) {
-        return {
-          user_id: currentUser.id, asset_name: r.asset_name || null, asset_type: r.asset_type || null,
-          make: r.make || null, model: r.model || null, year: parseInt(r.year) || null,
-          fuel_type: r.fuel_type || null, registration: r.registration || null,
-          idle_burn_rate_lph: r.idle_burn_rate_lph ? parseFloat(r.idle_burn_rate_lph) : null,
-          purchase_price: r.purchase_price ? parseFloat(r.purchase_price) : null,
-          expected_life_hours: r.expected_life_hours ? parseFloat(r.expected_life_hours) : null,
-          service_cost_per_hour: r.service_cost_per_hour ? parseFloat(r.service_cost_per_hour) : null,
-          available_hours_per_week: r.available_hours_per_week ? parseFloat(r.available_hours_per_week) : null,
-          target_utilisation_percent: r.target_utilisation_percent ? parseFloat(r.target_utilisation_percent) : null
-        };
-      });
-      var retry = await supabase.from('assets').insert(records);
-      error = retry.error;
-    }
     this.disabled = false; this.textContent = 'Import All Assets';
     if (error) { showToast('Import failed: ' + error.message, 'error'); return; }
     document.getElementById('upload-preview').classList.remove('visible');
