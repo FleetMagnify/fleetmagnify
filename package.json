@@ -1,0 +1,7 @@
+{
+  "name": "fleetmagnify",
+  "private": true,
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "_comment": "TEST/POC cron only — sync-eroad-test inserts a placeholder telematics row. Replace with real eRoad sync logic once API credentials are available. Scheduled for 2:00 AM New Zealand (UTC+13), which is 13:00 UTC the previous calendar day.",
+  "crons": [
+    {
+      "path": "/api/cron/sync-eroad-test",
+      "schedule": "0 13 * * *"
+    }
+  ]
+}
