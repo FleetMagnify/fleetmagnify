@@ -236,6 +236,7 @@
           <div class="kpi-card"><div class="kpi-label">Total Idle Cost</div><div class="kpi-value amber" id="kpi-idle">—</div></div>
           <div class="kpi-card"><div class="kpi-label">Total Depreciation Cost</div><div class="kpi-value" id="kpi-depr">—</div></div>
           <div class="kpi-card"><div class="kpi-label">Total Service Cost</div><div class="kpi-value" id="kpi-service">—</div></div>
+          <div class="kpi-card"><div class="kpi-label">Total Maintenance Cost</div><div class="kpi-value" id="kpi-maintenance">—</div></div>
           <div class="kpi-card"><div class="kpi-label">Total Emissions</div><div class="kpi-value" id="kpi-emissions">—</div></div>
         </div>
         <div class="kpi-row grand">
@@ -257,11 +258,11 @@
             <thead>
               <tr>
                 <th>Asset Name</th><th>Days Worked</th><th>Fuel Cost</th><th>Idle Cost</th>
-                <th>Depreciation Cost</th><th>Service Cost</th><th>Asset Total</th>
+                <th>Depreciation Cost</th><th>Service Cost</th><th>Maintenance Cost</th><th>Asset Total</th>
               </tr>
             </thead>
             <tbody id="breakdown-tbody">
-              <tr><td colspan="7" class="empty-state">Assign assets and work days to see cost breakdown.</td></tr>
+              <tr><td colspan="8" class="empty-state">Assign assets and work days to see cost breakdown.</td></tr>
             </tbody>
           </table>
         </div>
@@ -319,8 +320,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="js/fleet-cost-model.js"></script>
 <script>
 (function() {
+  var FCM = window.FleetCostModel;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
   var companyName = '';
@@ -516,7 +519,7 @@
     if (!currentJob || jobAssignments.length === 0) {
       costBreakdown = []; costTotals = null;
       setKpisEmpty();
-      document.getElementById('breakdown-tbody').innerHTML = '<tr><td colspan="7" class="empty-state">Assign assets and work days to see cost breakdown.</td></tr>';
+      document.getElementById('breakdown-tbody').innerHTML = '<tr><td colspan="8" class="empty-state">Assign assets and work days to see cost breakdown.</td></tr>';
       return;
     }
 
@@ -526,8 +529,20 @@
 
     var fuelResult = await supabase.from('fuel_records').select('asset_id, record_date, litres, total_cost')
       .eq('user_id', currentUser.id).in('asset_id', assetIds).in('record_date', dates);
-    var telResult = await supabase.from('telematics_records').select('asset_id, record_date, idle_hours')
+    var telResult = await supabase.from('telematics_records').select('asset_id, record_date, idle_hours, total_engine_hours')
       .eq('user_id', currentUser.id).in('asset_id', assetIds).in('record_date', dates);
+    var latestTelResult = await supabase.from('telematics_records').select('asset_id, total_engine_hours, record_date')
+      .eq('user_id', currentUser.id).in('asset_id', assetIds).order('record_date', { ascending: false });
+
+    var engineHoursMap = {};
+    (latestTelResult.data || []).forEach(function(r) {
+      var id = Number(r.asset_id);
+      var h = FCM.num(r.total_engine_hours);
+      if (h === null) return;
+      if (!engineHoursMap[id] || String(r.record_date) > String(engineHoursMap[id].date)) {
+        engineHoursMap[id] = { hours: h, date: r.record_date };
+      }
+    });
 
     var fuelMap = {};
     (fuelResult.data || []).forEach(function(r) {
@@ -543,7 +558,7 @@
     });
 
     var byAsset = {};
-    var totals = { fuel: 0, idle: 0, depr: 0, service: 0, emissions: 0 };
+    var totals = { fuel: 0, idle: 0, depr: 0, service: 0, maint: 0, emissions: 0 };
 
     jobAssignments.forEach(function(row) {
       var asset = allAssets.find(function(a) { return a.id === row.asset_id; });
@@ -553,27 +568,25 @@
       var idleHours = telMap[key] || 0;
       var idleRate = getIdleRate(asset);
       var costPerLitre = fuel.litres > 0 ? fuel.cost / fuel.litres : 0;
-      var idleFuelCost = idleHours * idleRate * costPerLitre;
-      var purchasePrice = parseFloat(asset.purchase_price) || 0;
-      var lifeHours = parseFloat(asset.expected_life_hours) || 0;
-      var servicePerHour = parseFloat(asset.service_cost_per_hour) || 0;
-      var deprPerHour = lifeHours > 0 ? purchasePrice / lifeHours : 0;
-      var deprCost = idleHours * deprPerHour;
-      var serviceCost = idleHours * servicePerHour;
+      var engineEntry = engineHoursMap[Number(asset.id)];
+      var totalEngineHours = engineEntry ? engineEntry.hours : null;
+      var idleCosts = FCM.calcIdleHourCosts(asset, idleHours, costPerLitre, idleRate, totalEngineHours);
       var emissionsKg = fuel.litres * getEmissionFactor(asset.fuel_type);
 
-      byAsset[row.asset_id] = byAsset[row.asset_id] || { asset: asset, days: 0, fuel: 0, idle: 0, depr: 0, service: 0, emissions: 0 };
+      byAsset[row.asset_id] = byAsset[row.asset_id] || { asset: asset, days: 0, fuel: 0, idle: 0, depr: 0, service: 0, maint: 0, emissions: 0 };
       byAsset[row.asset_id].days += 1;
       byAsset[row.asset_id].fuel += fuel.cost;
-      byAsset[row.asset_id].idle += idleFuelCost;
-      byAsset[row.asset_id].depr += deprCost;
-      byAsset[row.asset_id].service += serviceCost;
+      byAsset[row.asset_id].idle += idleCosts.fuel;
+      byAsset[row.asset_id].depr += idleCosts.depreciation !== null ? idleCosts.depreciation : 0;
+      byAsset[row.asset_id].service += idleCosts.servicing !== null ? idleCosts.servicing : 0;
+      byAsset[row.asset_id].maint += idleCosts.maintenance !== null ? idleCosts.maintenance : 0;
       byAsset[row.asset_id].emissions += emissionsKg;
 
       totals.fuel += fuel.cost;
-      totals.idle += idleFuelCost;
-      totals.depr += deprCost;
-      totals.service += serviceCost;
+      totals.idle += idleCosts.fuel;
+      totals.depr += idleCosts.depreciation !== null ? idleCosts.depreciation : 0;
+      totals.service += idleCosts.servicing !== null ? idleCosts.servicing : 0;
+      totals.maint += idleCosts.maintenance !== null ? idleCosts.maintenance : 0;
       totals.emissions += emissionsKg;
     });
 
@@ -582,34 +595,35 @@
       return {
         name: b.asset.asset_name,
         days: b.days,
-        fuel: b.fuel, idle: b.idle, depr: b.depr, service: b.service,
-        total: b.fuel + b.idle + b.depr + b.service,
+        fuel: b.fuel, idle: b.idle, depr: b.depr, service: b.service, maint: b.maint,
+        total: b.fuel + b.idle + b.depr + b.service + b.maint,
         emissions: b.emissions
       };
     });
     costTotals = totals;
-    totals.grand = totals.fuel + totals.idle + totals.depr + totals.service;
+    totals.grand = totals.fuel + totals.idle + totals.depr + totals.service + totals.maint;
 
     document.getElementById('kpi-fuel').textContent = fmtMoney(totals.fuel);
     document.getElementById('kpi-idle').textContent = fmtMoney(totals.idle);
     document.getElementById('kpi-depr').textContent = fmtMoney(totals.depr);
     document.getElementById('kpi-service').textContent = fmtMoney(totals.service);
+    document.getElementById('kpi-maintenance').textContent = fmtMoney(totals.maint);
     document.getElementById('kpi-emissions').textContent = (totals.emissions / 1000).toFixed(2) + ' t';
     document.getElementById('kpi-grand').textContent = fmtMoney(totals.grand);
 
     if (costBreakdown.length === 0) {
-      document.getElementById('breakdown-tbody').innerHTML = '<tr><td colspan="7" class="empty-state">No cost data available.</td></tr>';
+      document.getElementById('breakdown-tbody').innerHTML = '<tr><td colspan="8" class="empty-state">No cost data available.</td></tr>';
       return;
     }
     document.getElementById('breakdown-tbody').innerHTML = costBreakdown.map(function(r) {
       return '<tr><td class="cell-strong">' + esc(r.name) + '</td><td>' + r.days + '</td>' +
         '<td>' + fmtMoney(r.fuel) + '</td><td>' + fmtMoney(r.idle) + '</td><td>' + fmtMoney(r.depr) + '</td>' +
-        '<td>' + fmtMoney(r.service) + '</td><td class="cell-teal">' + fmtMoney(r.total) + '</td></tr>';
+        '<td>' + fmtMoney(r.service) + '</td><td>' + fmtMoney(r.maint) + '</td><td class="cell-teal">' + fmtMoney(r.total) + '</td></tr>';
     }).join('');
   }
 
   function setKpisEmpty() {
-    ['kpi-fuel','kpi-idle','kpi-depr','kpi-service','kpi-emissions','kpi-grand'].forEach(function(id) {
+    ['kpi-fuel','kpi-idle','kpi-depr','kpi-service','kpi-maintenance','kpi-emissions','kpi-grand'].forEach(function(id) {
       document.getElementById(id).textContent = '—';
     });
   }
@@ -717,12 +731,12 @@
 
   function exportCsv() {
     if (!currentJob || !costBreakdown.length) { showToast('No data to export.', 'error'); return; }
-    var headers = ['Asset Name','Days Worked','Fuel Cost','Idle Cost','Depreciation Cost','Service Cost','Asset Total','Emissions (kg)'];
+    var headers = ['Asset Name','Days Worked','Fuel Cost','Idle Cost','Depreciation Cost','Service Cost','Maintenance Cost','Asset Total','Emissions (kg)'];
     var lines = [headers.join(',')];
     costBreakdown.forEach(function(r) {
-      lines.push([r.name, r.days, r.fuel.toFixed(2), r.idle.toFixed(2), r.depr.toFixed(2), r.service.toFixed(2), r.total.toFixed(2), r.emissions.toFixed(2)].join(','));
+      lines.push([r.name, r.days, r.fuel.toFixed(2), r.idle.toFixed(2), r.depr.toFixed(2), r.service.toFixed(2), r.maint.toFixed(2), r.total.toFixed(2), r.emissions.toFixed(2)].join(','));
     });
-    lines.push(['FLEET TOTAL','', costTotals.fuel.toFixed(2), costTotals.idle.toFixed(2), costTotals.depr.toFixed(2), costTotals.service.toFixed(2), costTotals.grand.toFixed(2), costTotals.emissions.toFixed(2)].join(','));
+    lines.push(['FLEET TOTAL','', costTotals.fuel.toFixed(2), costTotals.idle.toFixed(2), costTotals.depr.toFixed(2), costTotals.service.toFixed(2), costTotals.maint.toFixed(2), costTotals.grand.toFixed(2), costTotals.emissions.toFixed(2)].join(','));
     var blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -766,6 +780,7 @@
         ['Total Idle Cost', fmtMoney(costTotals.idle)],
         ['Total Depreciation', fmtMoney(costTotals.depr)],
         ['Total Service Cost', fmtMoney(costTotals.service)],
+        ['Total Maintenance Cost', fmtMoney(costTotals.maint)],
         ['Total Emissions', (costTotals.emissions / 1000).toFixed(2) + ' t CO₂'],
         ['Grand Total Job Cost', fmtMoney(costTotals.grand)]
       ];
@@ -777,13 +792,13 @@
       });
 
       var body = costBreakdown.map(function(r) {
-        return [r.name, String(r.days), fmtMoney(r.fuel), fmtMoney(r.idle), fmtMoney(r.depr), fmtMoney(r.service), fmtMoney(r.total)];
+        return [r.name, String(r.days), fmtMoney(r.fuel), fmtMoney(r.idle), fmtMoney(r.depr), fmtMoney(r.service), fmtMoney(r.maint), fmtMoney(r.total)];
       });
-      body.push(['GRAND TOTAL', '', fmtMoney(costTotals.fuel), fmtMoney(costTotals.idle), fmtMoney(costTotals.depr), fmtMoney(costTotals.service), fmtMoney(costTotals.grand)]);
+      body.push(['GRAND TOTAL', '', fmtMoney(costTotals.fuel), fmtMoney(costTotals.idle), fmtMoney(costTotals.depr), fmtMoney(costTotals.service), fmtMoney(costTotals.maint), fmtMoney(costTotals.grand)]);
 
       doc.autoTable({
         startY: y + 4,
-        head: [['Asset', 'Days', 'Fuel', 'Idle', 'Depr', 'Service', 'Total']],
+        head: [['Asset', 'Days', 'Fuel', 'Idle', 'Depr', 'Service', 'Maint', 'Total']],
         body: body,
         margin: { left: margin, right: margin },
         styles: { fontSize: 8, cellPadding: 2.5 },

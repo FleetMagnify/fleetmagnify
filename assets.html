@@ -416,10 +416,20 @@
       <input type="number" id="asset-idle-rate" placeholder="e.g. 4.0" step="0.1" min="0">
       <div class="form-hint" id="hint-idle-rate">Leave blank to use a default estimate based on asset type. You can update this anytime once you know your actual idle fuel usage.</div>
     </div>
-    <div class="form-group">
-      <label for="asset-purchase-price" id="label-purchase-price">Purchase Price ($)</label>
-      <input type="number" id="asset-purchase-price" placeholder="e.g. 285000" step="0.01" min="0">
-      <div class="form-hint" id="hint-purchase-price">Used for depreciation and total cost calculations across FleetMagnify modules.</div>
+    <div class="form-group field-shared-cost field-hidden" id="field-current-value">
+      <label for="asset-current-value">Current Value ($)</label>
+      <input type="number" id="asset-current-value" placeholder="e.g. 220000" step="0.01" min="0">
+      <div class="form-hint" id="hint-current-value">The asset's current book or market value — used with end-of-life value and remaining life to calculate depreciation.</div>
+    </div>
+    <div class="form-group field-shared-cost field-hidden" id="field-eol-value">
+      <label for="asset-eol-value">Estimated End of Life Value ($)</label>
+      <input type="number" id="asset-eol-value" placeholder="e.g. 25000" step="0.01" min="0">
+      <div class="form-hint" id="hint-eol-value">Expected residual or salvage value at end of useful life.</div>
+    </div>
+    <div class="form-group field-shared-cost field-hidden" id="field-annual-repair">
+      <label for="asset-annual-repair">Estimated Annual Repair Cost ($)</label>
+      <input type="number" id="asset-annual-repair" placeholder="e.g. 12000" step="0.01" min="0">
+      <div class="form-hint" id="hint-annual-repair">Unscheduled repairs and wear items — separate from scheduled servicing costs below.</div>
     </div>
     <div class="form-group field-on-road field-hidden" id="field-life-km">
       <label for="asset-life-km">Expected Total Life (km)</label>
@@ -430,6 +440,16 @@
       <label for="asset-service-cost-km">Service Cost Per KM ($)</label>
       <input type="number" id="asset-service-cost-km" placeholder="e.g. 0.15" step="0.01" min="0">
       <div class="form-hint" id="hint-service-km">Your blended average service cost per kilometre, calculated from your own service history.</div>
+    </div>
+    <div class="form-group field-on-road field-hidden" id="field-current-odometer">
+      <label for="asset-current-odometer">Current Odometer (km)</label>
+      <input type="number" id="asset-current-odometer" placeholder="e.g. 185000" step="1" min="0">
+      <div class="form-hint" id="hint-current-odometer">Current odometer reading — used with expected life (km) to calculate remaining depreciation life.</div>
+    </div>
+    <div class="form-group field-on-road field-hidden" id="field-estimated-annual-km">
+      <label for="asset-estimated-annual-km">Estimated Annual KM</label>
+      <input type="number" id="asset-estimated-annual-km" placeholder="e.g. 80000" step="1" min="0">
+      <div class="form-hint" id="hint-estimated-annual-km">Expected kilometres driven per year — used to spread annual repair cost into a per-km maintenance rate.</div>
     </div>
     <div class="form-group field-construction field-hidden" id="field-life-hours">
       <label for="asset-life-hours">Expected Total Life (hours)</label>
@@ -479,6 +499,7 @@
 <script src="js/supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="js/fleet-cost-model.js"></script>
 <script>
 (function() {
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
@@ -491,7 +512,8 @@
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var ON_ROAD_TYPE_SET = { 'Light Vehicle': true, 'Rigid Truck': true, 'Semi Trailer': true };
-  var ON_ROAD_FIELD_IDS = ['field-life-km', 'field-service-km'];
+  var ON_ROAD_FIELD_IDS = ['field-life-km', 'field-service-km', 'field-current-odometer', 'field-estimated-annual-km'];
+  var SHARED_COST_FIELD_IDS = ['field-current-value', 'field-eol-value', 'field-annual-repair'];
   var CONSTRUCTION_FIELD_IDS = ['field-life-hours', 'field-service-hour', 'field-available-hours', 'field-target-utilisation'];
   var supportsIsOnRoad = true;
 
@@ -610,7 +632,7 @@
     }));
   });
 
-  var ASSET_FIELD_IDS = ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-purchase-price','asset-life-km','asset-service-cost-km','asset-life-hours','asset-service-cost','asset-available-hours','asset-target-utilisation'];
+  var ASSET_FIELD_IDS = ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-current-value','asset-eol-value','asset-annual-repair','asset-life-km','asset-service-cost-km','asset-current-odometer','asset-estimated-annual-km','asset-life-hours','asset-service-cost','asset-available-hours','asset-target-utilisation'];
 
   function parseOptionalFloat(raw) {
     if (raw === '' || raw == null) return null;
@@ -644,6 +666,9 @@
     var normalized = (assetType || '').trim();
     var onRoad = isOnRoadType(normalized);
     var hasType = !!normalized;
+    SHARED_COST_FIELD_IDS.forEach(function(id) {
+      setFieldBlockVisible(id, hasType);
+    });
     ON_ROAD_FIELD_IDS.forEach(function(id) {
       setFieldBlockVisible(id, hasType && onRoad);
     });
@@ -742,18 +767,16 @@
       regoInput.placeholder = 'e.g. ABC123 — matches eRoad / telematics';
       document.getElementById('hint-rego').innerHTML = '<span class="emphasis">Important for on-road assets.</span> Used to match fuel invoices and telematics odometer data. Keep this aligned with your eRoad integration plate number.';
       document.getElementById('hint-idle-rate').textContent = 'Used to calculate idle fuel waste while stationary (e.g. traffic, loading). On-road fuel efficiency is calculated per KM from odometer data.';
-      document.getElementById('hint-purchase-price').textContent = 'Supports depreciation calculations. Combined with expected life (km) and odometer distance for total cost per KM in Fuel Analyst.';
-      document.getElementById('hint-life-km').textContent = 'Total kilometres expected over the vehicle\'s useful life — divides purchase price into a per-kilometre depreciation rate.';
-      document.getElementById('hint-service-km').textContent = 'Blended average service cost per kilometre. Used in Truck Fuel Cost Analyst and related on-road modules.';
+      document.getElementById('hint-life-km').textContent = 'Total kilometres expected over the vehicle\'s useful life — used with current odometer to calculate remaining depreciation life.';
+      document.getElementById('hint-service-km').textContent = 'Scheduled servicing cost per kilometre (oil changes, routine intervals) — separate from annual repair cost above.';
     } else {
       contextText.innerHTML = '<strong>Hours-based asset.</strong> Fuel Analyst splits invoiced fuel into <strong>operating vs idle</strong> using telematics hours and idle burn rate. Accurate idle burn rate and cost-per-operating-hour settings drive the most reliable results.';
       document.getElementById('label-rego').textContent = 'Registration / ID';
       regoInput.placeholder = 'e.g. site ID or rego (optional)';
       document.getElementById('hint-rego').textContent = 'Optional internal or site identifier. Less critical than for on-road vehicles.';
       document.getElementById('hint-idle-rate').innerHTML = '<span class="emphasis">Critical for construction assets.</span> Litres per idle hour — drives Fuel Analyst and Idle Cost Analyst split between travelling and idle fuel. Leave blank to use a default by asset type.';
-      document.getElementById('hint-purchase-price').textContent = 'Used with expected life hours to calculate depreciation cost per operating hour in Idle Cost Analyst.';
-      document.getElementById('hint-life-hours').innerHTML = '<span class="emphasis">Key for cost per operating hour.</span> Total operating hours over the asset\'s useful life — divides purchase price into an hourly depreciation rate.';
-      document.getElementById('hint-service-cost').innerHTML = '<span class="emphasis">Key for cost per operating hour.</span> Your blended average service cost per operating hour from your own service history.';
+      document.getElementById('hint-life-hours').innerHTML = '<span class="emphasis">Key for depreciation.</span> Total operating hours over the asset\'s useful life — used with current engine hours to calculate remaining depreciation life.';
+      document.getElementById('hint-service-cost').innerHTML = '<span class="emphasis">Scheduled servicing only.</span> Routine service cost per operating hour — separate from annual repair cost above.';
       document.getElementById('hint-available-hours').textContent = 'Hours per week the asset is available to work. Leave blank to default to 40 in Utilisation Analyst.';
       document.getElementById('hint-target-utilisation').textContent = 'Target operating utilisation percentage — compared against actual hours in Utilisation Analyst.';
     }
@@ -772,11 +795,15 @@
       year: parseOptionalInt(document.getElementById('asset-year').value),
       registration: document.getElementById('asset-rego').value.trim() || null,
       idle_burn_rate_lph: parseOptionalFloat(idleRateRaw),
-      purchase_price: parseOptionalFloat(document.getElementById('asset-purchase-price').value)
+      current_value: parseOptionalFloat(document.getElementById('asset-current-value').value),
+      estimated_end_of_life_value: parseOptionalFloat(document.getElementById('asset-eol-value').value),
+      estimated_annual_repair_cost: parseOptionalFloat(document.getElementById('asset-annual-repair').value)
     };
     if (onRoad) {
       payload.expected_life_km = parseOptionalFloat(document.getElementById('asset-life-km').value);
       payload.service_cost_per_km = parseOptionalFloat(document.getElementById('asset-service-cost-km').value);
+      payload.current_odometer = parseOptionalFloat(document.getElementById('asset-current-odometer').value);
+      payload.estimated_annual_km = parseOptionalFloat(document.getElementById('asset-estimated-annual-km').value);
       payload.expected_life_hours = null;
       payload.service_cost_per_hour = null;
       payload.available_hours_per_week = null;
@@ -788,6 +815,8 @@
       payload.target_utilisation_percent = parseOptionalFloat(document.getElementById('asset-target-utilisation').value);
       payload.expected_life_km = null;
       payload.service_cost_per_km = null;
+      payload.current_odometer = null;
+      payload.estimated_annual_km = null;
     }
     if (supportsIsOnRoad) {
       payload.is_on_road = onRoad;
@@ -856,9 +885,13 @@
     document.getElementById('asset-year').value = asset.year != null ? asset.year : '';
     document.getElementById('asset-rego').value = asset.registration || '';
     document.getElementById('asset-idle-rate').value = asset.idle_burn_rate_lph != null ? asset.idle_burn_rate_lph : '';
-    document.getElementById('asset-purchase-price').value = asset.purchase_price != null ? asset.purchase_price : '';
+    document.getElementById('asset-current-value').value = asset.current_value != null ? asset.current_value : '';
+    document.getElementById('asset-eol-value').value = asset.estimated_end_of_life_value != null ? asset.estimated_end_of_life_value : '';
+    document.getElementById('asset-annual-repair').value = asset.estimated_annual_repair_cost != null ? asset.estimated_annual_repair_cost : '';
     document.getElementById('asset-life-km').value = asset.expected_life_km != null ? asset.expected_life_km : '';
     document.getElementById('asset-service-cost-km').value = asset.service_cost_per_km != null ? asset.service_cost_per_km : '';
+    document.getElementById('asset-current-odometer').value = asset.current_odometer != null ? asset.current_odometer : '';
+    document.getElementById('asset-estimated-annual-km').value = asset.estimated_annual_km != null ? asset.estimated_annual_km : '';
     document.getElementById('asset-life-hours').value = asset.expected_life_hours != null ? asset.expected_life_hours : '';
     document.getElementById('asset-service-cost').value = asset.service_cost_per_hour != null ? asset.service_cost_per_hour : '';
     document.getElementById('asset-available-hours').value = asset.available_hours_per_week != null ? asset.available_hours_per_week : '';
@@ -960,12 +993,13 @@
   var TRUCKS_SHEET = 'Trucks';
   var MACHINERY_COLUMNS = [
     'asset_name', 'asset_type', 'make', 'model', 'year', 'fuel_type', 'registration',
-    'idle_burn_rate_lph', 'purchase_price', 'expected_life_hours', 'service_cost_per_hour',
-    'available_hours_per_week', 'target_utilisation_percent'
+    'idle_burn_rate_lph', 'current_value', 'estimated_end_of_life_value', 'estimated_annual_repair_cost',
+    'expected_life_hours', 'service_cost_per_hour', 'available_hours_per_week', 'target_utilisation_percent'
   ];
   var TRUCKS_COLUMNS = [
     'asset_name', 'asset_type', 'make', 'model', 'year', 'fuel_type', 'registration',
-    'idle_burn_rate_lph', 'purchase_price', 'expected_life_km', 'service_cost_per_km'
+    'idle_burn_rate_lph', 'current_value', 'estimated_end_of_life_value', 'estimated_annual_repair_cost',
+    'expected_life_km', 'service_cost_per_km', 'current_odometer', 'estimated_annual_km'
   ];
   var MACHINERY_TYPE_NOTE = 'Valid asset_type values: Excavator, Dump Truck, Wheel Loader, Motor Grader, Bulldozer, Crane, Forklift, Water Truck, Other';
   var TRUCKS_TYPE_NOTE = 'Valid asset_type values: Light Vehicle, Rigid Truck, Semi Trailer';
@@ -987,12 +1021,12 @@
     var machineryData = [
       [MACHINERY_TYPE_NOTE],
       MACHINERY_COLUMNS,
-      ['CAT 390F Excavator', 'Excavator', 'Caterpillar', '390F', 2021, 'Diesel', 'SITE-001', 4.0, 285000, 20000, 7.20, 40, 75]
+      ['CAT 390F Excavator', 'Excavator', 'Caterpillar', '390F', 2021, 'Diesel', 'SITE-001', 4.0, 220000, 25000, 12000, 20000, 7.20, 40, 75]
     ];
     var trucksData = [
       [TRUCKS_TYPE_NOTE],
       TRUCKS_COLUMNS,
-      ['Kenworth T610', 'Rigid Truck', 'Kenworth', 'T610', 2022, 'Diesel', 'XYZ789', 2.5, 180000, 800000, 0.15]
+      ['Kenworth T610', 'Rigid Truck', 'Kenworth', 'T610', 2022, 'Diesel', 'XYZ789', 2.5, 145000, 18000, 15000, 800000, 0.08, 185000, 80000]
     ];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(machineryData), MACHINERY_SHEET);
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(trucksData), TRUCKS_SHEET);
@@ -1012,17 +1046,23 @@
       fuel_type: (row.fuel_type || '').trim() || null,
       registration: (row.registration || '').trim() || null,
       idle_burn_rate_lph: parseImportNumber(row.idle_burn_rate_lph),
-      purchase_price: parseImportNumber(row.purchase_price),
+      current_value: parseImportNumber(row.current_value),
+      estimated_end_of_life_value: parseImportNumber(row.estimated_end_of_life_value),
+      estimated_annual_repair_cost: parseImportNumber(row.estimated_annual_repair_cost),
       expected_life_hours: null,
       service_cost_per_hour: null,
       available_hours_per_week: null,
       target_utilisation_percent: null,
       expected_life_km: null,
-      service_cost_per_km: null
+      service_cost_per_km: null,
+      current_odometer: null,
+      estimated_annual_km: null
     };
     if (onRoad) {
       rec.expected_life_km = parseImportNumber(row.expected_life_km);
       rec.service_cost_per_km = parseImportNumber(row.service_cost_per_km);
+      rec.current_odometer = parseImportNumber(row.current_odometer);
+      rec.estimated_annual_km = parseImportNumber(row.estimated_annual_km);
     } else {
       rec.expected_life_hours = parseImportNumber(row.expected_life_hours);
       rec.service_cost_per_hour = parseImportNumber(row.service_cost_per_hour);

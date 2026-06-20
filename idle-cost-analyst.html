@@ -142,7 +142,9 @@
   .asset-meta-value .warn { color: #EF9F27; }
 
   /* ── KPI ROW ── */
-  .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 28px; }
+  .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 28px; }
+  .kpi-value.missing { font-size: 11px; font-weight: 600; color: #EF9F27; line-height: 1.35; letter-spacing: 0; }
+  .cell-missing { font-size: 11px; color: #EF9F27; line-height: 1.35; max-width: 180px; }
   .kpi-card {
     background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
     border-radius: 14px; padding: 18px 20px;
@@ -258,7 +260,7 @@
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this is calculated:</strong> Idle fuel cost uses the same idle burn rate method as the Fuel Analyst page. Depreciation cost is the asset's purchase price divided by its expected life hours, multiplied by idle hours. Service cost uses a blended service cost per hour (calculated by you from your own service history) multiplied by idle hours. Set or adjust these figures per asset on the <a href="assets.html">Assets page</a>.</p>
+      <p><strong>How this is calculated:</strong> Idle fuel cost uses the same idle burn rate method as the Fuel Analyst page. Depreciation uses (current value − end of life value) ÷ remaining life per hour or km. Servicing is scheduled routine service cost per hour. Maintenance is estimated annual repair cost spread across expected annual usage. Set these per asset on the <a href="assets.html">Assets page</a>.</p>
     </div>
 
     <!-- FILTER BAR -->
@@ -301,9 +303,14 @@
         <div class="kpi-sub">value lost on idle hours</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Service Cost Impact</div>
+        <div class="kpi-label">Servicing Cost of Idling</div>
         <div class="kpi-value amber" id="kpi-service-cost">—</div>
-        <div class="kpi-sub">maintenance brought forward</div>
+        <div class="kpi-sub">scheduled service brought forward</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Maintenance Cost of Idling</div>
+        <div class="kpi-value amber" id="kpi-maintenance-cost">—</div>
+        <div class="kpi-sub">repair &amp; wear on idle hours</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Total Cost of Idling</div>
@@ -319,7 +326,8 @@
         <div class="chart-legend">
           <div class="legend-item"><div class="legend-dot" style="background:#0EA57A;"></div> Fuel Cost</div>
           <div class="legend-item"><div class="legend-dot" style="background:#EF9F27;"></div> Depreciation Cost</div>
-          <div class="legend-item"><div class="legend-dot" style="background:#E2554A;"></div> Service Cost</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#E2554A;"></div> Servicing Cost</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#7C6BF0;"></div> Maintenance Cost</div>
         </div>
       </div>
       <div class="chart-wrap">
@@ -344,12 +352,13 @@
               <th>Idle Hours</th>
               <th>Idle Fuel Cost</th>
               <th>Depreciation Cost</th>
-              <th>Service Cost</th>
+              <th>Servicing Cost</th>
+              <th>Maintenance Cost</th>
               <th>Total Cost</th>
             </tr>
           </thead>
           <tbody id="data-tbody">
-            <tr><td colspan="6"><div class="empty-state"><span class="icon">⏱</span>Select an asset and apply filters to see daily idle cost data.</div></td></tr>
+            <tr><td colspan="7"><div class="empty-state"><span class="icon">⏱</span>Select an asset and apply filters to see daily idle cost data.</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -361,8 +370,10 @@
 <script src="js/supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="js/fleet-cost-model.js"></script>
 <script>
 (function() {
+  var FCM = window.FleetCostModel;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
   var assetsList = [];
@@ -398,7 +409,7 @@
   async function loadAssets() {
     var { data, error } = await supabase
       .from('assets')
-      .select('id, asset_name, asset_type, idle_burn_rate_lph, purchase_price, expected_life_hours, service_cost_per_hour')
+      .select('*')
       .eq('user_id', currentUser.id)
       .order('asset_name');
     if (error || !data) return;
@@ -431,10 +442,18 @@
       return;
     }
 
-    var missing = [];
-    if (!selectedAsset.purchase_price) missing.push('purchase price');
-    if (!selectedAsset.expected_life_hours) missing.push('expected life hours');
-    if (!selectedAsset.service_cost_per_hour) missing.push('service cost/hr');
+    var missing = []
+      .concat(FCM.getMissingDepreciationFields(selectedAsset, { totalEngineHours: null }))
+      .concat(FCM.getMissingMaintenanceFields(selectedAsset))
+      .concat(FCM.getMissingServicingFields(selectedAsset));
+    if (FCM.isOnRoad(selectedAsset)) {
+      missing = missing.filter(function(m) { return m.indexOf('engine hours') === -1; });
+    } else {
+      missing = missing.filter(function(m) {
+        return m.indexOf('Odometer') === -1 && m.indexOf('Annual KM') === -1;
+      });
+    }
+    missing = Array.from(new Set(missing));
 
     if (missing.length > 0) {
       display.innerHTML = 'Missing: <span class="warn">' + missing.join(', ') + '</span>';
@@ -446,6 +465,24 @@
 
   document.getElementById('apply-filters-btn').addEventListener('click', runAnalysis);
 
+  function setKpiMoneyOrMissing(elId, value, missingFields) {
+    var el = document.getElementById(elId);
+    if (missingFields && missingFields.length) {
+      el.className = 'kpi-value missing';
+      el.textContent = FCM.formatMissingMessage(missingFields);
+      return;
+    }
+    el.className = 'kpi-value amber';
+    el.textContent = '$' + Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+
+  function cellMoneyOrMissing(value, missingFields) {
+    if (missingFields && missingFields.length) {
+      return '<td class="cell-missing">' + esc(FCM.formatMissingMessage(missingFields)) + '</td>';
+    }
+    return '<td class="cell-amber">$' + Number(value || 0).toFixed(2) + '</td>';
+  }
+
   async function runAnalysis() {
     if (!selectedAsset) return;
     var dateFrom = document.getElementById('date-from').value;
@@ -456,10 +493,6 @@
     btn.disabled = true; btn.textContent = 'Loading...';
 
     var idleRate = selectedAsset.idle_burn_rate_lph || DEFAULT_IDLE_RATES[selectedAsset.asset_type] || 3.0;
-    var purchasePrice = parseFloat(selectedAsset.purchase_price) || 0;
-    var lifeHours = parseFloat(selectedAsset.expected_life_hours) || 0;
-    var serviceCostPerHour = parseFloat(selectedAsset.service_cost_per_hour) || 0;
-    var depreciationPerHour = lifeHours > 0 ? (purchasePrice / lifeHours) : 0;
 
     var fuelResult = await supabase
       .from('fuel_records')
@@ -472,24 +505,33 @@
 
     var telResult = await supabase
       .from('telematics_records')
-      .select('record_date, idle_hours')
+      .select('record_date, idle_hours, total_engine_hours')
       .eq('asset_id', selectedAsset.id)
       .eq('user_id', currentUser.id)
       .gte('record_date', dateFrom)
       .lte('record_date', dateTo)
       .order('record_date');
 
+    var latestTel = await supabase
+      .from('telematics_records')
+      .select('total_engine_hours, record_date')
+      .eq('asset_id', selectedAsset.id)
+      .eq('user_id', currentUser.id)
+      .order('record_date', { ascending: false })
+      .limit(1);
+
     btn.disabled = false; btn.textContent = 'Apply Filters';
 
     var fuelRows = (fuelResult.data || []);
     var telRows = (telResult.data || []);
+    var totalEngineHours = latestTel.data && latestTel.data.length
+      ? FCM.num(latestTel.data[0].total_engine_hours) : FCM.getLatestEngineHours(telRows, selectedAsset.id);
 
     if (telRows.length === 0) {
       showEmpty();
       return;
     }
 
-    // Average cost per litre across the fuel records in the period (used to value idle fuel)
     var totalLitres = 0, totalFuelCost = 0;
     fuelRows.forEach(function(r) {
       totalLitres += parseFloat(r.litres) || 0;
@@ -497,7 +539,6 @@
     });
     var avgCostPerLitre = totalLitres > 0 ? (totalFuelCost / totalLitres) : 0;
 
-    // Build daily rows from telematics idle hours
     var byDate = {};
     telRows.forEach(function(r) {
       byDate[r.record_date] = byDate[r.record_date] || 0;
@@ -506,33 +547,38 @@
 
     var dates = Object.keys(byDate).sort();
     var dailyRows = [];
-    var sumIdleHours = 0, sumFuelCost = 0, sumDeprCost = 0, sumServiceCost = 0;
+    var sumIdleHours = 0, sumFuelCost = 0, sumDeprCost = 0, sumServiceCost = 0, sumMaintCost = 0;
+    var aggDeprMissing = null, aggServMissing = null, aggMaintMissing = null;
 
     dates.forEach(function(date) {
       var idleHours = byDate[date];
-      var idleFuelLitres = idleHours * idleRate;
-      var idleFuelCost = idleFuelLitres * avgCostPerLitre;
-      var deprCost = idleHours * depreciationPerHour;
-      var serviceCost = idleHours * serviceCostPerHour;
-      var totalCost = idleFuelCost + deprCost + serviceCost;
+      var costs = FCM.calcIdleHourCosts(selectedAsset, idleHours, avgCostPerLitre, idleRate, totalEngineHours);
 
       sumIdleHours += idleHours;
-      sumFuelCost += idleFuelCost;
-      sumDeprCost += deprCost;
-      sumServiceCost += serviceCost;
+      sumFuelCost += costs.fuel;
+      if (costs.depreciation !== null) sumDeprCost += costs.depreciation;
+      if (costs.servicing !== null) sumServiceCost += costs.servicing;
+      if (costs.maintenance !== null) sumMaintCost += costs.maintenance;
+      aggDeprMissing = costs.depreciationMissing;
+      aggServMissing = costs.servicingMissing;
+      aggMaintMissing = costs.maintenanceMissing;
 
       dailyRows.push({
-        date: date, idleHours: idleHours, fuelCost: idleFuelCost,
-        deprCost: deprCost, serviceCost: serviceCost, totalCost: totalCost
+        date: date, idleHours: idleHours, fuelCost: costs.fuel,
+        deprCost: costs.depreciation, deprMissing: costs.depreciationMissing,
+        serviceCost: costs.servicing, serviceMissing: costs.servicingMissing,
+        maintCost: costs.maintenance, maintMissing: costs.maintenanceMissing,
+        totalCost: costs.total
       });
     });
 
-    var grandTotal = sumFuelCost + sumDeprCost + sumServiceCost;
+    var grandTotal = sumFuelCost + sumDeprCost + sumServiceCost + sumMaintCost;
 
     document.getElementById('kpi-idle-hours').textContent = sumIdleHours.toFixed(1) + ' hr';
     document.getElementById('kpi-fuel-cost').textContent = '$' + sumFuelCost.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0});
-    document.getElementById('kpi-depreciation-cost').textContent = '$' + sumDeprCost.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0});
-    document.getElementById('kpi-service-cost').textContent = '$' + sumServiceCost.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0});
+    setKpiMoneyOrMissing('kpi-depreciation-cost', sumDeprCost, aggDeprMissing);
+    setKpiMoneyOrMissing('kpi-service-cost', sumServiceCost, aggServMissing);
+    setKpiMoneyOrMissing('kpi-maintenance-cost', sumMaintCost, aggMaintMissing);
     document.getElementById('kpi-total-cost').textContent = '$' + grandTotal.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0});
     document.getElementById('kpi-total-cost-sub').textContent = 'over ' + sumIdleHours.toFixed(0) + ' idle hours';
 
@@ -545,8 +591,9 @@
     var ctx = document.getElementById('idle-chart').getContext('2d');
     var labels = rows.map(function(r) { return formatDateShort(r.date); });
     var fuelData = rows.map(function(r) { return Math.round(r.fuelCost * 100) / 100; });
-    var deprData = rows.map(function(r) { return Math.round(r.deprCost * 100) / 100; });
-    var serviceData = rows.map(function(r) { return Math.round(r.serviceCost * 100) / 100; });
+    var deprData = rows.map(function(r) { return r.deprCost !== null ? Math.round(r.deprCost * 100) / 100 : 0; });
+    var serviceData = rows.map(function(r) { return r.serviceCost !== null ? Math.round(r.serviceCost * 100) / 100 : 0; });
+    var maintData = rows.map(function(r) { return r.maintCost !== null ? Math.round(r.maintCost * 100) / 100 : 0; });
 
     if (idleChart) idleChart.destroy();
     idleChart = new Chart(ctx, {
@@ -556,7 +603,8 @@
         datasets: [
           { label: 'Fuel Cost', data: fuelData, backgroundColor: '#0EA57A', borderRadius: 4 },
           { label: 'Depreciation Cost', data: deprData, backgroundColor: '#EF9F27', borderRadius: 4 },
-          { label: 'Service Cost', data: serviceData, backgroundColor: '#E2554A', borderRadius: 4 }
+          { label: 'Servicing Cost', data: serviceData, backgroundColor: '#E2554A', borderRadius: 4 },
+          { label: 'Maintenance Cost', data: maintData, backgroundColor: '#7C6BF0', borderRadius: 4 }
         ]
       },
       options: {
@@ -573,7 +621,7 @@
   function renderTable(rows) {
     var tbody = document.getElementById('data-tbody');
     if (rows.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><span class="icon">⏱</span>No idle data found for this asset and date range.</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><span class="icon">⏱</span>No idle data found for this asset and date range.</div></td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(function(r) {
@@ -581,8 +629,9 @@
         '<td class="cell-strong">' + formatDateShort(r.date) + '</td>' +
         '<td>' + r.idleHours.toFixed(1) + ' hr</td>' +
         '<td class="cell-teal">$' + r.fuelCost.toFixed(2) + '</td>' +
-        '<td class="cell-amber">$' + r.deprCost.toFixed(2) + '</td>' +
-        '<td style="color:#E2554A; font-weight:600;">$' + r.serviceCost.toFixed(2) + '</td>' +
+        cellMoneyOrMissing(r.deprCost, r.deprMissing) +
+        cellMoneyOrMissing(r.serviceCost, r.serviceMissing) +
+        cellMoneyOrMissing(r.maintCost, r.maintMissing) +
         '<td class="cell-total">$' + r.totalCost.toFixed(2) + '</td>' +
       '</tr>';
     }).join('');
@@ -591,13 +640,17 @@
   function showEmpty() {
     document.getElementById('kpi-idle-hours').textContent = '—';
     document.getElementById('kpi-fuel-cost').textContent = '—';
+    document.getElementById('kpi-depreciation-cost').className = 'kpi-value amber';
     document.getElementById('kpi-depreciation-cost').textContent = '—';
+    document.getElementById('kpi-service-cost').className = 'kpi-value amber';
     document.getElementById('kpi-service-cost').textContent = '—';
+    document.getElementById('kpi-maintenance-cost').className = 'kpi-value amber';
+    document.getElementById('kpi-maintenance-cost').textContent = '—';
     document.getElementById('kpi-total-cost').textContent = '—';
     document.getElementById('kpi-total-cost-sub').textContent = 'combined impact';
     document.getElementById('chart-empty').style.display = 'block';
     if (idleChart) { idleChart.destroy(); idleChart = null; }
-    document.getElementById('data-tbody').innerHTML = '<tr><td colspan="6"><div class="empty-state"><span class="icon">⏱</span>No telematics data found for this asset in the selected date range.</div></td></tr>';
+    document.getElementById('data-tbody').innerHTML = '<tr><td colspan="7"><div class="empty-state"><span class="icon">⏱</span>No telematics data found for this asset in the selected date range.</div></td></tr>';
   }
 
   function formatDateShort(dateStr) {

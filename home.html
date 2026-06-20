@@ -143,7 +143,7 @@
 
       <div class="kpi-row">
         <div class="kpi-card"><div class="kpi-label">Total Fuel Cost MTD</div><div class="kpi-value" id="kpi-fuel">—</div></div>
-        <div class="kpi-card"><div class="kpi-label">Total Idle Cost MTD</div><div class="kpi-value amber" id="kpi-idle">—</div><div class="kpi-sub">fuel waste + depreciation + service</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Idle Cost MTD</div><div class="kpi-value amber" id="kpi-idle">—</div><div class="kpi-sub">fuel + depreciation + servicing + maintenance</div></div>
         <div class="kpi-card"><div class="kpi-label">Total Emissions MTD</div><div class="kpi-value teal" id="kpi-emissions">—</div><div class="kpi-sub">tonnes CO₂</div></div>
         <div class="kpi-card"><div class="kpi-label">Average Fleet Utilisation MTD</div><div class="kpi-value" id="kpi-util">—</div><div class="kpi-sub" id="kpi-util-sub">—</div></div>
       </div>
@@ -171,8 +171,10 @@
 <script src="js/supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="js/fleet-cost-model.js"></script>
 <script>
 (function() {
+  var FCM = window.FleetCostModel;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
   var companyName = '';
@@ -237,8 +239,18 @@
   }
   function fmtMoney(n) { return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
 
-  function computeAssetMetrics(assets, fuelRows, telRows, dateFrom, dateTo) {
+  function computeAssetMetrics(assets, fuelRows, telRows, latestTelRows, dateFrom, dateTo) {
     var weeks = daysInRange(dateFrom, dateTo) / 7;
+    var engineHoursMap = {};
+    (latestTelRows || []).forEach(function(r) {
+      var id = Number(r.asset_id);
+      var h = FCM.num(r.total_engine_hours);
+      if (h === null) return;
+      if (!engineHoursMap[id] || String(r.record_date) > String(engineHoursMap[id].date)) {
+        engineHoursMap[id] = { hours: h, date: r.record_date };
+      }
+    });
+
     var results = assets.map(function(asset) {
       var assetFuel = fuelRows.filter(function(r) { return Number(r.asset_id) === Number(asset.id); });
       var assetTel = telRows.filter(function(r) { return Number(r.asset_id) === Number(asset.id); });
@@ -255,14 +267,10 @@
 
       var avgCpl = litres > 0 ? fuelCost / litres : 0;
       var idleRate = getIdleRate(asset);
-      var idleFuelCost = idleHours * idleRate * avgCpl;
-      var lifeHours = parseFloat(asset.expected_life_hours) || 0;
-      var purchasePrice = parseFloat(asset.purchase_price) || 0;
-      var servicePerHour = parseFloat(asset.service_cost_per_hour) || 0;
-      var deprPerHour = lifeHours > 0 ? purchasePrice / lifeHours : 0;
-      var deprCost = idleHours * deprPerHour;
-      var serviceCost = idleHours * servicePerHour;
-      var idleTotal = idleFuelCost + deprCost + serviceCost;
+      var engineEntry = engineHoursMap[Number(asset.id)];
+      var totalEngineHours = engineEntry ? engineEntry.hours : null;
+      var idleCosts = FCM.calcIdleHourCosts(asset, idleHours, avgCpl, idleRate, totalEngineHours);
+
       var emissionsKg = litres * getEmissionFactor(asset.fuel_type);
       var available = getHoursPerWeek(asset) * weeks;
       var utilRate = available > 0 ? (opHours / available) * 100 : 0;
@@ -270,20 +278,26 @@
 
       return {
         id: asset.id, name: asset.asset_name,
-        fuelCost: fuelCost, idleFuelCost: idleFuelCost, deprCost: deprCost, serviceCost: serviceCost,
-        idleTotal: idleTotal, totalCost: fuelCost + idleTotal,
+        fuelCost: fuelCost,
+        idleFuelCost: idleCosts.fuel,
+        deprCost: idleCosts.depreciation !== null ? idleCosts.depreciation : 0,
+        serviceCost: idleCosts.servicing !== null ? idleCosts.servicing : 0,
+        maintCost: idleCosts.maintenance !== null ? idleCosts.maintenance : 0,
+        idleTotal: idleCosts.total,
+        totalCost: fuelCost + idleCosts.total,
         emissionsKg: emissionsKg, utilRate: utilRate, target: target,
         opHours: opHours, available: available
       };
     });
 
-    var totals = { fuel: 0, idle: 0, depr: 0, service: 0, emissions: 0, opHours: 0, available: 0, grand: 0 };
+    var totals = { fuel: 0, idle: 0, depr: 0, service: 0, maint: 0, emissions: 0, opHours: 0, available: 0, grand: 0 };
     var targetSum = 0, targetCount = 0;
     results.forEach(function(r) {
       totals.fuel += r.fuelCost;
       totals.idle += r.idleTotal;
       totals.depr += r.deprCost;
       totals.service += r.serviceCost;
+      totals.maint += r.maintCost;
       totals.emissions += r.emissionsKg;
       totals.opHours += r.opHours;
       totals.available += r.available;
@@ -298,14 +312,21 @@
   async function fetchData(dateFrom, dateTo) {
     var assetsResult = await supabase.from('assets').select('*').eq('user_id', currentUser.id).order('asset_name');
     var assets = assetsResult.data || [];
-    if (assets.length === 0) return { assets: [], fuel: [], tel: [] };
+    if (assets.length === 0) return { assets: [], fuel: [], tel: [], latestTel: [] };
 
     var fuelResult = await supabase.from('fuel_records').select('asset_id, litres, total_cost, record_date')
       .eq('user_id', currentUser.id).gte('record_date', dateFrom).lte('record_date', dateTo);
-    var telResult = await supabase.from('telematics_records').select('asset_id, idle_hours, operating_hours, record_date')
+    var telResult = await supabase.from('telematics_records').select('asset_id, idle_hours, operating_hours, total_engine_hours, record_date')
       .eq('user_id', currentUser.id).gte('record_date', dateFrom).lte('record_date', dateTo);
+    var latestTelResult = await supabase.from('telematics_records').select('asset_id, total_engine_hours, record_date')
+      .eq('user_id', currentUser.id).order('record_date', { ascending: false });
 
-    return { assets: assets, fuel: fuelResult.data || [], tel: telResult.data || [] };
+    return {
+      assets: assets,
+      fuel: fuelResult.data || [],
+      tel: telResult.data || [],
+      latestTel: latestTelResult.data || []
+    };
   }
 
   async function loadDashboard() {
@@ -322,9 +343,9 @@
     document.getElementById('empty-state').hidden = true;
     document.getElementById('dashboard-content').hidden = false;
 
-    var curMetrics = computeAssetMetrics(current.assets, current.fuel, current.tel, mtd.from, mtd.to);
+    var curMetrics = computeAssetMetrics(current.assets, current.fuel, current.tel, current.latestTel, mtd.from, mtd.to);
     var prevData = await fetchData(prev.from, prev.to);
-    var prevMetrics = computeAssetMetrics(prevData.assets, prevData.fuel, prevData.tel, prev.from, prev.to);
+    var prevMetrics = computeAssetMetrics(prevData.assets, prevData.fuel, prevData.tel, prevData.latestTel, prev.from, prev.to);
 
     document.getElementById('hero-total').textContent = fmtMoney(curMetrics.totals.grand);
     var compareEl = document.getElementById('hero-compare');
@@ -387,7 +408,8 @@
         datasets: [
           { label: 'Idle Fuel', data: assets.map(function(a) { return Math.round(a.idleFuelCost); }), backgroundColor: '#0EA57A' },
           { label: 'Depreciation', data: assets.map(function(a) { return Math.round(a.deprCost); }), backgroundColor: '#EF9F27' },
-          { label: 'Service', data: assets.map(function(a) { return Math.round(a.serviceCost); }), backgroundColor: '#E2554A' }
+          { label: 'Servicing', data: assets.map(function(a) { return Math.round(a.serviceCost); }), backgroundColor: '#E2554A' },
+          { label: 'Maintenance', data: assets.map(function(a) { return Math.round(a.maintCost); }), backgroundColor: '#7C6BF0' }
         ]
       },
       options: {
