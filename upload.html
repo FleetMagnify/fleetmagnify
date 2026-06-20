@@ -581,6 +581,21 @@
     return String(cell).trim().toLowerCase().replace(/\s+/g, '_');
   }
 
+  function normalizeSheetName(name) {
+    return String(name).trim().toLowerCase();
+  }
+
+  function findWorkbookSheetName(workbook, preferredName) {
+    if (!preferredName || !workbook.SheetNames.length) return null;
+    var target = normalizeSheetName(preferredName);
+    for (var i = 0; i < workbook.SheetNames.length; i++) {
+      if (normalizeSheetName(workbook.SheetNames[i]) === target) {
+        return workbook.SheetNames[i];
+      }
+    }
+    return null;
+  }
+
   function findHeaderRowIndex(sheetRows, expectedHeaders) {
     var limit = Math.min(sheetRows.length, HEADER_SCAN_LIMIT);
     for (var i = 0; i < limit; i++) {
@@ -629,15 +644,13 @@
   function parseExcelSheetFromWorkbook(workbook, preferredSheetName, expectedHeaders, nameColumn) {
     expectedHeaders = expectedHeaders || FUEL_HEADER_KEYS;
     nameColumn = nameColumn || 'asset_name';
-    var sheetName = workbook.SheetNames[0];
-    if (preferredSheetName && workbook.SheetNames.indexOf(preferredSheetName) !== -1) {
-      sheetName = preferredSheetName;
-    }
+    var sheetName = findWorkbookSheetName(workbook, preferredSheetName) || workbook.SheetNames[0] || null;
+    if (!sheetName) return { headers: [], rows: [], sheetName: null, headerFound: false };
     var sheet = workbook.Sheets[sheetName];
-    if (!sheet) return { headers: [], rows: [], sheetName: sheetName };
+    if (!sheet) return { headers: [], rows: [], sheetName: sheetName, headerFound: false };
     var sheetRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
     var headerIdx = findHeaderRowIndex(sheetRows, expectedHeaders);
-    if (headerIdx === -1) return { headers: [], rows: [], sheetName: sheetName };
+    if (headerIdx === -1) return { headers: [], rows: [], sheetName: sheetName, headerFound: false };
     var headers = (sheetRows[headerIdx] || []).map(normalizeHeaderCell);
     var rows = [];
     for (var j = headerIdx + 1; j < sheetRows.length; j++) {
@@ -649,7 +662,31 @@
       });
       if (String(row[nameColumn] || '').trim()) rows.push(row);
     }
-    return { headers: headers.filter(Boolean), rows: rows, sheetName: sheetName };
+    return { headers: headers.filter(Boolean), rows: rows, sheetName: sheetName, headerFound: true };
+  }
+
+  function findSheetByHeaderSignature(workbook, expectedHeaders, nameColumn, excludeSheetName) {
+    var exclude = excludeSheetName ? normalizeSheetName(excludeSheetName) : null;
+    var best = { headers: [], rows: [], sheetName: null, headerFound: false };
+    for (var i = 0; i < workbook.SheetNames.length; i++) {
+      var candidateName = workbook.SheetNames[i];
+      if (exclude && normalizeSheetName(candidateName) === exclude) continue;
+      var result = parseExcelSheetFromWorkbook(workbook, candidateName, expectedHeaders, nameColumn);
+      if (!result.headerFound) continue;
+      if (!best.headerFound || result.rows.length > best.rows.length) {
+        best = result;
+      }
+    }
+    return best;
+  }
+
+  function parseTruckSheet(workbook, preferredSheetName, expectedHeaders, nameColumn) {
+    var namedSheet = findWorkbookSheetName(workbook, preferredSheetName);
+    if (namedSheet) {
+      var namedResult = parseExcelSheetFromWorkbook(workbook, namedSheet, expectedHeaders, nameColumn);
+      if (namedResult.headerFound) return namedResult;
+    }
+    return findSheetByHeaderSignature(workbook, expectedHeaders, nameColumn, null);
   }
 
   function parseExcelUpload(arrayBuffer, options) {
@@ -665,13 +702,11 @@
 
   function parseTruckWorkbook(arrayBuffer) {
     var workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
-    var fuel = parseExcelSheetFromWorkbook(workbook, 'Fuel Purchases', TRUCK_FUEL_HEADER_KEYS, 'vehicle_name');
-    var mileage = parseExcelSheetFromWorkbook(workbook, 'Eroad Mileage', TRUCK_MILEAGE_HEADER_KEYS, 'vehicle_name');
-    if (!fuel.rows.length && workbook.SheetNames.length > 0 && fuel.sheetName !== 'Fuel Purchases') {
-      fuel = parseExcelSheetFromWorkbook(workbook, workbook.SheetNames[0], TRUCK_FUEL_HEADER_KEYS, 'vehicle_name');
-    }
-    if (!mileage.rows.length && workbook.SheetNames.length > 1) {
-      mileage = parseExcelSheetFromWorkbook(workbook, workbook.SheetNames[1], TRUCK_MILEAGE_HEADER_KEYS, 'vehicle_name');
+    var fuel = parseTruckSheet(workbook, 'Fuel Purchases', TRUCK_FUEL_HEADER_KEYS, 'vehicle_name');
+    var mileage = parseTruckSheet(workbook, 'Eroad Mileage', TRUCK_MILEAGE_HEADER_KEYS, 'vehicle_name');
+    if (fuel.sheetName && mileage.sheetName &&
+        normalizeSheetName(fuel.sheetName) === normalizeSheetName(mileage.sheetName)) {
+      mileage = findSheetByHeaderSignature(workbook, TRUCK_MILEAGE_HEADER_KEYS, 'vehicle_name', fuel.sheetName);
     }
     return { fuel: fuel, mileage: mileage };
   }
@@ -951,18 +986,29 @@
       truckMileageRows = parsed.mileage.rows;
       truckFuelHeaders = previewColumns(parsed.fuel.headers, TRUCK_FUEL_HEADERS);
       truckMileageHeaders = previewColumns(parsed.mileage.headers, TRUCK_MILEAGE_HEADERS);
+      var fuelOk = parsed.fuel.headerFound;
+      var mileageOk = parsed.mileage.headerFound;
       var totalRows = truckFuelRows.length + truckMileageRows.length;
-      if (totalRows === 0) {
-        showResult('truck-result', 'No valid rows found. Check sheet names (Fuel Purchases, Eroad Mileage) and column headers.', 'error');
+      if (!fuelOk && !mileageOk) {
+        showResult('truck-result', 'No valid rows found. Each sheet needs a header row with the expected columns (Fuel Purchases: vehicle_name, purchase_date; Eroad Mileage: vehicle_name, reading_date).', 'error');
         return;
+      }
+      if (!fuelOk) {
+        showResult('truck-result', 'Fuel Purchases sheet not found or missing header row (expected vehicle_name and purchase_date). Eroad Mileage loaded ' + truckMileageRows.length + ' row' + (truckMileageRows.length !== 1 ? 's' : '') + '.', 'error');
+      } else if (!mileageOk) {
+        showResult('truck-result', 'Eroad Mileage sheet not found or missing header row (expected vehicle_name and reading_date). Fuel Purchases loaded ' + truckFuelRows.length + ' row' + (truckFuelRows.length !== 1 ? 's' : '') + '.', 'error');
+      } else if (totalRows === 0) {
+        showResult('truck-result', 'Header rows found on both sheets but no data rows with a vehicle_name. Check your file matches the template.', 'error');
+        return;
+      } else {
+        document.getElementById('truck-result').className = 'result-box';
       }
       renderPreview(document.getElementById('truck-fuel-preview-table'), truckFuelHeaders, truckFuelRows);
       renderPreview(document.getElementById('truck-mileage-preview-table'), truckMileageHeaders, truckMileageRows);
       document.getElementById('truck-count').textContent =
         truckFuelRows.length + ' fuel · ' + truckMileageRows.length + ' mileage row' + (truckMileageRows.length !== 1 ? 's' : '');
       document.getElementById('truck-preview').classList.add('visible');
-      document.getElementById('truck-import-btn').disabled = false;
-      document.getElementById('truck-result').className = 'result-box';
+      document.getElementById('truck-import-btn').disabled = totalRows === 0;
     });
   }, /\.xlsx$/i);
 
