@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trip Report | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #F0F2F5; min-height: 100vh; display: flex; }
+
+  .sidebar { width: 240px; flex-shrink: 0; background: rgba(10,16,26,0.95); border-right: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 50; overflow-y: auto; }
+  .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); text-decoration: none; }
+  .logo-mark { width: 34px; height: 34px; border-radius: 9px; background: #0EA57A; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #080C12; }
+  .logo-name { font-size: 16px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
+  .logo-name span { color: #0EA57A; }
+  .sidebar-nav { flex: 1; padding: 16px 12px; }
+  .nav-label { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #2E3A4A; padding: 0 8px; margin-bottom: 8px; margin-top: 16px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; margin-bottom: 2px; text-decoration: none; font-size: 13.5px; font-weight: 500; color: #6B7785; transition: all 0.2s; }
+  .nav-item:hover { background: rgba(255,255,255,0.04); color: #C8D0DB; }
+  .nav-item.active { background: rgba(14,165,122,0.10); color: #0EA57A; }
+  .nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+  .sidebar-footer { padding: 16px 12px; border-top: 1px solid rgba(255,255,255,0.06); }
+  .btn-signout { width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 8px; border: none; background: none; font-size: 13px; font-weight: 500; color: #4A5568; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-signout:hover { background: rgba(226,75,74,0.08); color: #F0A8A7; }
+
+  .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar { padding: 20px 36px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; background: rgba(8,12,18,0.80); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 40; }
+  .breadcrumb { font-size: 13px; color: #3A4A5C; margin-bottom: 2px; }
+  .breadcrumb a { color: #3A4A5C; text-decoration: none; }
+  .breadcrumb a:hover { color: #6B7785; }
+  .topbar-title { font-size: 18px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.4px; }
+  .user-pill { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); border-radius: 100px; padding: 6px 14px 6px 8px; }
+  .user-avatar { width: 26px; height: 26px; border-radius: 50%; background: rgba(14,165,122,0.20); border: 1px solid rgba(14,165,122,0.30); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #0EA57A; }
+  .user-name { font-size: 12.5px; font-weight: 500; color: #9BA4B0; }
+
+  .page-content { padding: 36px; flex: 1; max-width: 900px; }
+  .page-eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #0EA57A; margin-bottom: 8px; }
+  .page-eyebrow .dash { width: 14px; height: 1.5px; background: #0EA57A; border-radius: 2px; }
+  .page-title { font-size: 28px; font-weight: 800; letter-spacing: -1px; color: #F0F2F5; margin-bottom: 6px; }
+  .page-sub { font-size: 14px; color: #5A6474; line-height: 1.55; margin-bottom: 28px; }
+
+  .method-note { display: flex; align-items: flex-start; gap: 12px; background: rgba(14,165,122,0.05); border: 1px solid rgba(14,165,122,0.14); border-radius: 12px; padding: 14px 18px; margin-bottom: 28px; }
+  .method-note-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .method-note p { font-size: 12.5px; color: #5A6474; line-height: 1.6; }
+  .method-note p strong { color: #C8D0DB; font-weight: 600; }
+
+  .filter-bar { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 18px 22px; margin-bottom: 28px; display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+  .filter-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 160px; }
+  .filter-group label { font-size: 11px; font-weight: 600; color: #4A5568; letter-spacing: 0.02em; }
+  .filter-group select, .filter-group input { width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09); border-radius: 8px; padding: 9px 13px; color: #F0F2F5; font-size: 13px; font-family: inherit; outline: none; transition: border-color 0.2s; }
+  .filter-group select:focus, .filter-group input:focus { border-color: rgba(14,165,122,0.4); }
+  .filter-group select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%234A5568' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 34px; }
+  .filter-group select option { background: #0A101A; color: #F0F2F5; }
+  .btn-generate { background: #0EA57A; border: none; color: #080C12; font-size: 13px; font-weight: 700; padding: 10px 24px; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit; white-space: nowrap; }
+  .btn-generate:hover:not(:disabled) { background: #0BC48E; }
+  .btn-generate:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .error-panel { display: none; background: rgba(239,159,39,0.08); border: 1px solid rgba(239,159,39,0.28); border-radius: 12px; padding: 16px 20px; margin-bottom: 28px; }
+  .error-panel.visible { display: block; }
+  .error-panel h3 { font-size: 14px; font-weight: 700; color: #EF9F27; margin-bottom: 8px; }
+  .error-panel p { font-size: 13px; color: #C8A060; line-height: 1.6; }
+  .error-panel a { color: #0EA57A; font-weight: 600; }
+
+  .report-content[hidden] { display: none !important; }
+
+  .trip-summary-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 28px 32px; margin-bottom: 20px; text-align: center; }
+  .trip-asset-name { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #0EA57A; margin-bottom: 10px; }
+  .trip-dates { font-size: 15px; color: #C8D0DB; font-weight: 500; line-height: 1.5; margin-bottom: 18px; }
+  .trip-km-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3A4A5C; margin-bottom: 8px; }
+  .trip-km-value { font-size: 48px; font-weight: 800; letter-spacing: -2px; color: #F0F2F5; line-height: 1; }
+
+  .total-cost-card { background: rgba(14,165,122,0.06); border: 1px solid rgba(14,165,122,0.28); border-radius: 16px; padding: 28px 32px; margin-bottom: 20px; text-align: center; }
+  .total-cost-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #0EA57A; margin-bottom: 10px; }
+  .total-cost-value { font-size: 42px; font-weight: 800; letter-spacing: -1.5px; color: #F0F2F5; margin-bottom: 22px; }
+
+  .cost-breakdown-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+  .cost-pill { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 12px 10px; text-align: center; }
+  .cost-pill-label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #3A4A5C; margin-bottom: 6px; }
+  .cost-pill-value { font-size: 16px; font-weight: 700; color: #D8DFE8; }
+
+  .cost-stack { display: flex; height: 10px; border-radius: 100px; overflow: hidden; background: rgba(255,255,255,0.04); }
+  .cost-stack-seg { height: 100%; min-width: 2px; }
+  .cost-stack-seg.fuel { background: #0EA57A; }
+  .cost-stack-seg.depr { background: #4A9EFF; }
+  .cost-stack-seg.serv { background: #8B7CF6; }
+  .cost-stack-seg.maint { background: #EF9F27; }
+  .stack-legend { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
+  .stack-legend span { font-size: 11px; color: #5A6474; display: flex; align-items: center; gap: 5px; }
+  .stack-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
+  .emissions-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 22px 28px; margin-bottom: 20px; text-align: center; }
+  .emissions-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3A4A5C; margin-bottom: 8px; }
+  .emissions-value { font-size: 32px; font-weight: 800; color: #0EA57A; letter-spacing: -1px; }
+
+  .reference-panel { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; }
+  .reference-panel h4 { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3A4A5C; margin-bottom: 10px; }
+  .reference-panel p { font-size: 12.5px; color: #6B7785; line-height: 1.65; }
+  .reference-panel strong { color: #9BA4B0; font-weight: 600; }
+
+  .report-actions { display: flex; justify-content: flex-end; }
+  .btn-export { background: rgba(14,165,122,0.08); border: 1px solid rgba(14,165,122,0.22); color: #0EA57A; font-size: 13px; font-weight: 700; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+  .btn-export:hover { background: rgba(14,165,122,0.15); }
+
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
+    .page-content { padding: 20px; }
+    .cost-breakdown-row { grid-template-columns: 1fr 1fr; }
+    .filter-bar { flex-direction: column; align-items: stretch; }
+  }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <a class="sidebar-logo" href="home.html">
+    <div class="logo-mark">FM</div>
+    <span class="logo-name">Fleet<span>Magnify</span></span>
+  </a>
+  <nav class="sidebar-nav">
+    <a class="nav-item" href="home.html"><span class="nav-icon">🏠</span> Overview</a>
+    <div class="nav-label">Analytics Modules</div>
+    <a class="nav-item" href="fuel-analyst.html"><span class="nav-icon">⛽</span> Fuel Analyst</a>
+    <a class="nav-item" href="idle-cost-analyst.html"><span class="nav-icon">⏱</span> Idle Cost Analyst</a>
+    <a class="nav-item" href="emissions-intelligence.html"><span class="nav-icon">🌍</span> Emissions Intelligence</a>
+    <a class="nav-item" href="utilisation-analyst.html"><span class="nav-icon">📊</span> Utilisation Analyst</a>
+    <a class="nav-item" href="job-cost-analyst.html"><span class="nav-icon">🏗</span> Job Cost Analyst</a>
+    <a class="nav-item" href="reports.html"><span class="nav-icon">📋</span> Reports</a>
+    <div class="nav-label">Truck Fleet</div>
+    <a class="nav-item" href="truck-fuel-analyst.html"><span class="nav-icon">🚛</span> Fuel Cost Analyst</a>
+    <a class="nav-item" href="cost-per-km-analyst.html"><span class="nav-icon">📏</span> Cost Per KM Analyst</a>
+    <a class="nav-item" href="truck-emissions-analyst.html"><span class="nav-icon">🌿</span> Emissions Analyst</a>
+    <a class="nav-item active" href="trip-report.html"><span class="nav-icon">🗺️</span> Trip Report</a>
+    <div class="nav-label">Fleet Management</div>
+    <a class="nav-item" href="assets.html"><span class="nav-icon">🚧</span> Assets</a>
+    <a class="nav-item" href="upload.html"><span class="nav-icon">📤</span> Upload Data</a>
+  </nav>
+  <div class="sidebar-footer">
+    <button class="btn-signout" id="signout-btn">↩ Sign Out</button>
+  </div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="breadcrumb"><a href="home.html">Overview</a> / Trip Report</div>
+      <div class="topbar-title">Trip Report</div>
+    </div>
+    <div class="user-pill">
+      <div class="user-avatar" id="user-avatar">?</div>
+      <span class="user-name" id="user-name">Loading...</span>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="page-eyebrow"><div class="dash"></div> Truck Fleet</div>
+    <h1 class="page-title">Trip Cost Report</h1>
+    <p class="page-sub">Generate a full cost and emissions summary for a specific trip window using eROAD mileage, rolling fuel rates, and asset cost data.</p>
+
+    <div class="method-note">
+      <div class="method-note-icon">💡</div>
+      <p><strong>How this works:</strong> Trip distance comes from the closest eROAD odometer readings to your start and end times. Fuel cost uses the truck's <strong>most recent fill-to-fill rate</strong> before the trip ends — not fuel bought during the trip itself. Depreciation, servicing, and maintenance are applied per km from your asset profile.</p>
+    </div>
+
+    <div class="filter-bar">
+      <div class="filter-group" style="flex:1.4;">
+        <label for="vehicle-select">Vehicle</label>
+        <select id="vehicle-select">
+          <option value="">Select a vehicle...</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label for="trip-start">Trip Start</label>
+        <input type="datetime-local" id="trip-start">
+      </div>
+      <div class="filter-group">
+        <label for="trip-end">Trip End</label>
+        <input type="datetime-local" id="trip-end">
+      </div>
+      <button type="button" class="btn-generate" id="generate-btn" disabled>Generate Trip Report</button>
+    </div>
+
+    <div class="error-panel" id="error-panel">
+      <h3>Cannot generate report</h3>
+      <p id="error-panel-text"></p>
+    </div>
+
+    <div id="report-content" class="report-content" hidden>
+      <div class="trip-summary-card">
+        <div class="trip-asset-name" id="report-asset-name"></div>
+        <div class="trip-dates" id="report-trip-dates"></div>
+        <div class="trip-km-label">Trip Distance</div>
+        <div class="trip-km-value" id="report-trip-km"></div>
+      </div>
+
+      <div class="total-cost-card">
+        <div class="total-cost-label">Total Trip Cost</div>
+        <div class="total-cost-value" id="report-total-cost"></div>
+        <div class="cost-breakdown-row">
+          <div class="cost-pill">
+            <div class="cost-pill-label">Fuel</div>
+            <div class="cost-pill-value" id="report-fuel-cost"></div>
+          </div>
+          <div class="cost-pill">
+            <div class="cost-pill-label">Depreciation</div>
+            <div class="cost-pill-value" id="report-depr-cost"></div>
+          </div>
+          <div class="cost-pill">
+            <div class="cost-pill-label">Servicing</div>
+            <div class="cost-pill-value" id="report-serv-cost"></div>
+          </div>
+          <div class="cost-pill">
+            <div class="cost-pill-label">Maintenance</div>
+            <div class="cost-pill-value" id="report-maint-cost"></div>
+          </div>
+        </div>
+        <div class="cost-stack" id="cost-stack"></div>
+        <div class="stack-legend">
+          <span><i style="background:#0EA57A;"></i> Fuel</span>
+          <span><i style="background:#4A9EFF;"></i> Depreciation</span>
+          <span><i style="background:#8B7CF6;"></i> Servicing</span>
+          <span><i style="background:#EF9F27;"></i> Maintenance</span>
+        </div>
+      </div>
+
+      <div class="emissions-card">
+        <div class="emissions-label">Total Trip Emissions</div>
+        <div class="emissions-value" id="report-emissions"></div>
+      </div>
+
+      <div class="reference-panel">
+        <h4>Fuel rate reference</h4>
+        <p id="report-reference"></p>
+      </div>
+
+      <div class="report-actions">
+        <button type="button" class="btn-export" id="export-pdf-btn">⬇ Export PDF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="js/fleet-cost-model.js"></script>
+<script>
+(function() {
+  var FCM = window.FleetCostModel;
+  var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var currentUser = null;
+  var companyName = '';
+  var vehiclesList = [];
+  var selectedVehicle = null;
+  var tripReport = null;
+
+  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
+  var EMISSION_FACTORS = { Diesel: 2.68, Petrol: 2.31, Hybrid: 1.5, Electric: 0 };
+  var MILEAGE_BUFFER_DAYS = 45;
+
+  function num(v) {
+    if (v === null || v === undefined || v === '') return null;
+    var n = parseFloat(v);
+    return isNaN(n) ? null : n;
+  }
+
+  function fmtMoney(n) {
+    return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function fmtNum(n, d) {
+    return Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+  }
+
+  function fmtDate(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function fmtDateTimeLocal(d) {
+    return fmtDate(d) + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  function addDays(dateStr, days) {
+    var d = new Date(dateStr + 'T12:00:00');
+    d.setDate(d.getDate() + days);
+    return fmtDate(d);
+  }
+
+  function parseDateTimeLocal(value) {
+    if (!value) return null;
+    var d = new Date(value);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function formatTripRange(startDt, endDt) {
+    var opts = { day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true };
+    var s = startDt.toLocaleString('en-NZ', opts).replace(',', ',');
+    var e = endDt.toLocaleString('en-NZ', opts).replace(',', ',');
+    return s + ' to ' + e;
+  }
+
+  function formatDateShort(dateStr) {
+    var d = new Date(dateStr + 'T12:00:00');
+    return d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function getEmissionFactor(fuelType) {
+    var key = (fuelType || '').trim();
+    if (Object.prototype.hasOwnProperty.call(EMISSION_FACTORS, key)) return EMISSION_FACTORS[key];
+    return 2.68;
+  }
+
+  function closestReadingToDatetime(readings, datetime) {
+    if (!readings.length || !datetime) return null;
+    var target = datetime.getTime();
+    var best = null;
+    var bestDiff = Infinity;
+    readings.forEach(function(r) {
+      var odo = parseFloat(r.odometer_km);
+      if (isNaN(odo) || odo <= 0) return;
+      var t = new Date(r.reading_date + 'T12:00:00').getTime();
+      var diff = Math.abs(t - target);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = r;
+      }
+    });
+    return best;
+  }
+
+  function closestReading(readings, dateStr) {
+    return closestReadingToDatetime(readings, new Date(dateStr + 'T12:00:00'));
+  }
+
+  function computePeriods(fuelRows, mileageRows) {
+    if (fuelRows.length < 2) return { periods: [], error: 'insufficient_fuel' };
+    if (!mileageRows.length) return { periods: [], error: 'no_mileage' };
+
+    var periods = [];
+    for (var i = 1; i < fuelRows.length; i++) {
+      var first = fuelRows[i - 1];
+      var second = fuelRows[i];
+      var odo1 = closestReading(mileageRows, first.purchase_date);
+      var odo2 = closestReading(mileageRows, second.purchase_date);
+      if (!odo1 || !odo2) continue;
+
+      var km = parseFloat(odo2.odometer_km) - parseFloat(odo1.odometer_km);
+      if (km <= 0) continue;
+
+      var totalCost = parseFloat(second.cost_nzd) || 0;
+      var litres = parseFloat(second.litres) || 0;
+
+      periods.push({
+        periodStart: first.purchase_date,
+        periodEnd: second.purchase_date,
+        litresUsed: litres,
+        kmDriven: km,
+        totalCost: totalCost
+      });
+    }
+
+    if (!periods.length) return { periods: [], error: 'no_periods' };
+    return { periods: periods, error: null };
+  }
+
+  function getLatestFillPeriod(fuelRows, mileageRows, tripEndDateStr) {
+    var eligible = fuelRows.filter(function(f) {
+      return String(f.purchase_date) <= tripEndDateStr;
+    });
+    if (eligible.length < 2) {
+      return { error: 'Fewer than two fuel purchase records on or before the trip end date' };
+    }
+    var computed = computePeriods(eligible, mileageRows);
+    if (computed.error === 'no_mileage') {
+      return { error: 'No eROAD mileage data to calculate fill-to-fill fuel rates' };
+    }
+    if (computed.error) {
+      return { error: 'Could not calculate a fill-to-fill fuel period from available purchases' };
+    }
+    var periods = computed.periods.filter(function(p) {
+      return p.periodEnd <= tripEndDateStr;
+    });
+    if (!periods.length) {
+      return { error: 'No completed fill-to-fill period available on or before the trip end date' };
+    }
+    var latest = periods[periods.length - 1];
+    if (!latest.litresUsed || latest.kmDriven <= 0) {
+      return { error: 'Latest fill-to-fill period has invalid litres or distance data' };
+    }
+    return {
+      period: latest,
+      litresPerKm: latest.litresUsed / latest.kmDriven,
+      pricePerLitre: latest.totalCost / latest.litresUsed
+    };
+  }
+
+  function getAssetFieldGaps(asset) {
+    var gaps = [];
+    if (num(asset.current_value) === null) gaps.push('Current Value');
+    if (num(asset.estimated_end_of_life_value) === null) gaps.push('Estimated End of Life Value');
+    if (num(asset.expected_life_km) === null) gaps.push('Expected Total Life (km)');
+    if (num(asset.current_odometer) === null) gaps.push('Current Odometer (km)');
+    if (num(asset.service_cost_per_km) === null) gaps.push('Service Cost Per KM');
+    if (num(asset.estimated_annual_repair_cost) === null) gaps.push('Estimated Annual Repair Cost');
+    if (num(asset.estimated_annual_km) === null) gaps.push('Estimated Annual KM');
+    return gaps;
+  }
+
+  function showError(messages) {
+    var panel = document.getElementById('error-panel');
+    var list = Array.isArray(messages) ? messages : [messages];
+    var html = list.map(function(m) { return esc(m); }).join('<br>');
+    if (list.some(function(m) { return m.indexOf('asset') !== -1 || m.indexOf('Value') !== -1 || m.indexOf('Odometer') !== -1; })) {
+      html += '<br><br><a href="assets.html">Update asset details in Assets →</a>';
+    }
+    document.getElementById('error-panel-text').innerHTML = html;
+    panel.classList.add('visible');
+    document.getElementById('report-content').hidden = true;
+    tripReport = null;
+  }
+
+  function hideError() {
+    document.getElementById('error-panel').classList.remove('visible');
+  }
+
+  async function init() {
+    var sessionResult = await supabase.auth.getSession();
+    if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
+    currentUser = sessionResult.data.session.user;
+    companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name)
+      ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
+    document.getElementById('user-name').textContent = companyName;
+    document.getElementById('user-avatar').textContent = companyName.charAt(0).toUpperCase();
+
+    var now = new Date();
+    var yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    document.getElementById('trip-end').value = fmtDateTimeLocal(now);
+    document.getElementById('trip-start').value = fmtDateTimeLocal(yesterday);
+
+    await loadVehicles();
+  }
+
+  async function loadVehicles() {
+    var result = await supabase
+      .from('assets')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .in('asset_type', ON_ROAD_TYPES)
+      .order('asset_name');
+
+    vehiclesList = result.data || [];
+    var select = document.getElementById('vehicle-select');
+    if (!vehiclesList.length) {
+      select.innerHTML = '<option value="">No on-road vehicles found</option>';
+      return;
+    }
+    select.innerHTML = '<option value="">Select a vehicle...</option>' +
+      vehiclesList.map(function(v) {
+        return '<option value="' + v.id + '">' + esc(v.asset_name) + '</option>';
+      }).join('');
+  }
+
+  function updateGenerateBtn() {
+    var start = document.getElementById('trip-start').value;
+    var end = document.getElementById('trip-end').value;
+    document.getElementById('generate-btn').disabled = !selectedVehicle || !start || !end;
+  }
+
+  document.getElementById('vehicle-select').addEventListener('change', function() {
+    var id = this.value;
+    selectedVehicle = vehiclesList.find(function(v) { return Number(v.id) === Number(id); }) || null;
+    updateGenerateBtn();
+  });
+  document.getElementById('trip-start').addEventListener('change', updateGenerateBtn);
+  document.getElementById('trip-end').addEventListener('change', updateGenerateBtn);
+
+  document.getElementById('generate-btn').addEventListener('click', generateReport);
+
+  async function fetchFuelPurchases(vehicleId, throughDate) {
+    var result = await supabase
+      .from('fuel_purchases')
+      .select('purchase_date, litres, cost_nzd')
+      .eq('vehicle_id', Number(vehicleId))
+      .eq('user_id', currentUser.id)
+      .lte('purchase_date', throughDate)
+      .order('purchase_date');
+    return result.data || [];
+  }
+
+  async function fetchMileage(vehicleId, fromDate, toDate) {
+    var result = await supabase
+      .from('eroad_mileage')
+      .select('reading_date, odometer_km')
+      .eq('vehicle_id', Number(vehicleId))
+      .eq('user_id', currentUser.id)
+      .gte('reading_date', fromDate)
+      .lte('reading_date', toDate)
+      .order('reading_date');
+    return result.data || [];
+  }
+
+  async function generateReport() {
+    if (!selectedVehicle) return;
+    hideError();
+
+    var startDt = parseDateTimeLocal(document.getElementById('trip-start').value);
+    var endDt = parseDateTimeLocal(document.getElementById('trip-end').value);
+    if (!startDt || !endDt) {
+      showError('Please enter valid trip start and end dates.');
+      return;
+    }
+    if (endDt <= startDt) {
+      showError('Trip end must be after trip start.');
+      return;
+    }
+
+    var btn = document.getElementById('generate-btn');
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+
+    var assetGaps = getAssetFieldGaps(selectedVehicle);
+    if (assetGaps.length) {
+      btn.disabled = false;
+      btn.textContent = 'Generate Trip Report';
+      updateGenerateBtn();
+      showError(['Missing asset data for ' + selectedVehicle.asset_name + ': ' + assetGaps.join(', ') + '.']);
+      return;
+    }
+
+    var tripEndDate = fmtDate(endDt);
+    var tripStartDate = fmtDate(startDt);
+    var mileageFrom = addDays(tripStartDate, -MILEAGE_BUFFER_DAYS);
+    var mileageTo = addDays(tripEndDate, MILEAGE_BUFFER_DAYS);
+
+    var fuelRows = await fetchFuelPurchases(selectedVehicle.id, tripEndDate);
+    var mileageRows = await fetchMileage(selectedVehicle.id, mileageFrom, mileageTo);
+
+    btn.disabled = false;
+    btn.textContent = 'Generate Trip Report';
+    updateGenerateBtn();
+
+    if (fuelRows.length < 2) {
+      showError('Fewer than two fuel purchase records for this vehicle.');
+      return;
+    }
+    if (!mileageRows.length) {
+      showError('No eROAD mileage data covering the trip window.');
+      return;
+    }
+
+    var startReading = closestReadingToDatetime(mileageRows, startDt);
+    var endReading = closestReadingToDatetime(mileageRows, endDt);
+    if (!startReading || !endReading) {
+      showError('Could not find eROAD odometer readings near the trip start and end times.');
+      return;
+    }
+
+    var tripKm = parseFloat(endReading.odometer_km) - parseFloat(startReading.odometer_km);
+    if (tripKm <= 0) {
+      showError('Trip distance could not be calculated — end odometer must be greater than start odometer.');
+      return;
+    }
+
+    var fillData = getLatestFillPeriod(fuelRows, mileageRows, tripEndDate);
+    if (fillData.error) {
+      showError(fillData.error);
+      return;
+    }
+
+    var deprResult = FCM.calcDepreciationPerKm(selectedVehicle);
+    if (!deprResult.ok) {
+      showError('Cannot calculate depreciation: missing ' + deprResult.missing.join(', ') + '.');
+      return;
+    }
+    var maintResult = FCM.calcMaintenancePerKm(selectedVehicle);
+    if (!maintResult.ok) {
+      showError('Cannot calculate maintenance: missing ' + maintResult.missing.join(', ') + '.');
+      return;
+    }
+
+    var litresPerKm = fillData.litresPerKm;
+    var pricePerLitre = fillData.pricePerLitre;
+    var deprPerKm = deprResult.value;
+    var servPerKm = num(selectedVehicle.service_cost_per_km);
+    var maintPerKm = maintResult.value;
+
+    var tripFuelLitres = tripKm * litresPerKm;
+    var tripFuelCost = tripFuelLitres * pricePerLitre;
+    var tripDeprCost = tripKm * deprPerKm;
+    var tripServCost = tripKm * servPerKm;
+    var tripMaintCost = tripKm * maintPerKm;
+    var totalCost = tripFuelCost + tripDeprCost + tripServCost + tripMaintCost;
+    var tripEmissionsKg = tripFuelLitres * getEmissionFactor(selectedVehicle.fuel_type);
+
+    tripReport = {
+      assetName: selectedVehicle.asset_name,
+      tripRangeLabel: formatTripRange(startDt, endDt),
+      startDt: startDt,
+      endDt: endDt,
+      tripKm: tripKm,
+      fuelCost: tripFuelCost,
+      deprCost: tripDeprCost,
+      servCost: tripServCost,
+      maintCost: tripMaintCost,
+      totalCost: totalCost,
+      emissionsKg: tripEmissionsKg,
+      fillPeriod: fillData.period,
+      litresPerKm: litresPerKm,
+      pricePerLitre: pricePerLitre
+    };
+
+    renderReport(tripReport);
+  }
+
+  function renderReport(r) {
+    document.getElementById('report-content').hidden = false;
+    document.getElementById('report-asset-name').textContent = r.assetName;
+    document.getElementById('report-trip-dates').textContent = r.tripRangeLabel;
+    document.getElementById('report-trip-km').textContent = fmtNum(r.tripKm, 1) + ' km';
+    document.getElementById('report-total-cost').textContent = fmtMoney(r.totalCost);
+    document.getElementById('report-fuel-cost').textContent = fmtMoney(r.fuelCost);
+    document.getElementById('report-depr-cost').textContent = fmtMoney(r.deprCost);
+    document.getElementById('report-serv-cost').textContent = fmtMoney(r.servCost);
+    document.getElementById('report-maint-cost').textContent = fmtMoney(r.maintCost);
+    document.getElementById('report-emissions').textContent = fmtNum(r.emissionsKg, 2) + ' kg CO₂';
+
+    var total = r.totalCost || 1;
+    var segs = [
+      { cls: 'fuel', pct: (r.fuelCost / total) * 100 },
+      { cls: 'depr', pct: (r.deprCost / total) * 100 },
+      { cls: 'serv', pct: (r.servCost / total) * 100 },
+      { cls: 'maint', pct: (r.maintCost / total) * 100 }
+    ];
+    document.getElementById('cost-stack').innerHTML = segs.map(function(s) {
+      return '<div class="cost-stack-seg ' + s.cls + '" style="width:' + Math.max(s.pct, 0.5).toFixed(1) + '%"></div>';
+    }).join('');
+
+    document.getElementById('report-reference').innerHTML =
+      'Rates derived from the fill-to-fill period <strong>' +
+      formatDateShort(r.fillPeriod.periodStart) + ' → ' + formatDateShort(r.fillPeriod.periodEnd) +
+      '</strong> (' + fmtNum(r.fillPeriod.litresUsed, 1) + ' L over ' + fmtNum(r.fillPeriod.kmDriven, 1) + ' km). ' +
+      'Applied rates: <strong>' + fmtNum(r.litresPerKm, 3) + ' L/km</strong> and <strong>' + fmtMoney(r.pricePerLitre) + '/L</strong>. ' +
+      'These reflect the truck\'s most recent fuel consumption and price before the trip ended, not fuel purchased during the trip itself.';
+  }
+
+  document.getElementById('export-pdf-btn').addEventListener('click', function() {
+    if (!tripReport) return;
+    if (typeof window.jspdf === 'undefined') return;
+
+    var r = tripReport;
+    var doc = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    var pageW = doc.internal.pageSize.getWidth();
+    var margin = 16;
+
+    doc.setFillColor(14, 165, 122);
+    doc.rect(0, 0, pageW, 32, 'F');
+    doc.setTextColor(8, 12, 18);
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text('FleetMagnify', margin, 14);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Trip Cost Report', margin, 22);
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9);
+    doc.text(companyName, pageW - margin, 14, { align: 'right' });
+    doc.text(new Date().toLocaleDateString('en-NZ'), pageW - margin, 22, { align: 'right' });
+
+    var y = 44;
+    doc.setTextColor(30, 40, 55);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text(r.assetName, margin, y);
+    y += 8;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(80, 90, 105);
+    var dateLines = doc.splitTextToSize(r.tripRangeLabel, pageW - margin * 2);
+    doc.text(dateLines, margin, y);
+    y += dateLines.length * 5 + 6;
+
+    doc.setTextColor(14, 165, 122);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('TRIP DISTANCE', margin, y);
+    y += 7;
+    doc.setTextColor(20, 30, 45);
+    doc.setFontSize(22);
+    doc.text(fmtNum(r.tripKm, 1) + ' km', margin, y);
+    y += 16;
+
+    doc.setFillColor(240, 248, 245);
+    doc.roundedRect(margin, y, pageW - margin * 2, 28, 3, 3, 'F');
+    doc.setTextColor(14, 165, 122);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('TOTAL TRIP COST', margin + 6, y + 10);
+    doc.setTextColor(20, 30, 45);
+    doc.setFontSize(20);
+    doc.text(fmtMoney(r.totalCost), margin + 6, y + 22);
+    y += 36;
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 40, 55);
+    doc.text('Cost Breakdown', margin, y);
+    y += 7;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    var breakdown = [
+      ['Fuel Cost', fmtMoney(r.fuelCost)],
+      ['Depreciation Cost', fmtMoney(r.deprCost)],
+      ['Servicing Cost', fmtMoney(r.servCost)],
+      ['Maintenance Cost', fmtMoney(r.maintCost)]
+    ];
+    breakdown.forEach(function(row) {
+      doc.setTextColor(100, 110, 125);
+      doc.text(row[0] + ':', margin, y);
+      doc.setTextColor(30, 40, 55);
+      doc.setFont('helvetica', 'bold');
+      doc.text(row[1], margin + 52, y);
+      doc.setFont('helvetica', 'normal');
+      y += 6;
+    });
+    y += 6;
+
+    doc.setTextColor(14, 165, 122);
+    doc.setFont('helvetica', 'bold');
+    doc.text('TOTAL EMISSIONS', margin, y);
+    y += 7;
+    doc.setTextColor(30, 40, 55);
+    doc.setFontSize(14);
+    doc.text(fmtNum(r.emissionsKg, 2) + ' kg CO₂', margin, y);
+    y += 12;
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(120, 130, 145);
+    var refText = 'Fuel rate from fill-to-fill period ' + formatDateShort(r.fillPeriod.periodStart) +
+      ' to ' + formatDateShort(r.fillPeriod.periodEnd) + '. Rates applied: ' +
+      fmtNum(r.litresPerKm, 3) + ' L/km at ' + fmtMoney(r.pricePerLitre) + '/L.';
+    doc.text(doc.splitTextToSize(refText, pageW - margin * 2), margin, y);
+
+    doc.setFontSize(7);
+    doc.setTextColor(160, 170, 185);
+    doc.text('Generated by FleetMagnify · ' + new Date().toLocaleString('en-NZ'), margin, doc.internal.pageSize.getHeight() - 10);
+
+    var safeName = (r.assetName || 'trip').replace(/[^a-z0-9_-]+/gi, '_');
+    doc.save('FleetMagnify_Trip_Report_' + safeName + '.pdf');
+  });
+
+  function esc(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  document.getElementById('signout-btn').addEventListener('click', async function() {
+    await supabase.auth.signOut();
+    window.location.href = 'login.html';
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>
