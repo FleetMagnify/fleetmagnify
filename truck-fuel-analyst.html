@@ -102,9 +102,6 @@
   .empty-state p { font-size: 14px; color: #5A6474; line-height: 1.65; max-width: 520px; margin: 0 auto; }
 
   .dashboard-content[hidden] { display: none !important; }
-  .running-cost-section { margin-top: 8px; margin-bottom: 28px; }
-  .running-cost-section .kpi-card.highlight { border-color: rgba(14,165,122,0.35); background: rgba(14,165,122,0.06); }
-  .kpi-value.missing { font-size: 11px; font-weight: 600; color: #EF9F27; line-height: 1.35; letter-spacing: 0; }
 
   @media (max-width: 1100px) { .kpi-row { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 900px) { .sidebar { display: none; } .main { margin-left: 0; } .page-content { padding: 20px; } .filter-bar { flex-direction: column; align-items: stretch; } }
@@ -239,46 +236,6 @@
           </table>
         </div>
       </div>
-
-      <div class="running-cost-section">
-        <div class="chart-card">
-          <div class="chart-card-header">
-            <div class="chart-card-title">Total Running Cost Per KM</div>
-            <div class="chart-legend">
-              <div class="legend-item"><span style="font-size:12px;color:#5A6474;">Fuel + depreciation + servicing + maintenance per km</span></div>
-            </div>
-          </div>
-          <div class="kpi-row">
-            <div class="kpi-card">
-              <div class="kpi-label">Fuel Cost Per KM</div>
-              <div class="kpi-value teal" id="running-fuel">—</div>
-              <div class="kpi-sub">from fill-to-fill data</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Depreciation Cost Per KM</div>
-              <div class="kpi-value teal" id="running-depr">—</div>
-              <div class="kpi-sub">(current value − end of life) ÷ remaining km</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Servicing Cost Per KM</div>
-              <div class="kpi-value teal" id="running-service">—</div>
-              <div class="kpi-sub">scheduled routine service</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Maintenance Cost Per KM</div>
-              <div class="kpi-value teal" id="running-maintenance">—</div>
-              <div class="kpi-sub">annual repair cost ÷ annual km</div>
-            </div>
-          </div>
-          <div class="kpi-row" style="margin-top:0;">
-            <div class="kpi-card highlight" style="grid-column: 1 / -1;">
-              <div class="kpi-label">Total Running Cost Per KM</div>
-              <div class="kpi-value white" id="running-total" style="font-size:32px;">—</div>
-              <div class="kpi-sub">headline figure for comparing trucks</div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <div class="fleet-section" id="fleet-section">
@@ -298,10 +255,8 @@
 <script src="js/supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="js/fleet-cost-model.js"></script>
 <script>
 (function() {
-  var FCM = window.FleetCostModel;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
   var vehiclesList = [];
@@ -504,49 +459,8 @@
       return;
     }
 
-    showDashboard(inRange, data.mileage);
+    showDashboard(inRange);
     await loadFleetComparison();
-  }
-
-  function getLatestOdometer(mileageRows, asset) {
-    if (mileageRows && mileageRows.length) {
-      var sorted = mileageRows.slice().sort(function(a, b) {
-        return String(a.reading_date).localeCompare(String(b.reading_date));
-      });
-      var odo = parseFloat(sorted[sorted.length - 1].odometer_km);
-      if (!isNaN(odo)) return odo;
-    }
-    return FCM.num(asset.current_odometer);
-  }
-
-  function setRunningKpi(elId, value, missingFields, isTotal) {
-    var el = document.getElementById(elId);
-    if (missingFields && missingFields.length) {
-      el.className = 'kpi-value missing';
-      el.textContent = FCM.formatMissingMessage(missingFields);
-      return;
-    }
-    el.className = 'kpi-value ' + (isTotal ? 'white' : 'teal');
-    if (isTotal) el.style.fontSize = '32px';
-    el.textContent = fmtMoney(value) + '/km';
-  }
-
-  function renderRunningCosts(asset, fuelCostPerKm, mileageRows) {
-    var odo = getLatestOdometer(mileageRows, asset);
-    var running = FCM.calcRunningCostPerKm(asset, fuelCostPerKm, odo);
-    setRunningKpi('running-fuel', running.fuel, null, false);
-    setRunningKpi('running-depr', running.depreciation, running.depreciationMissing, false);
-    setRunningKpi('running-service', running.servicing, running.servicingMissing, false);
-    setRunningKpi('running-maintenance', running.maintenance, running.maintenanceMissing, false);
-    if (running.total !== null) {
-      setRunningKpi('running-total', running.total, null, true);
-    } else {
-      var missing = []
-        .concat(running.depreciationMissing || [])
-        .concat(running.servicingMissing || [])
-        .concat(running.maintenanceMissing || []);
-      setRunningKpi('running-total', null, missing.length ? missing : ['one or more cost components'], true);
-    }
   }
 
   function showEmpty() {
@@ -555,7 +469,7 @@
     destroyCharts();
   }
 
-  function showDashboard(periods, mileageRows) {
+  function showDashboard(periods) {
     document.getElementById('empty-state').hidden = true;
     document.getElementById('dashboard-content').hidden = false;
 
@@ -579,7 +493,6 @@
 
     renderCostChart(periods);
     renderTable(periods);
-    if (selectedVehicle) renderRunningCosts(selectedVehicle, latest.costPerKm, mileageRows || []);
   }
 
   function destroyCharts() {
