@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fuel Cost Analyst | FleetMagnify</title>
+<title>Emissions Analyst | FleetMagnify</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -49,7 +49,7 @@
   .filter-bar { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 18px 22px; margin-bottom: 28px; display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
   .filter-group { display: flex; flex-direction: column; gap: 6px; }
   .filter-group label { font-size: 11px; font-weight: 600; color: #4A5568; letter-spacing: 0.02em; }
-  .filter-group select, .filter-group input { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09); border-radius: 8px; padding: 9px 13px; color: #F0F2F5; font-size: 13px; font-family: inherit; outline: none; transition: border-color 0.2s; min-width: 170px; }
+  .filter-group select, .filter-group input { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09); border-radius: 8px; padding: 9px 13px; color: #F0F2F5; font-size: 13px; font-family: inherit; outline: none; transition: border-color 0.2s; min-width: 220px; }
   .filter-group select:focus, .filter-group input:focus { border-color: rgba(14,165,122,0.4); }
   .filter-group select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%234A5568' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 34px; }
   .filter-group select option { background: #0A101A; color: #F0F2F5; }
@@ -74,12 +74,14 @@
   .chart-legend { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
   .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #5A6474; }
   .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
-  .legend-line { width: 18px; height: 0; border-top: 2px dashed #6B7785; }
   .chart-wrap { height: 300px; position: relative; }
 
   .table-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; overflow: hidden; margin-bottom: 28px; }
-  .table-header { padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .table-header { padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .table-title { font-size: 14px; font-weight: 700; color: #C8D0DB; }
+  .btn-export { background: rgba(14,165,122,0.08); border: 1px solid rgba(14,165,122,0.22); color: #0EA57A; font-size: 12px; font-weight: 700; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+  .btn-export:hover:not(:disabled) { background: rgba(14,165,122,0.15); }
+  .btn-export:disabled { opacity: 0.45; cursor: not-allowed; }
   table { width: 100%; border-collapse: collapse; }
   thead th { padding: 11px 16px; text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #2E3A4A; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.01); white-space: nowrap; }
   tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); }
@@ -89,11 +91,8 @@
   .cell-strong { color: #D8DFE8; font-weight: 600; }
   .cell-teal { color: #0EA57A; font-weight: 600; }
   .cell-amber { color: #EF9F27; font-weight: 600; }
-  .status-badge { display: inline-flex; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 100px; letter-spacing: 0.03em; }
-  .status-badge.normal { color: #0EA57A; background: rgba(14,165,122,0.12); border: 1px solid rgba(14,165,122,0.25); }
-  .status-badge.anomaly { color: #EF9F27; background: rgba(239,159,39,0.12); border: 1px solid rgba(239,159,39,0.25); }
 
-  .fleet-section { margin-top: 8px; }
+  .fleet-section { margin-bottom: 28px; }
   .fleet-section .chart-wrap { height: 280px; }
 
   .empty-state { text-align: center; padding: 64px 32px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; }
@@ -124,9 +123,9 @@
     <a class="nav-item" href="job-cost-analyst.html"><span class="nav-icon">🏗</span> Job Cost Analyst</a>
     <a class="nav-item" href="reports.html"><span class="nav-icon">📋</span> Reports</a>
     <div class="nav-label">Truck Fleet</div>
-    <a class="nav-item active" href="truck-fuel-analyst.html"><span class="nav-icon">🚛</span> Fuel Cost Analyst</a>
+    <a class="nav-item" href="truck-fuel-analyst.html"><span class="nav-icon">🚛</span> Fuel Cost Analyst</a>
     <a class="nav-item" href="cost-per-km-analyst.html"><span class="nav-icon">📏</span> Cost Per KM Analyst</a>
-    <a class="nav-item" href="truck-emissions-analyst.html"><span class="nav-icon">🌿</span> Emissions Analyst</a>
+    <a class="nav-item active" href="truck-emissions-analyst.html"><span class="nav-icon">🌿</span> Emissions Analyst</a>
     <div class="nav-label">Fleet Management</div>
     <a class="nav-item" href="assets.html"><span class="nav-icon">🚧</span> Assets</a>
     <a class="nav-item" href="upload.html"><span class="nav-icon">📤</span> Upload Data</a>
@@ -139,8 +138,8 @@
 <div class="main">
   <div class="topbar">
     <div>
-      <div class="breadcrumb"><a href="home.html">Overview</a> / Fuel Cost Analyst</div>
-      <div class="topbar-title">Truck Fuel Cost Analyst</div>
+      <div class="breadcrumb"><a href="home.html">Overview</a> / Emissions Analyst</div>
+      <div class="topbar-title">Truck Emissions Analyst</div>
     </div>
     <div class="user-pill">
       <div class="user-avatar" id="user-avatar">?</div>
@@ -150,12 +149,12 @@
 
   <div class="page-content">
     <div class="page-eyebrow"><div class="dash"></div> Truck Fleet</div>
-    <h1 class="page-title">Fuel Cost Per Kilometre</h1>
-    <p class="page-sub">Fill-to-fill cost analysis for on-road vehicles using BP fuel purchases and eROAD odometer readings.</p>
+    <h1 class="page-title">Emissions Per Kilometre</h1>
+    <p class="page-sub">Fill-to-fill CO₂ analysis for on-road vehicles using fuel consumption and eROAD odometer readings.</p>
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this is calculated:</strong> Each period runs from one fuel fill to the next. Litres and cost come from the second fill; kilometres driven are the odometer difference between readings closest to each fill date. Periods above <strong>$0.155/km</strong> are flagged as above benchmark.</p>
+      <p><strong>How this is calculated:</strong> Each period runs from one fuel fill to the next. Litres come from the second fill; kilometres driven are the odometer difference between readings closest to each fill date. Total emissions = litres × emission factor for the vehicle's fuel type (Diesel 2.68, Petrol 2.31, Hybrid 1.5, Electric 0 kg CO₂/L).</p>
     </div>
 
     <div class="filter-bar">
@@ -176,17 +175,22 @@
     </div>
 
     <div id="empty-state" class="empty-state" hidden>
-      <span class="icon">🚛</span>
+      <span class="icon">🌿</span>
       <h2>Not enough data yet</h2>
-      <p>At least two fuel fills and corresponding odometer readings are needed to calculate cost per km. This will populate automatically once your eROAD and BP integrations are connected.</p>
+      <p>At least two fuel fills and corresponding eROAD odometer readings are needed to calculate emissions per km. This will populate automatically once your fuel purchase and mileage data is available.</p>
     </div>
 
-    <div id="dashboard-content" class="dashboard-content">
+    <div id="dashboard-content" class="dashboard-content" hidden>
       <div class="kpi-row">
         <div class="kpi-card">
-          <div class="kpi-label">Current Cost Per KM</div>
-          <div class="kpi-value teal" id="kpi-cost-km">—</div>
-          <div class="kpi-sub">Benchmark: $0.15 – $0.16 / km</div>
+          <div class="kpi-label">Total Emissions</div>
+          <div class="kpi-value teal" id="kpi-total-emissions">—</div>
+          <div class="kpi-sub">tonnes CO₂ · selected date range</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Emissions Per KM</div>
+          <div class="kpi-value white" id="kpi-emissions-km">—</div>
+          <div class="kpi-sub">kg CO₂ · most recent period</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Total KM Driven</div>
@@ -194,31 +198,39 @@
           <div class="kpi-sub">selected date range</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">Total Fuel Cost</div>
-          <div class="kpi-value white" id="kpi-total-cost">—</div>
-          <div class="kpi-sub">selected date range</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">Anomaly Count</div>
-          <div class="kpi-value amber" id="kpi-anomalies">—</div>
-          <div class="kpi-sub">periods above $0.155/km</div>
+          <div class="kpi-label">Total Fuel Consumed</div>
+          <div class="kpi-value white" id="kpi-total-litres">—</div>
+          <div class="kpi-sub">litres · selected date range</div>
         </div>
       </div>
 
       <div class="chart-card">
         <div class="chart-card-header">
-          <div class="chart-card-title">Cost Per KM — Fill to Fill</div>
+          <div class="chart-card-title">Emissions Per KM — Fill to Fill</div>
           <div class="chart-legend">
-            <div class="legend-item"><div class="legend-dot" style="background:#0EA57A;"></div> Normal</div>
-            <div class="legend-item"><div class="legend-dot" style="background:#EF9F27;"></div> Above benchmark</div>
-            <div class="legend-item"><div class="legend-line"></div> $0.155 benchmark</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#0EA57A;"></div> kg CO₂ per km</div>
           </div>
         </div>
-        <div class="chart-wrap"><canvas id="cost-chart"></canvas></div>
+        <div class="chart-wrap"><canvas id="emissions-chart"></canvas></div>
+      </div>
+
+      <div class="fleet-section" id="fleet-section">
+        <div class="chart-card" style="margin-bottom:0;">
+          <div class="chart-card-header">
+            <div class="chart-card-title">Fleet Comparison — Latest Emissions Per KM</div>
+            <div class="chart-legend">
+              <div class="legend-item"><span style="font-size:12px;color:#5A6474;">All on-road vehicles · highest to lowest efficiency</span></div>
+            </div>
+          </div>
+          <div class="chart-wrap"><canvas id="fleet-chart"></canvas></div>
+        </div>
       </div>
 
       <div class="table-card">
-        <div class="table-header"><div class="table-title">Fill-to-Fill Periods</div></div>
+        <div class="table-header">
+          <div class="table-title">Fill-to-Fill Periods</div>
+          <button type="button" class="btn-export" id="export-csv-btn" disabled>⬇ Export CSV</button>
+        </div>
         <div style="overflow-x:auto;">
           <table>
             <thead>
@@ -227,28 +239,13 @@
                 <th>Period End</th>
                 <th>Litres Used</th>
                 <th>KM Driven</th>
-                <th>Total Cost</th>
-                <th>Cost Per KM</th>
-                <th>Status</th>
+                <th>Total Emissions (kg)</th>
+                <th>Emissions Per KM</th>
               </tr>
             </thead>
-            <tbody id="periods-tbody">
-              <tr><td colspan="7" style="text-align:center;padding:24px;color:#3A4A5C;">Select a vehicle and apply filters.</td></tr>
-            </tbody>
+            <tbody id="periods-tbody"></tbody>
           </table>
         </div>
-      </div>
-    </div>
-
-    <div class="fleet-section" id="fleet-section">
-      <div class="chart-card">
-        <div class="chart-card-header">
-          <div class="chart-card-title">Fleet Comparison — Latest Cost Per KM</div>
-          <div class="chart-legend">
-            <div class="legend-item"><span style="font-size:12px;color:#5A6474;">All on-road vehicles · most recent fill-to-fill period</span></div>
-          </div>
-        </div>
-        <div class="chart-wrap"><canvas id="fleet-chart"></canvas></div>
       </div>
     </div>
   </div>
@@ -263,11 +260,12 @@
   var currentUser = null;
   var vehiclesList = [];
   var selectedVehicle = null;
-  var costChart = null;
+  var displayPeriods = [];
+  var emissionsChart = null;
   var fleetChart = null;
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
-  var BENCHMARK = 0.155;
+  var EMISSION_FACTORS = { Diesel: 2.68, Petrol: 2.31, Hybrid: 1.5, Electric: 0 };
   var DATE_BUFFER_DAYS = 21;
 
   function fmtDate(d) {
@@ -280,13 +278,26 @@
     return fmtDate(d);
   }
 
-  function fmtMoney(n) {
-    return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-
   function fmtDateShort(dateStr) {
     var d = new Date(dateStr + 'T00:00:00');
     return d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function fmtNum(n, decimals) {
+    return Number(n).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  }
+
+  function getEmissionFactor(fuelType) {
+    var key = (fuelType || '').trim();
+    if (Object.prototype.hasOwnProperty.call(EMISSION_FACTORS, key)) {
+      return EMISSION_FACTORS[key];
+    }
+    return 2.68;
+  }
+
+  function vehicleLabel(v) {
+    var fuel = (v.fuel_type || '').trim() || 'Unknown fuel';
+    return v.asset_name + ' (' + fuel + ')';
   }
 
   function closestReading(readings, targetDate) {
@@ -307,7 +318,7 @@
     return best;
   }
 
-  function computePeriods(fuelRows, mileageRows) {
+  function computePeriods(fuelRows, mileageRows, emissionFactor) {
     if (fuelRows.length < 2) {
       return { periods: [], error: 'insufficient_fuel' };
     }
@@ -326,22 +337,21 @@
       var km = parseFloat(odo2.odometer_km) - parseFloat(odo1.odometer_km);
       if (km <= 0) continue;
 
-      var totalCost = parseFloat(second.cost_nzd) || 0;
       var litres = parseFloat(second.litres) || 0;
-      var costPerKm = totalCost / km;
+      var totalEmissionsKg = litres * emissionFactor;
+      var emissionsPerKm = totalEmissionsKg / km;
 
       periods.push({
         periodStart: first.purchase_date,
         periodEnd: second.purchase_date,
         litresUsed: litres,
         kmDriven: km,
-        totalCost: totalCost,
-        costPerKm: costPerKm,
-        anomaly: costPerKm > BENCHMARK
+        totalEmissionsKg: totalEmissionsKg,
+        emissionsPerKm: emissionsPerKm
       });
     }
 
-    if (periods.length === 0) {
+    if (!periods.length) {
       return { periods: [], error: 'no_periods' };
     }
     return { periods: periods, error: null };
@@ -375,20 +385,20 @@
   async function loadVehicles() {
     var result = await supabase
       .from('assets')
-      .select('*')
+      .select('id, asset_name, asset_type, fuel_type')
       .eq('user_id', currentUser.id)
       .in('asset_type', ON_ROAD_TYPES)
       .order('asset_name');
 
     vehiclesList = result.data || [];
     var select = document.getElementById('vehicle-select');
-    if (vehiclesList.length === 0) {
+    if (!vehiclesList.length) {
       select.innerHTML = '<option value="">No on-road vehicles found</option>';
       return;
     }
     select.innerHTML = '<option value="">Select a vehicle...</option>' +
       vehiclesList.map(function(v) {
-        return '<option value="' + v.id + '">' + esc(v.asset_name) + '</option>';
+        return '<option value="' + v.id + '">' + esc(vehicleLabel(v)) + '</option>';
       }).join('');
   }
 
@@ -441,6 +451,7 @@
     btn.textContent = 'Loading...';
 
     var data = await fetchVehicleData(selectedVehicle.id, dateFrom, dateTo);
+
     btn.disabled = false;
     btn.textContent = 'Apply Filters';
 
@@ -449,18 +460,20 @@
       return;
     }
 
-    var computed = computePeriods(data.fuel, data.mileage);
-    if (computed.error === 'insufficient_fuel' || computed.error === 'no_mileage' || computed.error === 'no_periods') {
+    var factor = getEmissionFactor(selectedVehicle.fuel_type);
+    var computed = computePeriods(data.fuel, data.mileage, factor);
+    if (computed.error) {
       showEmpty();
       return;
     }
 
     var inRange = filterPeriodsByRange(computed.periods, dateFrom, dateTo);
-    if (inRange.length === 0) {
+    if (!inRange.length) {
       showEmpty();
       return;
     }
 
+    displayPeriods = inRange;
     showDashboard(inRange);
     await loadFleetComparison();
   }
@@ -468,76 +481,62 @@
   function showEmpty() {
     document.getElementById('empty-state').hidden = false;
     document.getElementById('dashboard-content').hidden = true;
+    displayPeriods = [];
+    document.getElementById('export-csv-btn').disabled = true;
     destroyCharts();
   }
 
   function showDashboard(periods) {
     document.getElementById('empty-state').hidden = true;
     document.getElementById('dashboard-content').hidden = false;
+    document.getElementById('export-csv-btn').disabled = false;
 
     var latest = periods[periods.length - 1];
     var totalKm = 0;
-    var totalCost = 0;
-    var anomalyCount = 0;
+    var totalLitres = 0;
+    var totalEmissionsKg = 0;
     periods.forEach(function(p) {
       totalKm += p.kmDriven;
-      totalCost += p.totalCost;
-      if (p.anomaly) anomalyCount++;
+      totalLitres += p.litresUsed;
+      totalEmissionsKg += p.totalEmissionsKg;
     });
 
-    var costKmEl = document.getElementById('kpi-cost-km');
-    costKmEl.textContent = fmtMoney(latest.costPerKm);
-    costKmEl.className = 'kpi-value ' + (latest.anomaly ? 'amber' : 'teal');
-
+    document.getElementById('kpi-total-emissions').textContent = fmtNum(totalEmissionsKg / 1000, 2) + ' t';
+    document.getElementById('kpi-emissions-km').textContent = fmtNum(latest.emissionsPerKm, 3) + ' kg';
     document.getElementById('kpi-total-km').textContent = Math.round(totalKm).toLocaleString() + ' km';
-    document.getElementById('kpi-total-cost').textContent = fmtMoney(totalCost);
-    document.getElementById('kpi-anomalies').textContent = String(anomalyCount);
+    document.getElementById('kpi-total-litres').textContent = fmtNum(totalLitres, 1) + ' L';
 
-    renderCostChart(periods);
+    renderEmissionsChart(periods);
     renderTable(periods);
   }
 
   function destroyCharts() {
-    if (costChart) { costChart.destroy(); costChart = null; }
+    if (emissionsChart) { emissionsChart.destroy(); emissionsChart = null; }
   }
 
-  function renderCostChart(periods) {
-    var ctx = document.getElementById('cost-chart').getContext('2d');
+  function renderEmissionsChart(periods) {
+    var ctx = document.getElementById('emissions-chart').getContext('2d');
     var labels = periods.map(function(p) { return fmtDateShort(p.periodEnd); });
-    var values = periods.map(function(p) { return Math.round(p.costPerKm * 1000) / 1000; });
-    var pointColors = periods.map(function(p) { return p.anomaly ? '#EF9F27' : '#0EA57A'; });
-    var benchmarkLine = periods.map(function() { return BENCHMARK; });
+    var values = periods.map(function(p) { return Math.round(p.emissionsPerKm * 1000) / 1000; });
 
-    if (costChart) costChart.destroy();
-    costChart = new Chart(ctx, {
+    if (emissionsChart) emissionsChart.destroy();
+    emissionsChart = new Chart(ctx, {
       type: 'line',
       data: {
         labels: labels,
-        datasets: [
-          {
-            label: 'Cost per KM',
-            data: values,
-            borderColor: '#0EA57A',
-            backgroundColor: 'rgba(14,165,122,0.12)',
-            pointBackgroundColor: pointColors,
-            pointBorderColor: pointColors,
-            pointRadius: 5,
-            pointHoverRadius: 7,
-            borderWidth: 2,
-            tension: 0.25,
-            fill: true
-          },
-          {
-            label: 'Benchmark',
-            data: benchmarkLine,
-            borderColor: 'rgba(107,119,133,0.65)',
-            borderDash: [6, 4],
-            borderWidth: 1.5,
-            pointRadius: 0,
-            fill: false,
-            tension: 0
-          }
-        ]
+        datasets: [{
+          label: 'Emissions per KM',
+          data: values,
+          borderColor: '#0EA57A',
+          backgroundColor: 'rgba(14,165,122,0.12)',
+          pointBackgroundColor: '#0EA57A',
+          pointBorderColor: '#0EA57A',
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          borderWidth: 2,
+          tension: 0.25,
+          fill: true
+        }]
       },
       options: {
         responsive: true,
@@ -547,10 +546,7 @@
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: function(ctx) {
-                if (ctx.datasetIndex === 1) return 'Benchmark: $' + BENCHMARK.toFixed(3) + '/km';
-                return 'Cost: $' + ctx.parsed.y.toFixed(3) + '/km';
-              }
+              label: function(ctx) { return ctx.parsed.y.toFixed(3) + ' kg CO₂/km'; }
             }
           }
         },
@@ -558,8 +554,8 @@
           x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4A5568', font: { size: 10 }, maxRotation: 45 } },
           y: {
             grid: { color: 'rgba(255,255,255,0.04)' },
-            ticks: { color: '#4A5568', callback: function(v) { return '$' + v; } },
-            title: { display: true, text: 'NZD per km', color: '#3A4A5C', font: { size: 10 } }
+            ticks: { color: '#4A5568', callback: function(v) { return v + ' kg'; } },
+            title: { display: true, text: 'kg CO₂ per km', color: '#3A4A5C', font: { size: 10 } }
           }
         }
       }
@@ -572,36 +568,59 @@
       return '<tr>' +
         '<td class="cell-strong">' + fmtDateShort(p.periodStart) + '</td>' +
         '<td class="cell-strong">' + fmtDateShort(p.periodEnd) + '</td>' +
-        '<td>' + p.litresUsed.toFixed(1) + ' L</td>' +
-        '<td>' + p.kmDriven.toFixed(1) + ' km</td>' +
-        '<td>' + fmtMoney(p.totalCost) + '</td>' +
-        '<td class="' + (p.anomaly ? 'cell-amber' : 'cell-teal') + '">' + fmtMoney(p.costPerKm) + '</td>' +
-        '<td><span class="status-badge ' + (p.anomaly ? 'anomaly' : 'normal') + '">' +
-          (p.anomaly ? 'Above Benchmark' : 'Normal') + '</span></td>' +
+        '<td>' + fmtNum(p.litresUsed, 1) + ' L</td>' +
+        '<td>' + fmtNum(p.kmDriven, 1) + ' km</td>' +
+        '<td>' + fmtNum(p.totalEmissionsKg, 2) + ' kg</td>' +
+        '<td class="cell-teal">' + fmtNum(p.emissionsPerKm, 3) + ' kg/km</td>' +
       '</tr>';
     }).join('');
   }
 
+  document.getElementById('export-csv-btn').addEventListener('click', function() {
+    if (!displayPeriods.length || !selectedVehicle) return;
+    var headers = ['Period Start', 'Period End', 'Litres Used', 'KM Driven', 'Total Emissions (kg)', 'Emissions Per KM (kg/km)'];
+    var rows = displayPeriods.map(function(p) {
+      return [
+        p.periodStart,
+        p.periodEnd,
+        p.litresUsed.toFixed(1),
+        p.kmDriven.toFixed(1),
+        p.totalEmissionsKg.toFixed(2),
+        p.emissionsPerKm.toFixed(4)
+      ];
+    });
+    var csv = [headers.join(',')].concat(rows.map(function(r) { return r.join(','); })).join('\n');
+    var safeName = (selectedVehicle.asset_name || 'vehicle').replace(/[^a-z0-9_-]+/gi, '_');
+    var blob = new Blob([csv], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'FleetMagnify_Emissions_' + safeName + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
   async function loadFleetComparison() {
-    if (vehiclesList.length === 0) {
+    if (!vehiclesList.length) {
       renderFleetChart([]);
       return;
     }
 
     var fleetData = [];
+    var wideFrom = '2000-01-01';
+    var wideTo = fmtDate(new Date());
+
     for (var i = 0; i < vehiclesList.length; i++) {
       var v = vehiclesList[i];
-      var wideFrom = '2000-01-01';
-      var wideTo = fmtDate(new Date());
       var data = await fetchVehicleData(v.id, wideFrom, wideTo);
       if (data.fuel.length < 2 || !data.mileage.length) continue;
-      var computed = computePeriods(data.fuel, data.mileage);
+      var factor = getEmissionFactor(v.fuel_type);
+      var computed = computePeriods(data.fuel, data.mileage, factor);
       if (!computed.periods.length) continue;
       var latest = computed.periods[computed.periods.length - 1];
-      fleetData.push({ name: v.asset_name, costPerKm: latest.costPerKm, anomaly: latest.anomaly });
+      fleetData.push({ name: vehicleLabel(v), emissionsPerKm: latest.emissionsPerKm });
     }
 
-    fleetData.sort(function(a, b) { return b.costPerKm - a.costPerKm; });
+    fleetData.sort(function(a, b) { return b.emissionsPerKm - a.emissionsPerKm; });
     renderFleetChart(fleetData);
   }
 
@@ -609,7 +628,7 @@
     var ctx = document.getElementById('fleet-chart').getContext('2d');
     if (fleetChart) fleetChart.destroy();
 
-    if (fleetData.length === 0) {
+    if (!fleetData.length) {
       fleetChart = new Chart(ctx, {
         type: 'bar',
         data: { labels: ['No data'], datasets: [{ data: [0], backgroundColor: 'rgba(255,255,255,0.06)' }] },
@@ -622,13 +641,17 @@
       return;
     }
 
+    var maxVal = fleetData[0].emissionsPerKm;
     fleetChart = new Chart(ctx, {
       type: 'bar',
       data: {
         labels: fleetData.map(function(f) { return f.name; }),
         datasets: [{
-          data: fleetData.map(function(f) { return Math.round(f.costPerKm * 1000) / 1000; }),
-          backgroundColor: fleetData.map(function(f) { return f.anomaly ? '#EF9F27' : '#0EA57A'; }),
+          data: fleetData.map(function(f) { return Math.round(f.emissionsPerKm * 1000) / 1000; }),
+          backgroundColor: fleetData.map(function(f) {
+            var ratio = maxVal > 0 ? f.emissionsPerKm / maxVal : 0;
+            return ratio > 0.66 ? '#EF9F27' : (ratio > 0.33 ? 'rgba(239,159,39,0.65)' : '#0EA57A');
+          }),
           borderRadius: 4
         }]
       },
@@ -640,14 +663,14 @@
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: function(ctx) { return '$' + ctx.parsed.x.toFixed(3) + ' / km'; }
+              label: function(ctx) { return ctx.parsed.x.toFixed(3) + ' kg CO₂ / km'; }
             }
           }
         },
         scales: {
           x: {
             grid: { color: 'rgba(255,255,255,0.04)' },
-            ticks: { color: '#4A5568', callback: function(v) { return '$' + v; } }
+            ticks: { color: '#4A5568', callback: function(v) { return v + ' kg'; } }
           },
           y: { grid: { display: false }, ticks: { color: '#6B7785', font: { size: 11 } } }
         }
