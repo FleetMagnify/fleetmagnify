@@ -173,7 +173,8 @@
   .form-context-note p { font-size: 12px; color: #5A6474; line-height: 1.55; }
   .form-context-note p strong { color: #C8D0DB; font-weight: 600; }
   .form-hint.emphasis { color: #6B7785; }
-  .form-group.field-hidden { display: none !important; }
+  .form-group.field-hidden,
+  .form-group[hidden] { display: none !important; }
   @media (max-width: 900px) {
     .sidebar { display: none; } .main { margin-left: 0; } .page-content { padding: 20px; }
     .stats-row { grid-template-columns: 1fr 1fr; } .upload-card { flex-direction: column; align-items: flex-start; } .form-row { grid-template-columns: 1fr; }
@@ -331,10 +332,18 @@
         <div class="type-select-row">
           <select id="asset-type">
             <option value="" disabled selected>Select type</option>
-            <option>Excavator</option><option>Dump Truck</option><option>Wheel Loader</option>
-            <option>Motor Grader</option><option>Bulldozer</option><option>Crane</option>
-            <option>Forklift</option><option>Light Vehicle</option><option>Rigid Truck</option>
-            <option>Semi Trailer</option><option>Water Truck</option><option>Other</option>
+            <option value="Excavator">Excavator</option>
+            <option value="Dump Truck">Dump Truck</option>
+            <option value="Wheel Loader">Wheel Loader</option>
+            <option value="Motor Grader">Motor Grader</option>
+            <option value="Bulldozer">Bulldozer</option>
+            <option value="Crane">Crane</option>
+            <option value="Forklift">Forklift</option>
+            <option value="Light Vehicle">Light Vehicle</option>
+            <option value="Rigid Truck">Rigid Truck</option>
+            <option value="Semi Trailer">Semi Trailer</option>
+            <option value="Water Truck">Water Truck</option>
+            <option value="Other">Other</option>
           </select>
         </div>
       </div>
@@ -451,6 +460,9 @@
   var csvRows = [];
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
+  var ON_ROAD_TYPE_SET = { 'Light Vehicle': true, 'Rigid Truck': true, 'Semi Trailer': true };
+  var ON_ROAD_FIELD_IDS = ['field-life-km', 'field-service-km'];
+  var CONSTRUCTION_FIELD_IDS = ['field-life-hours', 'field-service-hour', 'field-available-hours', 'field-target-utilisation'];
   var supportsIsOnRoad = true;
 
   var DEFAULT_IDLE_RATES = {
@@ -583,7 +595,32 @@
   }
 
   function isOnRoadType(assetType) {
-    return ON_ROAD_TYPES.indexOf(assetType) !== -1;
+    return !!ON_ROAD_TYPE_SET[(assetType || '').trim()];
+  }
+
+  function setFieldBlockVisible(fieldId, visible) {
+    var el = document.getElementById(fieldId);
+    if (!el) return;
+    if (visible) {
+      el.classList.remove('field-hidden');
+      el.removeAttribute('hidden');
+    } else {
+      el.classList.add('field-hidden');
+      el.setAttribute('hidden', 'hidden');
+    }
+  }
+
+  function applyAssetTypeFieldVisibility(assetType) {
+    var normalized = (assetType || '').trim();
+    var onRoad = isOnRoadType(normalized);
+    var hasType = !!normalized;
+    ON_ROAD_FIELD_IDS.forEach(function(id) {
+      setFieldBlockVisible(id, hasType && onRoad);
+    });
+    CONSTRUCTION_FIELD_IDS.forEach(function(id) {
+      setFieldBlockVisible(id, hasType && !onRoad);
+    });
+    return { onRoad: onRoad, hasType: hasType, assetType: normalized };
   }
 
   function assetIsOnRoad(asset) {
@@ -644,9 +681,9 @@
   }
 
   function updateFormForAssetType() {
-    var assetType = document.getElementById('asset-type').value;
-    var onRoad = isOnRoadType(assetType);
-    var hasType = !!assetType;
+    var state = applyAssetTypeFieldVisibility(document.getElementById('asset-type').value);
+    var assetType = state.assetType;
+    var onRoad = state.onRoad;
     var metricBanner = document.getElementById('primary-metric-banner');
     var metricText = document.getElementById('primary-metric-text');
     var contextNote = document.getElementById('form-context-note');
@@ -654,14 +691,7 @@
     var contextText = document.getElementById('form-context-text');
     var regoInput = document.getElementById('asset-rego');
 
-    document.querySelectorAll('.field-on-road').forEach(function(el) {
-      el.classList.toggle('field-hidden', !hasType || !onRoad);
-    });
-    document.querySelectorAll('.field-construction').forEach(function(el) {
-      el.classList.toggle('field-hidden', !hasType || onRoad);
-    });
-
-    if (!assetType) {
+    if (!state.hasType) {
       metricBanner.className = 'primary-metric-banner';
       metricText.textContent = '';
       contextNote.classList.remove('visible', 'construction');
@@ -701,7 +731,7 @@
 
   function buildAssetPayload() {
     var idleRateRaw = document.getElementById('asset-idle-rate').value;
-    var assetType = document.getElementById('asset-type').value;
+    var assetType = (document.getElementById('asset-type').value || '').trim();
     var onRoad = isOnRoadType(assetType);
     var payload = {
       asset_name: document.getElementById('asset-name').value.trim(),
@@ -749,11 +779,12 @@
 
   function setSelectValue(selectId, value) {
     var select = document.getElementById(selectId);
-    select.value = value || '';
-    if (!select.value && value) {
+    var normalized = (value || '').trim();
+    select.value = normalized;
+    if (!select.value && normalized) {
       var option = document.createElement('option');
-      option.value = value;
-      option.textContent = value;
+      option.value = normalized;
+      option.textContent = normalized;
       option.selected = true;
       select.appendChild(option);
     }
@@ -763,6 +794,7 @@
     ASSET_FIELD_IDS.forEach(function(id) { document.getElementById(id).value = ''; });
     document.getElementById('asset-type').selectedIndex = 0;
     document.getElementById('fuel-type').selectedIndex = 0;
+    applyAssetTypeFieldVisibility('');
     updateFormForAssetType();
   }
 
@@ -801,6 +833,7 @@
     document.getElementById('asset-service-cost').value = asset.service_cost_per_hour != null ? asset.service_cost_per_hour : '';
     document.getElementById('asset-available-hours').value = asset.available_hours_per_week != null ? asset.available_hours_per_week : '';
     document.getElementById('asset-target-utilisation').value = asset.target_utilisation_percent != null ? asset.target_utilisation_percent : '';
+    applyAssetTypeFieldVisibility(asset.asset_type);
     updateFormForAssetType();
     document.getElementById('add-modal').classList.add('open');
   }
@@ -814,6 +847,11 @@
   document.getElementById('cancel-modal-btn').addEventListener('click', closeAssetModal);
   document.getElementById('add-modal').addEventListener('click', function(e) { if (e.target === this) closeAssetModal(); });
 
+  document.getElementById('asset-form').addEventListener('change', function(e) {
+    if (e.target && e.target.id === 'asset-type') {
+      updateFormForAssetType();
+    }
+  });
   document.getElementById('asset-type').addEventListener('change', updateFormForAssetType);
 
   document.getElementById('asset-form').addEventListener('submit', async function(e) {
