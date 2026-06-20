@@ -260,7 +260,7 @@
         <div style="display:flex; align-items:center; justify-content:space-between; width:100%; gap:24px; flex-wrap:wrap;">
           <div class="upload-card-text">
             <h3>Bulk Import via CSV</h3>
-            <p>Download the template, fill in your asset details, then upload it to import your entire fleet at once.</p>
+            <p>Download the template, fill in your asset details, then upload it to import your entire fleet at once. The template includes all columns for both construction and on-road assets — fill in only the fields relevant to each row's asset type and leave the rest blank.</p>
           </div>
           <div class="upload-card-actions">
             <button class="btn-secondary" id="download-template-btn">⬇ Download Template</button>
@@ -926,12 +926,75 @@
     section.style.display = section.style.display === 'none' ? 'flex' : 'none';
   });
 
+  var CSV_COLUMNS = [
+    'asset_name', 'asset_type', 'make', 'model', 'year', 'fuel_type', 'registration',
+    'idle_burn_rate_lph', 'purchase_price', 'expected_life_hours', 'service_cost_per_hour',
+    'available_hours_per_week', 'target_utilisation_percent', 'expected_life_km', 'service_cost_per_km'
+  ];
+
+  function parseCsvNumber(raw) {
+    if (raw === '' || raw == null) return null;
+    var n = parseFloat(String(raw).trim());
+    return isNaN(n) ? null : n;
+  }
+
+  function parseCsvInt(raw) {
+    if (raw === '' || raw == null) return null;
+    var n = parseInt(String(raw).trim(), 10);
+    return isNaN(n) ? null : n;
+  }
+
+  function buildCsvTemplate() {
+    var header = CSV_COLUMNS.join(',');
+    var constructionExample = [
+      'CAT 390F Excavator', 'Excavator', 'Caterpillar', '390F', '2021', 'Diesel', 'SITE-001',
+      '4.0', '285000', '20000', '7.20', '40', '75', '', ''
+    ].join(',');
+    var onRoadExample = [
+      'Kenworth T610', 'Rigid Truck', 'Kenworth', 'T610', '2022', 'Diesel', 'XYZ789',
+      '2.5', '180000', '', '', '', '', '800000', '0.15'
+    ].join(',');
+    return header + '\n' + constructionExample + '\n' + onRoadExample + '\n';
+  }
+
+  function buildCsvRecord(row) {
+    var assetType = (row.asset_type || '').trim();
+    var onRoad = isOnRoadType(assetType);
+    var rec = {
+      user_id: currentUser.id,
+      asset_name: (row.asset_name || '').trim() || null,
+      asset_type: assetType || null,
+      make: (row.make || '').trim() || null,
+      model: (row.model || '').trim() || null,
+      year: parseCsvInt(row.year),
+      fuel_type: (row.fuel_type || '').trim() || null,
+      registration: (row.registration || '').trim() || null,
+      idle_burn_rate_lph: parseCsvNumber(row.idle_burn_rate_lph),
+      purchase_price: parseCsvNumber(row.purchase_price),
+      expected_life_hours: null,
+      service_cost_per_hour: null,
+      available_hours_per_week: null,
+      target_utilisation_percent: null,
+      expected_life_km: null,
+      service_cost_per_km: null
+    };
+    if (onRoad) {
+      rec.expected_life_km = parseCsvNumber(row.expected_life_km);
+      rec.service_cost_per_km = parseCsvNumber(row.service_cost_per_km);
+    } else {
+      rec.expected_life_hours = parseCsvNumber(row.expected_life_hours);
+      rec.service_cost_per_hour = parseCsvNumber(row.service_cost_per_hour);
+      rec.available_hours_per_week = parseCsvNumber(row.available_hours_per_week);
+      rec.target_utilisation_percent = parseCsvNumber(row.target_utilisation_percent);
+    }
+    if (supportsIsOnRoad && assetType) {
+      rec.is_on_road = onRoad;
+    }
+    return rec;
+  }
+
   document.getElementById('download-template-btn').addEventListener('click', function() {
-    var csv = 'asset_name,asset_type,make,model,year,fuel_type,registration,idle_burn_rate_lph,purchase_price,expected_life_hours,service_cost_per_hour,available_hours_per_week,target_utilisation_percent,expected_life_km,service_cost_per_km\n' +
-      'CAT 390F Excavator,Excavator,Caterpillar,390F,2021,Diesel,,4.0,285000,20000,7.20,40,75,,\n' +
-      'Komatsu HD785 Dump Truck,Dump Truck,Komatsu,HD785,2019,Diesel,ABC123,5.5,420000,25000,8.50,40,80,,\n' +
-      'Kenworth T610,Rigid Truck,Kenworth,T610,2022,Diesel,XYZ789,2.5,180000,,,,,800000,0.15\n';
-    var blob = new Blob([csv], { type: 'text/csv' });
+    var blob = new Blob([buildCsvTemplate()], { type: 'text/csv' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'FleetMagnify_Assets_Template.csv'; a.click();
   });
@@ -984,41 +1047,6 @@
     document.getElementById('upload-preview').classList.remove('visible');
     document.getElementById('csv-file-input').value = '';
   });
-
-  function buildCsvRecord(row) {
-    var onRoad = isOnRoadType(row.asset_type);
-    var rec = {
-      user_id: currentUser.id,
-      asset_name: row.asset_name || null,
-      asset_type: row.asset_type || null,
-      make: row.make || null,
-      model: row.model || null,
-      year: parseInt(row.year, 10) || null,
-      fuel_type: row.fuel_type || null,
-      registration: row.registration || null,
-      idle_burn_rate_lph: row.idle_burn_rate_lph ? parseFloat(row.idle_burn_rate_lph) : null,
-      purchase_price: row.purchase_price ? parseFloat(row.purchase_price) : null
-    };
-    if (onRoad) {
-      rec.expected_life_km = row.expected_life_km ? parseFloat(row.expected_life_km) : null;
-      rec.service_cost_per_km = row.service_cost_per_km ? parseFloat(row.service_cost_per_km) : null;
-      rec.expected_life_hours = null;
-      rec.service_cost_per_hour = null;
-      rec.available_hours_per_week = null;
-      rec.target_utilisation_percent = null;
-    } else {
-      rec.expected_life_hours = row.expected_life_hours ? parseFloat(row.expected_life_hours) : null;
-      rec.service_cost_per_hour = row.service_cost_per_hour ? parseFloat(row.service_cost_per_hour) : null;
-      rec.available_hours_per_week = row.available_hours_per_week ? parseFloat(row.available_hours_per_week) : null;
-      rec.target_utilisation_percent = row.target_utilisation_percent ? parseFloat(row.target_utilisation_percent) : null;
-      rec.expected_life_km = null;
-      rec.service_cost_per_km = null;
-    }
-    if (supportsIsOnRoad && row.asset_type) {
-      rec.is_on_road = onRoad;
-    }
-    return rec;
-  }
 
   document.getElementById('import-csv-btn').addEventListener('click', async function() {
     if (csvRows.length === 0) return;
