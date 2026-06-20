@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Integrations | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #F0F2F5; min-height: 100vh; display: flex; }
+
+  .sidebar {
+    width: 240px; flex-shrink: 0; background: rgba(10,16,26,0.95);
+    border-right: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column;
+    position: fixed; top: 0; left: 0; height: 100vh; z-index: 50;
+  }
+  .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); text-decoration: none; }
+  .logo-mark { width: 34px; height: 34px; border-radius: 9px; background: #0EA57A; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #080C12; }
+  .logo-name { font-size: 16px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
+  .logo-name span { color: #0EA57A; }
+  .sidebar-nav { flex: 1; padding: 16px 12px; overflow-y: auto; }
+  .nav-label { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #2E3A4A; padding: 0 8px; margin-bottom: 8px; margin-top: 16px; }
+  .nav-label:first-child { margin-top: 0; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; margin-bottom: 2px; text-decoration: none; font-size: 13.5px; font-weight: 500; color: #6B7785; transition: all 0.2s; }
+  .nav-item:hover { background: rgba(255,255,255,0.04); color: #C8D0DB; }
+  .nav-item.active { background: rgba(14,165,122,0.10); color: #0EA57A; }
+  .nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+  .sidebar-footer { padding: 16px 12px; border-top: 1px solid rgba(255,255,255,0.06); }
+  .btn-signout { width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 8px; border: none; background: none; font-size: 13px; font-weight: 500; color: #4A5568; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-signout:hover { background: rgba(226,75,74,0.08); color: #F0A8A7; }
+
+  .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar { padding: 20px 36px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; background: rgba(8,12,18,0.80); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 40; }
+  .breadcrumb { font-size: 13px; color: #3A4A5C; margin-bottom: 2px; }
+  .breadcrumb a { color: #3A4A5C; text-decoration: none; }
+  .breadcrumb a:hover { color: #6B7785; }
+  .topbar-title { font-size: 18px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.4px; }
+  .user-pill { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); border-radius: 100px; padding: 6px 14px 6px 8px; }
+  .user-avatar { width: 26px; height: 26px; border-radius: 50%; background: rgba(14,165,122,0.20); border: 1px solid rgba(14,165,122,0.30); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #0EA57A; }
+  .user-name { font-size: 12.5px; font-weight: 500; color: #9BA4B0; }
+
+  .page-content { padding: 36px; flex: 1; max-width: 1000px; }
+  .page-eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #0EA57A; margin-bottom: 8px; }
+  .page-eyebrow .dash { width: 14px; height: 1.5px; background: #0EA57A; border-radius: 2px; }
+  .page-title { font-size: 28px; font-weight: 800; letter-spacing: -1px; color: #F0F2F5; margin-bottom: 6px; }
+  .page-sub { font-size: 14px; color: #5A6474; line-height: 1.55; margin-bottom: 32px; }
+
+  .section-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07); border-radius: 16px; overflow: hidden; margin-bottom: 28px; }
+  .section-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px 26px 18px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .section-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #0EA57A; background: rgba(14,165,122,0.09); border: 1px solid rgba(14,165,122,0.18); padding: 3px 10px; border-radius: 100px; margin-bottom: 10px; }
+  .section-title { font-size: 18px; font-weight: 800; color: #D8DFE8; letter-spacing: -0.5px; margin-bottom: 5px; }
+  .section-desc { font-size: 13px; color: #4A5568; line-height: 1.55; max-width: 520px; }
+  .section-body { padding: 22px 26px; }
+
+  .status-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 100px; white-space: nowrap; flex-shrink: 0; }
+  .status-badge.connected { background: rgba(14,165,122,0.12); border: 1px solid rgba(14,165,122,0.28); color: #0EA57A; }
+  .status-badge.disconnected { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: #4A5568; }
+
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 12px; font-weight: 600; color: #9BA4B0; margin-bottom: 6px; }
+  .form-hint { font-size: 11px; color: #3A4A5C; margin-top: 5px; line-height: 1.5; }
+  .form-group input, .form-group select { width: 100%; max-width: 420px; padding: 11px 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09); border-radius: 9px; color: #F0F2F5; font-size: 13.5px; font-family: inherit; outline: none; transition: border-color 0.2s; }
+  .form-group input:focus, .form-group select:focus { border-color: rgba(14,165,122,0.45); }
+  .form-group select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%234A5568' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+  .form-group select option { background: #0A101A; color: #F0F2F5; }
+  .provider-fields { display: none; }
+  .provider-fields.visible { display: block; }
+  .coming-soon-msg { display: none; font-size: 12.5px; color: #5A6474; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 9px; padding: 12px 14px; max-width: 420px; line-height: 1.5; }
+  .coming-soon-msg.visible { display: block; }
+  .form-group[hidden] { display: none !important; }
+
+  .btn-save { display: inline-flex; align-items: center; justify-content: center; background: #0EA57A; border: none; color: #080C12; font-size: 13px; font-weight: 700; padding: 10px 20px; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit; margin-top: 4px; }
+  .btn-save:hover:not(:disabled) { background: #0BC48E; }
+  .btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .table-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07); border-radius: 16px; overflow: hidden; }
+  .table-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .table-title { font-size: 14px; font-weight: 700; color: #C8D0DB; }
+  .table-count { font-size: 12px; color: #3A4A5C; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { padding: 11px 14px; text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #2E3A4A; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.01); white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  tbody td { padding: 12px 14px; font-size: 13.5px; color: #9BA4B0; vertical-align: middle; }
+  .asset-name-cell { font-weight: 600; color: #D8DFE8; }
+  .asset-type-badge { display: inline-flex; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 100px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); color: #6B7785; white-space: nowrap; }
+  .provider-cell { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .btn-manage { background: rgba(14,165,122,0.08); border: 1px solid rgba(14,165,122,0.20); color: #0EA57A; font-size: 12px; font-weight: 700; padding: 6px 14px; border-radius: 7px; cursor: pointer; transition: all 0.2s; font-family: inherit; white-space: nowrap; }
+  .btn-manage:hover { background: rgba(14,165,122,0.15); }
+  .empty-state { padding: 48px 24px; text-align: center; color: #3A4A5C; font-size: 13px; line-height: 1.6; }
+  .loading-row td { text-align: center; padding: 40px; color: #2E3A4A; font-size: 13px; }
+
+  .modal-overlay { display: none; position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: 24px; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: #0A101A; border: 1px solid rgba(255,255,255,0.10); border-radius: 18px; padding: 32px; width: 100%; max-width: 480px; box-shadow: 0 32px 80px rgba(0,0,0,0.5); max-height: 90vh; overflow-y: auto; }
+  .modal h2 { font-size: 20px; font-weight: 800; letter-spacing: -0.6px; color: #F0F2F5; margin-bottom: 6px; }
+  .modal-sub { font-size: 13px; color: #5A6474; margin-bottom: 22px; line-height: 1.5; }
+  .modal-actions { display: flex; align-items: center; gap: 10px; margin-top: 22px; }
+  .btn-cancel { flex: 1; background: none; border: 1px solid rgba(255,255,255,0.09); color: #6B7785; font-size: 14px; font-weight: 500; padding: 12px; border-radius: 9px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-cancel:hover { border-color: rgba(255,255,255,0.18); color: #C8D0DB; }
+  .modal .btn-save { flex: 2; margin-top: 0; }
+  .form-error { display: none; background: rgba(226,75,74,0.10); border: 1px solid rgba(226,75,74,0.28); color: #F0A8A7; font-size: 13px; line-height: 1.5; padding: 11px 14px; border-radius: 9px; margin-bottom: 16px; }
+  .form-error.visible { display: block; }
+
+  .toast { position: fixed; bottom: 28px; right: 28px; z-index: 200; background: rgba(10,16,26,0.98); border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; padding: 14px 20px; display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: #C8D0DB; transform: translateY(80px); opacity: 0; transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1); pointer-events: none; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: rgba(14,165,122,0.3); }
+  .toast.error { border-color: rgba(226,75,74,0.3); }
+
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
+    .page-content { padding: 20px; }
+    .section-header { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <a class="sidebar-logo" href="home.html">
+    <div class="logo-mark">FM</div>
+    <span class="logo-name">Fleet<span>Magnify</span></span>
+  </a>
+  <nav class="sidebar-nav">
+    <a class="nav-item" href="home.html"><span class="nav-icon">🏠</span> Overview</a>
+    <div class="nav-label">Analytics Modules</div>
+    <a class="nav-item" href="fuel-analyst.html"><span class="nav-icon">⛽</span> Fuel Analyst</a>
+    <a class="nav-item" href="idle-cost-analyst.html"><span class="nav-icon">⏱</span> Idle Cost Analyst</a>
+    <a class="nav-item" href="emissions-intelligence.html"><span class="nav-icon">🌍</span> Emissions Intelligence</a>
+    <a class="nav-item" href="utilisation-analyst.html"><span class="nav-icon">📊</span> Utilisation Analyst</a>
+    <a class="nav-item" href="job-cost-analyst.html"><span class="nav-icon">🏗</span> Job Cost Analyst</a>
+    <a class="nav-item" href="reports.html"><span class="nav-icon">📋</span> Reports</a>
+    <div class="nav-label">Truck Fleet</div>
+    <a class="nav-item" href="truck-fuel-analyst.html"><span class="nav-icon">🚛</span> Fuel Cost Analyst</a>
+    <a class="nav-item" href="cost-per-km-analyst.html"><span class="nav-icon">📏</span> Cost Per KM Analyst</a>
+    <a class="nav-item" href="truck-emissions-analyst.html"><span class="nav-icon">🌿</span> Emissions Analyst</a>
+    <a class="nav-item" href="trip-report.html"><span class="nav-icon">🗺️</span> Trip Report</a>
+    <div class="nav-label">Fleet Management</div>
+    <a class="nav-item" href="assets.html"><span class="nav-icon">🚧</span> Assets</a>
+    <a class="nav-item" href="upload.html"><span class="nav-icon">📤</span> Upload Data</a>
+    <a class="nav-item active" href="integrations.html"><span class="nav-icon">🔌</span> Integrations</a>
+  </nav>
+  <div class="sidebar-footer">
+    <button class="btn-signout" id="signout-btn">↩ Sign Out</button>
+  </div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="breadcrumb"><a href="home.html">Overview</a> / Integrations</div>
+      <div class="topbar-title">Integrations</div>
+    </div>
+    <div class="user-pill">
+      <div class="user-avatar" id="user-avatar">?</div>
+      <span class="user-name" id="user-name">Loading...</span>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="page-eyebrow"><div class="dash"></div> Connections</div>
+    <h1 class="page-title">Fleet Integrations</h1>
+    <p class="page-sub">Connect fuel providers and telematics systems to automatically sync data into FleetMagnify.</p>
+
+    <!-- SECTION 1: Fuel Provider -->
+    <div class="section-card">
+      <div class="section-header">
+        <div>
+          <div class="section-tag">⛽ Account Level</div>
+          <div class="section-title">Fuel Provider Connection</div>
+          <div class="section-desc">One company-wide connection covering all fuel cards on your BP account. Not configured per asset.</div>
+        </div>
+        <span class="status-badge disconnected" id="fuel-status-badge">Not connected</span>
+      </div>
+      <div class="section-body">
+        <form id="fuel-provider-form">
+          <div class="form-group">
+            <label for="fuel-provider">Fuel Provider</label>
+            <select id="fuel-provider">
+              <option value="">None</option>
+              <option value="BP">BP</option>
+            </select>
+          </div>
+          <div id="bp-fields" class="provider-fields">
+            <div class="form-group">
+              <label for="bp-api-key">BP API Key</label>
+              <input type="password" id="bp-api-key" placeholder="Paste your BP API key" autocomplete="off">
+              <div class="form-hint">This is a single account-level connection covering all fuel cards on your BP account.</div>
+            </div>
+          </div>
+          <button type="submit" class="btn-save" id="save-fuel-btn">Save Fuel Connection</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- SECTION 2: Telematics -->
+    <div class="table-card">
+      <div class="table-header">
+        <div class="section-tag">📡 Per Asset</div>
+        <div style="flex:1;margin-left:12px;">
+          <div class="table-title">Telematics Connections</div>
+        </div>
+        <span class="table-count" id="asset-count">Loading...</span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Asset Name</th>
+              <th>Asset Type</th>
+              <th>Telematics Provider</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="assets-tbody">
+            <tr class="loading-row"><td colspan="4">Loading assets...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Asset connection modal -->
+<div class="modal-overlay" id="connection-modal">
+  <div class="modal">
+    <h2 id="modal-asset-title">Manage Connection</h2>
+    <p class="modal-sub" id="modal-asset-sub"></p>
+    <div id="modal-error" class="form-error"></div>
+    <form id="connection-form">
+      <div class="form-group">
+        <label for="modal-telematics-provider">Telematics Provider</label>
+        <select id="modal-telematics-provider">
+          <option value="">None</option>
+          <option value="eRoad">eRoad</option>
+          <option value="VisionLink">VisionLink</option>
+        </select>
+      </div>
+      <div id="modal-eroad-fields" class="provider-fields">
+        <div class="form-group">
+          <label for="modal-eroad-api-key">eRoad API Key</label>
+          <input type="password" id="modal-eroad-api-key" placeholder="Paste your eRoad API key" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="modal-eroad-machine-id">eRoad Machine ID</label>
+          <input type="text" id="modal-eroad-machine-id" placeholder="e.g. machine ID from MyEROAD">
+          <div class="form-hint">Generate an API key in MyEROAD under Administration &gt; API Keys, and find the Machine ID under the vehicle's details in MyEROAD.</div>
+        </div>
+      </div>
+      <div id="modal-visionlink-msg" class="coming-soon-msg">VisionLink connection coming soon</div>
+      <div class="form-group" id="field-bp-card" hidden>
+        <label for="modal-bp-card-number">BP Fuel Card Number</label>
+        <input type="text" id="modal-bp-card-number" placeholder="e.g. card number on BP invoice">
+        <div class="form-hint">Enter this truck's BP fuel card number so incoming fuel transactions can be automatically matched to this vehicle.</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" id="modal-cancel-btn">Cancel</button>
+        <button type="submit" class="btn-save" id="modal-save-btn">Save Connection</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast">
+  <span id="toast-icon">✓</span>
+  <span id="toast-msg"></span>
+</div>
+
+<script src="js/supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function() {
+  var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var currentUser = null;
+  var allAssets = [];
+  var editingAssetId = null;
+  var editingHasEroadKey = false;
+  var storedHasBpKey = false;
+
+  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
+  var ON_ROAD_TYPE_SET = { 'Light Vehicle': true, 'Rigid Truck': true, 'Semi Trailer': true };
+
+  async function init() {
+    var sessionResult = await supabase.auth.getSession();
+    if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
+    currentUser = sessionResult.data.session.user;
+    var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
+      ? currentUser.user_metadata.company_name
+      : currentUser.email.split('@')[0];
+    document.getElementById('user-name').textContent = name;
+    document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+    await Promise.all([loadCompanyIntegration(), loadAssets()]);
+  }
+
+  function isOnRoadType(assetType) {
+    return !!ON_ROAD_TYPE_SET[(assetType || '').trim()];
+  }
+
+  function esc(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  var toastTimer;
+  function showToast(msg, type) {
+    var toast = document.getElementById('toast');
+    document.getElementById('toast-msg').textContent = msg;
+    document.getElementById('toast-icon').textContent = type === 'success' ? '✓' : '✕';
+    toast.className = 'toast ' + (type || 'success');
+    clearTimeout(toastTimer);
+    setTimeout(function() { toast.classList.add('show'); }, 10);
+    toastTimer = setTimeout(function() { toast.classList.remove('show'); }, 3500);
+  }
+
+  function setStatusBadge(el, connected) {
+    el.textContent = connected ? 'Connected' : 'Not connected';
+    el.className = 'status-badge ' + (connected ? 'connected' : 'disconnected');
+  }
+
+  function updateFuelProviderFields() {
+    var provider = (document.getElementById('fuel-provider').value || '').trim();
+    document.getElementById('bp-fields').classList.toggle('visible', provider === 'BP');
+  }
+
+  function updateFuelStatusBadge() {
+    var badge = document.getElementById('fuel-status-badge');
+    setStatusBadge(badge, storedHasBpKey);
+  }
+
+  async function loadCompanyIntegration() {
+    var result = await supabase
+      .from('company_integrations')
+      .select('fuel_provider, bp_api_key')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+
+    if (result.error && result.error.code !== 'PGRST116') {
+      showToast('Could not load fuel provider settings', 'error');
+      return;
+    }
+
+    var row = result.data;
+    storedHasBpKey = !!(row && row.bp_api_key);
+    document.getElementById('fuel-provider').value = (row && row.fuel_provider) ? row.fuel_provider : '';
+    document.getElementById('bp-api-key').value = '';
+    document.getElementById('bp-api-key').placeholder = storedHasBpKey
+      ? '••••••••  (leave blank to keep current key)'
+      : 'Paste your BP API key';
+    updateFuelProviderFields();
+    updateFuelStatusBadge();
+  }
+
+  document.getElementById('fuel-provider').addEventListener('change', updateFuelProviderFields);
+
+  document.getElementById('fuel-provider-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var btn = document.getElementById('save-fuel-btn');
+    var provider = (document.getElementById('fuel-provider').value || '').trim();
+    var apiKey = document.getElementById('bp-api-key').value.trim();
+
+    if (provider === 'BP' && !apiKey && !storedHasBpKey) {
+      showToast('Please enter your BP API key', 'error');
+      return;
+    }
+
+    var payload = {
+      user_id: currentUser.id,
+      fuel_provider: provider || null,
+      bp_api_key: provider === 'BP' ? (apiKey || null) : null
+    };
+
+    if (provider === 'BP' && !apiKey && storedHasBpKey) {
+      delete payload.bp_api_key;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+
+    var existing = await supabase
+      .from('company_integrations')
+      .select('user_id')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+
+    var result;
+    if (existing.data) {
+      var updatePayload = {
+        fuel_provider: payload.fuel_provider,
+        bp_api_key: payload.bp_api_key
+      };
+      if (payload.bp_api_key === undefined) delete updatePayload.bp_api_key;
+      result = await supabase.from('company_integrations').update(updatePayload).eq('user_id', currentUser.id);
+    } else {
+      if (payload.bp_api_key === undefined) payload.bp_api_key = null;
+      result = await supabase.from('company_integrations').insert(payload);
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Save Fuel Connection';
+
+    if (result.error) {
+      showToast('Failed to save: ' + result.error.message, 'error');
+      return;
+    }
+
+    if (provider !== 'BP') storedHasBpKey = false;
+    else if (apiKey) storedHasBpKey = true;
+    updateFuelStatusBadge();
+    document.getElementById('bp-api-key').value = '';
+    document.getElementById('bp-api-key').placeholder = storedHasBpKey
+      ? '••••••••  (leave blank to keep current key)'
+      : 'Paste your BP API key';
+    showToast('Fuel provider connection saved', 'success');
+  });
+
+  async function loadAssets() {
+    var tbody = document.getElementById('assets-tbody');
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="4">Loading assets...</td></tr>';
+    var result = await supabase
+      .from('assets')
+      .select('id, asset_name, asset_type, telematics_provider, eroad_api_key, eroad_machine_id, bp_card_number')
+      .eq('user_id', currentUser.id)
+      .order('asset_name');
+
+    if (result.error) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Failed to load assets.</td></tr>';
+      return;
+    }
+
+    allAssets = result.data || [];
+    document.getElementById('asset-count').textContent = allAssets.length + ' asset' + (allAssets.length !== 1 ? 's' : '');
+    renderAssetsTable();
+  }
+
+  function renderProviderCell(asset) {
+    var provider = (asset.telematics_provider || '').trim();
+    if (!provider) {
+      return '<div class="provider-cell"><span class="status-badge disconnected">Not connected</span></div>';
+    }
+    return '<div class="provider-cell">' +
+      '<span>' + esc(provider) + '</span>' +
+      '<span class="status-badge connected">Connected</span>' +
+    '</div>';
+  }
+
+  function renderAssetsTable() {
+    var tbody = document.getElementById('assets-tbody');
+    if (!allAssets.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No assets yet. <a href="assets.html" style="color:#0EA57A;">Add assets</a> first, then configure telematics connections here.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = allAssets.map(function(a) {
+      return '<tr>' +
+        '<td class="asset-name-cell">' + esc(a.asset_name || '—') + '</td>' +
+        '<td><span class="asset-type-badge">' + esc(a.asset_type || '—') + '</span></td>' +
+        '<td>' + renderProviderCell(a) + '</td>' +
+        '<td><button type="button" class="btn-manage" data-id="' + a.id + '">Manage Connection</button></td>' +
+      '</tr>';
+    }).join('');
+
+    tbody.querySelectorAll('.btn-manage').forEach(function(btn) {
+      btn.addEventListener('click', function() { openConnectionModal(btn.dataset.id); });
+    });
+  }
+
+  function updateModalProviderFields() {
+    var provider = (document.getElementById('modal-telematics-provider').value || '').trim();
+    document.getElementById('modal-eroad-fields').classList.toggle('visible', provider === 'eRoad');
+    document.getElementById('modal-visionlink-msg').classList.toggle('visible', provider === 'VisionLink');
+  }
+
+  function openConnectionModal(assetId) {
+    var asset = allAssets.find(function(a) { return Number(a.id) === Number(assetId); });
+    if (!asset) { showToast('Asset not found', 'error'); return; }
+
+    editingAssetId = asset.id;
+    editingHasEroadKey = !!(asset.eroad_api_key);
+    var onRoad = isOnRoadType(asset.asset_type);
+
+    document.getElementById('modal-asset-title').textContent = 'Manage Connection';
+    document.getElementById('modal-asset-sub').textContent = asset.asset_name || 'Asset';
+    document.getElementById('modal-error').classList.remove('visible');
+    document.getElementById('modal-error').textContent = '';
+
+    document.getElementById('modal-telematics-provider').value = (asset.telematics_provider || '').trim();
+    document.getElementById('modal-eroad-api-key').value = '';
+    document.getElementById('modal-eroad-api-key').placeholder = editingHasEroadKey
+      ? '••••••••  (leave blank to keep current key)'
+      : 'Paste your eRoad API key';
+    document.getElementById('modal-eroad-machine-id').value = asset.eroad_machine_id || '';
+    document.getElementById('modal-bp-card-number').value = asset.bp_card_number || '';
+
+    var bpField = document.getElementById('field-bp-card');
+    if (onRoad) {
+      bpField.removeAttribute('hidden');
+    } else {
+      bpField.setAttribute('hidden', 'hidden');
+    }
+
+    updateModalProviderFields();
+    document.getElementById('connection-modal').classList.add('open');
+  }
+
+  function closeConnectionModal() {
+    document.getElementById('connection-modal').classList.remove('open');
+    editingAssetId = null;
+    editingHasEroadKey = false;
+  }
+
+  document.getElementById('modal-telematics-provider').addEventListener('change', updateModalProviderFields);
+  document.getElementById('modal-cancel-btn').addEventListener('click', closeConnectionModal);
+  document.getElementById('connection-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeConnectionModal();
+  });
+
+  document.getElementById('connection-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    if (editingAssetId == null) return;
+
+    var errEl = document.getElementById('modal-error');
+    var saveBtn = document.getElementById('modal-save-btn');
+    var asset = allAssets.find(function(a) { return Number(a.id) === Number(editingAssetId); });
+    var onRoad = asset && isOnRoadType(asset.asset_type);
+    var provider = (document.getElementById('modal-telematics-provider').value || '').trim();
+
+    var payload = {};
+
+    if (!provider) {
+      payload.telematics_provider = null;
+      payload.eroad_api_key = null;
+      payload.eroad_machine_id = null;
+    } else {
+      payload.telematics_provider = provider;
+      if (provider === 'eRoad') {
+        var apiKey = document.getElementById('modal-eroad-api-key').value.trim();
+        var machineId = document.getElementById('modal-eroad-machine-id').value.trim();
+        if (!machineId || (!apiKey && !editingHasEroadKey)) {
+          errEl.textContent = 'eRoad connection requires an API key and Machine ID.';
+          errEl.classList.add('visible');
+          return;
+        }
+        payload.eroad_machine_id = machineId;
+        if (apiKey) payload.eroad_api_key = apiKey;
+      } else {
+        payload.eroad_api_key = null;
+        payload.eroad_machine_id = null;
+      }
+    }
+
+    if (onRoad) {
+      payload.bp_card_number = document.getElementById('modal-bp-card-number').value.trim() || null;
+    }
+
+    errEl.classList.remove('visible');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+
+    var result = await supabase
+      .from('assets')
+      .update(payload)
+      .eq('id', Number(editingAssetId))
+      .eq('user_id', currentUser.id)
+      .select('id, asset_name, asset_type, telematics_provider, eroad_api_key, eroad_machine_id, bp_card_number')
+      .single();
+
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save Connection';
+
+    if (result.error) {
+      errEl.textContent = result.error.message || 'Failed to save connection.';
+      errEl.classList.add('visible');
+      return;
+    }
+
+    var idx = allAssets.findIndex(function(a) { return Number(a.id) === Number(editingAssetId); });
+    if (idx !== -1) allAssets[idx] = result.data;
+    renderAssetsTable();
+    closeConnectionModal();
+    showToast('Connection saved for ' + (result.data.asset_name || 'asset'), 'success');
+  });
+
+  document.getElementById('signout-btn').addEventListener('click', async function() {
+    await supabase.auth.signOut();
+    window.location.href = 'login.html';
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>
