@@ -173,6 +173,7 @@
   .form-context-note p { font-size: 12px; color: #5A6474; line-height: 1.55; }
   .form-context-note p strong { color: #C8D0DB; font-weight: 600; }
   .form-hint.emphasis { color: #6B7785; }
+  .form-group.field-hidden { display: none !important; }
   @media (max-width: 900px) {
     .sidebar { display: none; } .main { margin-left: 0; } .page-content { padding: 20px; }
     .stats-row { grid-template-columns: 1fr 1fr; } .upload-card { flex-direction: column; align-items: flex-start; } .form-row { grid-template-columns: 1fr; }
@@ -298,7 +299,7 @@
         </div>
         <div style="overflow-x:auto;">
           <table id="assets-table">
-            <thead>
+            <thead id="assets-thead">
               <tr>
                 <th>Asset Name</th><th>Type</th><th>Make</th><th>Model</th><th>Year</th><th>Fuel Type</th><th>Idle Burn Rate</th><th>Actions</th>
               </tr>
@@ -383,22 +384,32 @@
       <input type="number" id="asset-purchase-price" placeholder="e.g. 285000" step="0.01" min="0">
       <div class="form-hint" id="hint-purchase-price">Used for depreciation and total cost calculations across FleetMagnify modules.</div>
     </div>
-    <div class="form-group">
-      <label for="asset-life-hours" id="label-life-hours">Expected Total Life (hours)</label>
+    <div class="form-group field-on-road field-hidden" id="field-life-km">
+      <label for="asset-life-km">Expected Total Life (km)</label>
+      <input type="number" id="asset-life-km" placeholder="e.g. 800000" step="1" min="0">
+      <div class="form-hint" id="hint-life-km">Total kilometres expected over the vehicle's useful life — used for depreciation cost per kilometre.</div>
+    </div>
+    <div class="form-group field-on-road field-hidden" id="field-service-km">
+      <label for="asset-service-cost-km">Service Cost Per KM ($)</label>
+      <input type="number" id="asset-service-cost-km" placeholder="e.g. 0.15" step="0.01" min="0">
+      <div class="form-hint" id="hint-service-km">Your blended average service cost per kilometre, calculated from your own service history.</div>
+    </div>
+    <div class="form-group field-construction field-hidden" id="field-life-hours">
+      <label for="asset-life-hours">Expected Total Life (hours)</label>
       <input type="number" id="asset-life-hours" placeholder="e.g. 20000" step="1" min="0">
       <div class="form-hint" id="hint-life-hours">Total operating hours expected over the asset's useful life — used for depreciation cost per hour.</div>
     </div>
-    <div class="form-group">
-      <label for="asset-service-cost" id="label-service-cost">Service Cost Per Hour ($)</label>
+    <div class="form-group field-construction field-hidden" id="field-service-hour">
+      <label for="asset-service-cost">Service Cost Per Hour ($)</label>
       <input type="number" id="asset-service-cost" placeholder="e.g. 7.20" step="0.01" min="0">
       <div class="form-hint" id="hint-service-cost">Your blended average service cost per operating hour, calculated from your own service history.</div>
     </div>
-    <div class="form-group">
+    <div class="form-group field-construction field-hidden" id="field-available-hours">
       <label for="asset-available-hours">Available Hours Per Week</label>
       <input type="number" id="asset-available-hours" placeholder="e.g. 40, leave blank to default to 40" step="0.5" min="0">
       <div class="form-hint" id="hint-available-hours">Leave blank to default to 40 hours per week in Utilisation Analyst.</div>
     </div>
-    <div class="form-group">
+    <div class="form-group field-construction field-hidden" id="field-target-utilisation">
       <label for="asset-target-utilisation">Target Utilisation Percent</label>
       <input type="number" id="asset-target-utilisation" placeholder="e.g. 75" step="1" min="0" max="100">
       <div class="form-hint" id="hint-target-utilisation">Target percentage for utilisation reporting — compared against actual operating hours.</div>
@@ -460,8 +471,10 @@
   }
 
   async function loadAssets() {
+    var comp = getFleetComposition(allAssets.length ? allAssets : []);
+    var colCount = getTableColCount(comp);
     var tbody = document.getElementById('assets-tbody');
-    tbody.innerHTML = '<tr class="loading-row"><td colspan="8">Loading assets...</td></tr>';
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="' + colCount + '">Loading assets...</td></tr>';
     var { data, error } = await supabase.from('assets').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
     if (error) { showToast('Failed to load assets', 'error'); return; }
     allAssets = data || [];
@@ -470,17 +483,21 @@
   }
 
   function renderAssets(assets) {
+    var comp = getFleetComposition(assets);
+    var colCount = getTableColCount(comp);
+    renderTableHeader(comp);
     var tbody = document.getElementById('assets-tbody');
     var count = document.getElementById('table-count');
     count.textContent = assets.length + ' asset' + (assets.length !== 1 ? 's' : '');
     if (assets.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🚧</div><div class="empty-title">No assets yet</div><div class="empty-sub">Add your first asset using the button above,<br>or import your fleet via CSV.</div></div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="' + colCount + '"><div class="empty-state"><div class="empty-icon">🚧</div><div class="empty-title">No assets yet</div><div class="empty-sub">Add your first asset using the button above,<br>or import your fleet via CSV.</div></div></td></tr>';
       return;
     }
     tbody.innerHTML = assets.map(function(a) {
+      var onRoad = assetIsOnRoad(a);
       var hasCustomRate = a.idle_burn_rate_lph !== null && a.idle_burn_rate_lph !== undefined;
       var displayRate = hasCustomRate ? a.idle_burn_rate_lph : (DEFAULT_IDLE_RATES[a.asset_type] || 3.0);
-      return '<tr>' +
+      var row = '<tr>' +
         '<td class="asset-name-cell">' + esc(a.asset_name || '—') + '</td>' +
         '<td><span class="asset-type-badge">' + esc(a.asset_type || '—') + '</span></td>' +
         '<td>' + esc(a.make || '—') + '</td>' +
@@ -492,12 +509,21 @@
           '<span class="idle-rate-unit">L/hr</span>' +
           (!hasCustomRate ? '<span class="idle-rate-default-tag">default</span>' : '') +
           '<button class="idle-rate-save-btn" data-id="' + a.id + '">Save</button>' +
-        '</div></td>' +
-        '<td><div class="actions-cell">' +
+        '</div></td>';
+      if (comp.hasConstruction) {
+        row += '<td>' + (onRoad ? '—' : formatLifeHours(a.expected_life_hours)) + '</td>';
+        row += '<td>' + (onRoad ? '—' : formatServiceHour(a.service_cost_per_hour)) + '</td>';
+      }
+      if (comp.hasOnRoad) {
+        row += '<td>' + (onRoad ? formatLifeKm(a.expected_life_km) : '—') + '</td>';
+        row += '<td>' + (onRoad ? formatServiceKm(a.service_cost_per_km) : '—') + '</td>';
+      }
+      row += '<td><div class="actions-cell">' +
           '<button type="button" class="btn-edit" data-id="' + a.id + '">Edit</button>' +
           '<button type="button" class="btn-delete" data-id="' + a.id + '">Delete</button>' +
         '</div></td>' +
       '</tr>';
+      return row;
     }).join('');
 
     tbody.querySelectorAll('.btn-edit').forEach(function(btn) {
@@ -542,7 +568,7 @@
     }));
   });
 
-  var ASSET_FIELD_IDS = ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-purchase-price','asset-life-hours','asset-service-cost','asset-available-hours','asset-target-utilisation'];
+  var ASSET_FIELD_IDS = ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-purchase-price','asset-life-km','asset-service-cost-km','asset-life-hours','asset-service-cost','asset-available-hours','asset-target-utilisation'];
 
   function parseOptionalFloat(raw) {
     if (raw === '' || raw == null) return null;
@@ -560,16 +586,80 @@
     return ON_ROAD_TYPES.indexOf(assetType) !== -1;
   }
 
+  function assetIsOnRoad(asset) {
+    if (!asset) return false;
+    if (asset.is_on_road === true) return true;
+    if (asset.is_on_road === false) return false;
+    return isOnRoadType(asset.asset_type);
+  }
+
+  function getFleetComposition(assets) {
+    var hasOnRoad = false;
+    var hasConstruction = false;
+    assets.forEach(function(a) {
+      if (assetIsOnRoad(a)) hasOnRoad = true;
+      else hasConstruction = true;
+    });
+    return { hasOnRoad: hasOnRoad, hasConstruction: hasConstruction };
+  }
+
+  function getTableColCount(comp) {
+    var n = 8;
+    if (comp.hasConstruction) n += 2;
+    if (comp.hasOnRoad) n += 2;
+    return n;
+  }
+
+  function formatLifeHours(val) {
+    if (val == null || val === '') return '—';
+    return Number(val).toLocaleString() + ' hr';
+  }
+
+  function formatLifeKm(val) {
+    if (val == null || val === '') return '—';
+    return Number(val).toLocaleString() + ' km';
+  }
+
+  function formatServiceHour(val) {
+    if (val == null || val === '') return '—';
+    return '$' + Number(val).toFixed(2) + '/hr';
+  }
+
+  function formatServiceKm(val) {
+    if (val == null || val === '') return '—';
+    return '$' + Number(val).toFixed(2) + '/km';
+  }
+
+  function renderTableHeader(comp) {
+    var cols = ['Asset Name', 'Type', 'Make', 'Model', 'Year', 'Fuel Type', 'Idle Burn Rate'];
+    if (comp.hasConstruction) {
+      cols.push('Life (hrs)', 'Service ($/hr)');
+    }
+    if (comp.hasOnRoad) {
+      cols.push('Life (km)', 'Service ($/km)');
+    }
+    cols.push('Actions');
+    document.getElementById('assets-thead').innerHTML =
+      '<tr>' + cols.map(function(c) { return '<th>' + c + '</th>'; }).join('') + '</tr>';
+  }
+
   function updateFormForAssetType() {
     var assetType = document.getElementById('asset-type').value;
     var onRoad = isOnRoadType(assetType);
+    var hasType = !!assetType;
     var metricBanner = document.getElementById('primary-metric-banner');
     var metricText = document.getElementById('primary-metric-text');
     var contextNote = document.getElementById('form-context-note');
     var contextIcon = document.getElementById('form-context-icon');
     var contextText = document.getElementById('form-context-text');
     var regoInput = document.getElementById('asset-rego');
-    var serviceInput = document.getElementById('asset-service-cost');
+
+    document.querySelectorAll('.field-on-road').forEach(function(el) {
+      el.classList.toggle('field-hidden', !hasType || !onRoad);
+    });
+    document.querySelectorAll('.field-construction').forEach(function(el) {
+      el.classList.toggle('field-hidden', !hasType || onRoad);
+    });
 
     if (!assetType) {
       metricBanner.className = 'primary-metric-banner';
@@ -587,32 +677,22 @@
     contextIcon.textContent = onRoad ? '🚛' : '🚧';
 
     if (onRoad) {
-      contextText.innerHTML = '<strong>Distance-first asset.</strong> Fuel Analyst calculates fuel efficiency and cost <strong>per kilometre</strong> from odometer telematics. Idling remains measured in hours using the idle burn rate below.';
+      contextText.innerHTML = '<strong>Distance-first asset.</strong> Fuel and service costs are tracked <strong>per kilometre</strong> using odometer telematics. Idling remains measured in hours using the idle burn rate below.';
       document.getElementById('label-rego').textContent = 'Registration / Plate Number';
       regoInput.placeholder = 'e.g. ABC123 — matches eRoad / telematics';
       document.getElementById('hint-rego').innerHTML = '<span class="emphasis">Important for on-road assets.</span> Used to match fuel invoices and telematics odometer data. Keep this aligned with your eRoad integration plate number.';
       document.getElementById('hint-idle-rate').textContent = 'Used to calculate idle fuel waste while stationary (e.g. traffic, loading). On-road fuel efficiency is calculated per KM from odometer data.';
-      document.getElementById('label-purchase-price').textContent = 'Purchase Price ($)';
-      document.getElementById('hint-purchase-price').textContent = 'Supports depreciation calculations. Combined with odometer distance data for total cost per KM in Fuel Analyst.';
-      document.getElementById('label-life-hours').textContent = 'Expected Total Life (hours)';
-      document.getElementById('hint-life-hours').textContent = 'Used mainly for idle-time depreciation. Distance-based calculations in Fuel Analyst rely primarily on odometer readings.';
-      document.getElementById('label-service-cost').textContent = 'Service Cost Per KM ($)';
-      serviceInput.placeholder = 'e.g. 0.15';
-      document.getElementById('hint-service-cost').textContent = 'Blended average service cost per kilometre. Used in Fuel Analyst and Idle Cost Analyst alongside idle hour calculations.';
-      document.getElementById('hint-available-hours').textContent = 'Typical weekly availability for utilisation tracking. Leave blank to default to 40 hours.';
-      document.getElementById('hint-target-utilisation').textContent = 'Target utilisation percentage — compared against actual operating hours in Utilisation Analyst.';
+      document.getElementById('hint-purchase-price').textContent = 'Supports depreciation calculations. Combined with expected life (km) and odometer distance for total cost per KM in Fuel Analyst.';
+      document.getElementById('hint-life-km').textContent = 'Total kilometres expected over the vehicle\'s useful life — divides purchase price into a per-kilometre depreciation rate.';
+      document.getElementById('hint-service-km').textContent = 'Blended average service cost per kilometre. Used in Truck Fuel Cost Analyst and related on-road modules.';
     } else {
       contextText.innerHTML = '<strong>Hours-based asset.</strong> Fuel Analyst splits invoiced fuel into <strong>operating vs idle</strong> using telematics hours and idle burn rate. Accurate idle burn rate and cost-per-operating-hour settings drive the most reliable results.';
       document.getElementById('label-rego').textContent = 'Registration / ID';
       regoInput.placeholder = 'e.g. site ID or rego (optional)';
       document.getElementById('hint-rego').textContent = 'Optional internal or site identifier. Less critical than for on-road vehicles.';
       document.getElementById('hint-idle-rate').innerHTML = '<span class="emphasis">Critical for construction assets.</span> Litres per idle hour — drives Fuel Analyst and Idle Cost Analyst split between travelling and idle fuel. Leave blank to use a default by asset type.';
-      document.getElementById('label-purchase-price').textContent = 'Purchase Price ($)';
       document.getElementById('hint-purchase-price').textContent = 'Used with expected life hours to calculate depreciation cost per operating hour in Idle Cost Analyst.';
-      document.getElementById('label-life-hours').textContent = 'Expected Total Life (hours)';
       document.getElementById('hint-life-hours').innerHTML = '<span class="emphasis">Key for cost per operating hour.</span> Total operating hours over the asset\'s useful life — divides purchase price into an hourly depreciation rate.';
-      document.getElementById('label-service-cost').textContent = 'Service Cost Per Hour ($)';
-      serviceInput.placeholder = 'e.g. 7.20';
       document.getElementById('hint-service-cost').innerHTML = '<span class="emphasis">Key for cost per operating hour.</span> Your blended average service cost per operating hour from your own service history.';
       document.getElementById('hint-available-hours').textContent = 'Hours per week the asset is available to work. Leave blank to default to 40 in Utilisation Analyst.';
       document.getElementById('hint-target-utilisation').textContent = 'Target operating utilisation percentage — compared against actual hours in Utilisation Analyst.';
@@ -622,6 +702,7 @@
   function buildAssetPayload() {
     var idleRateRaw = document.getElementById('asset-idle-rate').value;
     var assetType = document.getElementById('asset-type').value;
+    var onRoad = isOnRoadType(assetType);
     var payload = {
       asset_name: document.getElementById('asset-name').value.trim(),
       asset_type: assetType,
@@ -631,14 +712,25 @@
       year: parseOptionalInt(document.getElementById('asset-year').value),
       registration: document.getElementById('asset-rego').value.trim() || null,
       idle_burn_rate_lph: parseOptionalFloat(idleRateRaw),
-      purchase_price: parseOptionalFloat(document.getElementById('asset-purchase-price').value),
-      expected_life_hours: parseOptionalFloat(document.getElementById('asset-life-hours').value),
-      service_cost_per_hour: parseOptionalFloat(document.getElementById('asset-service-cost').value),
-      available_hours_per_week: parseOptionalFloat(document.getElementById('asset-available-hours').value),
-      target_utilisation_percent: parseOptionalFloat(document.getElementById('asset-target-utilisation').value)
+      purchase_price: parseOptionalFloat(document.getElementById('asset-purchase-price').value)
     };
+    if (onRoad) {
+      payload.expected_life_km = parseOptionalFloat(document.getElementById('asset-life-km').value);
+      payload.service_cost_per_km = parseOptionalFloat(document.getElementById('asset-service-cost-km').value);
+      payload.expected_life_hours = null;
+      payload.service_cost_per_hour = null;
+      payload.available_hours_per_week = null;
+      payload.target_utilisation_percent = null;
+    } else {
+      payload.expected_life_hours = parseOptionalFloat(document.getElementById('asset-life-hours').value);
+      payload.service_cost_per_hour = parseOptionalFloat(document.getElementById('asset-service-cost').value);
+      payload.available_hours_per_week = parseOptionalFloat(document.getElementById('asset-available-hours').value);
+      payload.target_utilisation_percent = parseOptionalFloat(document.getElementById('asset-target-utilisation').value);
+      payload.expected_life_km = null;
+      payload.service_cost_per_km = null;
+    }
     if (supportsIsOnRoad) {
-      payload.is_on_road = isOnRoadType(assetType);
+      payload.is_on_road = onRoad;
     }
     return payload;
   }
@@ -703,6 +795,8 @@
     document.getElementById('asset-rego').value = asset.registration || '';
     document.getElementById('asset-idle-rate').value = asset.idle_burn_rate_lph != null ? asset.idle_burn_rate_lph : '';
     document.getElementById('asset-purchase-price').value = asset.purchase_price != null ? asset.purchase_price : '';
+    document.getElementById('asset-life-km').value = asset.expected_life_km != null ? asset.expected_life_km : '';
+    document.getElementById('asset-service-cost-km').value = asset.service_cost_per_km != null ? asset.service_cost_per_km : '';
     document.getElementById('asset-life-hours').value = asset.expected_life_hours != null ? asset.expected_life_hours : '';
     document.getElementById('asset-service-cost').value = asset.service_cost_per_hour != null ? asset.service_cost_per_hour : '';
     document.getElementById('asset-available-hours').value = asset.available_hours_per_week != null ? asset.available_hours_per_week : '';
@@ -795,9 +889,10 @@
   });
 
   document.getElementById('download-template-btn').addEventListener('click', function() {
-    var csv = 'asset_name,asset_type,make,model,year,fuel_type,registration,idle_burn_rate_lph,purchase_price,expected_life_hours,service_cost_per_hour,available_hours_per_week,target_utilisation_percent\n' +
-      'CAT 390F Excavator,Excavator,Caterpillar,390F,2021,Diesel,,4.0,285000,20000,7.20,40,75\n' +
-      'Komatsu HD785 Dump Truck,Dump Truck,Komatsu,HD785,2019,Diesel,ABC123,5.5,420000,25000,8.50,40,80\n';
+    var csv = 'asset_name,asset_type,make,model,year,fuel_type,registration,idle_burn_rate_lph,purchase_price,expected_life_hours,service_cost_per_hour,available_hours_per_week,target_utilisation_percent,expected_life_km,service_cost_per_km\n' +
+      'CAT 390F Excavator,Excavator,Caterpillar,390F,2021,Diesel,,4.0,285000,20000,7.20,40,75,,\n' +
+      'Komatsu HD785 Dump Truck,Dump Truck,Komatsu,HD785,2019,Diesel,ABC123,5.5,420000,25000,8.50,40,80,,\n' +
+      'Kenworth T610,Rigid Truck,Kenworth,T610,2022,Diesel,XYZ789,2.5,180000,,,,,800000,0.15\n';
     var blob = new Blob([csv], { type: 'text/csv' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'FleetMagnify_Assets_Template.csv'; a.click();
@@ -852,41 +947,52 @@
     document.getElementById('csv-file-input').value = '';
   });
 
+  function buildCsvRecord(row) {
+    var onRoad = isOnRoadType(row.asset_type);
+    var rec = {
+      user_id: currentUser.id,
+      asset_name: row.asset_name || null,
+      asset_type: row.asset_type || null,
+      make: row.make || null,
+      model: row.model || null,
+      year: parseInt(row.year, 10) || null,
+      fuel_type: row.fuel_type || null,
+      registration: row.registration || null,
+      idle_burn_rate_lph: row.idle_burn_rate_lph ? parseFloat(row.idle_burn_rate_lph) : null,
+      purchase_price: row.purchase_price ? parseFloat(row.purchase_price) : null
+    };
+    if (onRoad) {
+      rec.expected_life_km = row.expected_life_km ? parseFloat(row.expected_life_km) : null;
+      rec.service_cost_per_km = row.service_cost_per_km ? parseFloat(row.service_cost_per_km) : null;
+      rec.expected_life_hours = null;
+      rec.service_cost_per_hour = null;
+      rec.available_hours_per_week = null;
+      rec.target_utilisation_percent = null;
+    } else {
+      rec.expected_life_hours = row.expected_life_hours ? parseFloat(row.expected_life_hours) : null;
+      rec.service_cost_per_hour = row.service_cost_per_hour ? parseFloat(row.service_cost_per_hour) : null;
+      rec.available_hours_per_week = row.available_hours_per_week ? parseFloat(row.available_hours_per_week) : null;
+      rec.target_utilisation_percent = row.target_utilisation_percent ? parseFloat(row.target_utilisation_percent) : null;
+      rec.expected_life_km = null;
+      rec.service_cost_per_km = null;
+    }
+    if (supportsIsOnRoad && row.asset_type) {
+      rec.is_on_road = onRoad;
+    }
+    return rec;
+  }
+
   document.getElementById('import-csv-btn').addEventListener('click', async function() {
     if (csvRows.length === 0) return;
     this.disabled = true; this.textContent = 'Importing...';
-    var records = csvRows.map(function(r) {
-      var rec = {
-        user_id: currentUser.id, asset_name: r.asset_name || null, asset_type: r.asset_type || null,
-        make: r.make || null, model: r.model || null, year: parseInt(r.year) || null,
-        fuel_type: r.fuel_type || null, registration: r.registration || null,
-        idle_burn_rate_lph: r.idle_burn_rate_lph ? parseFloat(r.idle_burn_rate_lph) : null,
-        purchase_price: r.purchase_price ? parseFloat(r.purchase_price) : null,
-        expected_life_hours: r.expected_life_hours ? parseFloat(r.expected_life_hours) : null,
-        service_cost_per_hour: r.service_cost_per_hour ? parseFloat(r.service_cost_per_hour) : null,
-        available_hours_per_week: r.available_hours_per_week ? parseFloat(r.available_hours_per_week) : null,
-        target_utilisation_percent: r.target_utilisation_percent ? parseFloat(r.target_utilisation_percent) : null
-      };
-      if (supportsIsOnRoad && r.asset_type) {
-        rec.is_on_road = isOnRoadType(r.asset_type);
-      }
-      return rec;
-    });
+    var records = csvRows.map(buildCsvRecord);
     var { error } = await supabase.from('assets').insert(records);
     if (error && supportsIsOnRoad && error.message && error.message.indexOf('is_on_road') !== -1) {
       supportsIsOnRoad = false;
       records = csvRows.map(function(r) {
-        return {
-          user_id: currentUser.id, asset_name: r.asset_name || null, asset_type: r.asset_type || null,
-          make: r.make || null, model: r.model || null, year: parseInt(r.year) || null,
-          fuel_type: r.fuel_type || null, registration: r.registration || null,
-          idle_burn_rate_lph: r.idle_burn_rate_lph ? parseFloat(r.idle_burn_rate_lph) : null,
-          purchase_price: r.purchase_price ? parseFloat(r.purchase_price) : null,
-          expected_life_hours: r.expected_life_hours ? parseFloat(r.expected_life_hours) : null,
-          service_cost_per_hour: r.service_cost_per_hour ? parseFloat(r.service_cost_per_hour) : null,
-          available_hours_per_week: r.available_hours_per_week ? parseFloat(r.available_hours_per_week) : null,
-          target_utilisation_percent: r.target_utilisation_percent ? parseFloat(r.target_utilisation_percent) : null
-        };
+        var rec = buildCsvRecord(r);
+        delete rec.is_on_road;
+        return rec;
       });
       var retry = await supabase.from('assets').insert(records);
       error = retry.error;
