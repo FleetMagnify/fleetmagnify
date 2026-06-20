@@ -571,32 +571,64 @@
   var TRUCK_MILEAGE_HEADERS = ['vehicle_name', 'reading_date', 'odometer_km', 'source'];
   var FUEL_PREVIEW_COLS = ['asset_name', 'record_date', 'litres', 'cost_per_litre', 'total_cost', 'supplier'];
   var TEL_PREVIEW_COLS = ['asset_name', 'record_date', 'total_engine_hours', 'operating_hours', 'idle_hours', 'odometer_km'];
+  var FUEL_HEADER_KEYS = ['asset_name', 'record_date'];
+  var TEL_HEADER_KEYS = ['asset_name', 'record_date'];
+  var TRUCK_FUEL_HEADER_KEYS = ['vehicle_name', 'purchase_date'];
+  var TRUCK_MILEAGE_HEADER_KEYS = ['vehicle_name', 'reading_date'];
+  var HEADER_SCAN_LIMIT = 15;
+
+  function normalizeHeaderCell(cell) {
+    return String(cell).trim().toLowerCase().replace(/\s+/g, '_');
+  }
+
+  function findHeaderRowIndex(sheetRows, expectedHeaders) {
+    var limit = Math.min(sheetRows.length, HEADER_SCAN_LIMIT);
+    for (var i = 0; i < limit; i++) {
+      var normalized = (sheetRows[i] || []).map(normalizeHeaderCell);
+      var matches = expectedHeaders.every(function(h) {
+        return normalized.indexOf(h) !== -1;
+      });
+      if (matches) return i;
+    }
+    return -1;
+  }
 
   // ── CSV / Excel parser ──
-  function parseCSV(text) {
+  function parseCSV(text, expectedHeaders, nameColumn) {
+    expectedHeaders = expectedHeaders || FUEL_HEADER_KEYS;
+    nameColumn = nameColumn || 'asset_name';
     var lines = text.split('\n').map(function(l) { return l.trim(); }).filter(Boolean);
     if (lines.length < 2) return { headers: [], rows: [] };
-    var headerIdx = 0;
-    for (var h = 0; h < lines.length; h++) {
-      if (lines[h].toLowerCase().indexOf('asset_name') !== -1) {
+    var headerIdx = -1;
+    for (var h = 0; h < Math.min(lines.length, HEADER_SCAN_LIMIT); h++) {
+      var normalized = lines[h].split(',').map(function(hdr) {
+        return normalizeHeaderCell(hdr.replace(/\r/g, ''));
+      });
+      if (expectedHeaders.every(function(key) { return normalized.indexOf(key) !== -1; })) {
         headerIdx = h;
         break;
       }
     }
-    var headers = lines[headerIdx].split(',').map(function(hdr) { return hdr.trim().toLowerCase().replace(/\r/g,''); });
+    if (headerIdx === -1) return { headers: [], rows: [] };
+    var headers = lines[headerIdx].split(',').map(function(hdr) {
+      return normalizeHeaderCell(hdr.replace(/\r/g, ''));
+    });
     var rows = [];
     for (var i = headerIdx + 1; i < lines.length; i++) {
       var vals = lines[i].split(',').map(function(v) { return v.trim().replace(/\r/g,''); });
       if (vals.every(function(v) { return !v; })) continue;
       var row = { _rowNum: i + 1 };
-      headers.forEach(function(hdr, idx) { row[hdr] = vals[idx] !== undefined ? vals[idx] : ''; });
-      if ((row.asset_name || '').trim() || (row.asset_id || '').trim()) rows.push(row);
+      headers.forEach(function(hdr, idx) {
+        if (hdr) row[hdr] = vals[idx] !== undefined ? vals[idx] : '';
+      });
+      if (String(row[nameColumn] || '').trim()) rows.push(row);
     }
-    return { headers: headers, rows: rows };
+    return { headers: headers.filter(Boolean), rows: rows };
   }
 
-  function parseExcelSheetFromWorkbook(workbook, preferredSheetName, headerColumn) {
-    headerColumn = headerColumn || 'asset_name';
+  function parseExcelSheetFromWorkbook(workbook, preferredSheetName, expectedHeaders, nameColumn) {
+    expectedHeaders = expectedHeaders || FUEL_HEADER_KEYS;
+    nameColumn = nameColumn || 'asset_name';
     var sheetName = workbook.SheetNames[0];
     if (preferredSheetName && workbook.SheetNames.indexOf(preferredSheetName) !== -1) {
       sheetName = preferredSheetName;
@@ -604,17 +636,9 @@
     var sheet = workbook.Sheets[sheetName];
     if (!sheet) return { headers: [], rows: [], sheetName: sheetName };
     var sheetRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-    var headerIdx = -1;
-    var headers = [];
-    for (var i = 0; i < sheetRows.length; i++) {
-      var normalized = (sheetRows[i] || []).map(function(c) { return String(c).trim().toLowerCase(); });
-      if (normalized.indexOf(headerColumn) !== -1) {
-        headerIdx = i;
-        headers = normalized;
-        break;
-      }
-    }
+    var headerIdx = findHeaderRowIndex(sheetRows, expectedHeaders);
     if (headerIdx === -1) return { headers: [], rows: [], sheetName: sheetName };
+    var headers = (sheetRows[headerIdx] || []).map(normalizeHeaderCell);
     var rows = [];
     for (var j = headerIdx + 1; j < sheetRows.length; j++) {
       var vals = sheetRows[j] || [];
@@ -623,26 +647,31 @@
       headers.forEach(function(hdr, idx) {
         if (hdr) row[hdr] = vals[idx] != null ? String(vals[idx]).trim() : '';
       });
-      var nameVal = row[headerColumn] || '';
-      if (String(nameVal).trim()) rows.push(row);
+      if (String(row[nameColumn] || '').trim()) rows.push(row);
     }
-    return { headers: headers, rows: rows, sheetName: sheetName };
+    return { headers: headers.filter(Boolean), rows: rows, sheetName: sheetName };
   }
 
-  function parseExcelUpload(arrayBuffer, preferredSheetName, headerColumn) {
+  function parseExcelUpload(arrayBuffer, options) {
+    options = options || {};
     var workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
-    return parseExcelSheetFromWorkbook(workbook, preferredSheetName, headerColumn);
+    return parseExcelSheetFromWorkbook(
+      workbook,
+      options.preferredSheet,
+      options.expectedHeaders,
+      options.nameColumn || 'asset_name'
+    );
   }
 
   function parseTruckWorkbook(arrayBuffer) {
     var workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
-    var fuel = parseExcelSheetFromWorkbook(workbook, 'Fuel Purchases', 'vehicle_name');
-    var mileage = parseExcelSheetFromWorkbook(workbook, 'Eroad Mileage', 'vehicle_name');
+    var fuel = parseExcelSheetFromWorkbook(workbook, 'Fuel Purchases', TRUCK_FUEL_HEADER_KEYS, 'vehicle_name');
+    var mileage = parseExcelSheetFromWorkbook(workbook, 'Eroad Mileage', TRUCK_MILEAGE_HEADER_KEYS, 'vehicle_name');
     if (!fuel.rows.length && workbook.SheetNames.length > 0 && fuel.sheetName !== 'Fuel Purchases') {
-      fuel = parseExcelSheetFromWorkbook(workbook, workbook.SheetNames[0], 'vehicle_name');
+      fuel = parseExcelSheetFromWorkbook(workbook, workbook.SheetNames[0], TRUCK_FUEL_HEADER_KEYS, 'vehicle_name');
     }
     if (!mileage.rows.length && workbook.SheetNames.length > 1) {
-      mileage = parseExcelSheetFromWorkbook(workbook, workbook.SheetNames[1], 'vehicle_name');
+      mileage = parseExcelSheetFromWorkbook(workbook, workbook.SheetNames[1], TRUCK_MILEAGE_HEADER_KEYS, 'vehicle_name');
     }
     return { fuel: fuel, mileage: mileage };
   }
@@ -660,7 +689,7 @@
           if (options.mode === 'truck') {
             callback(parseTruckWorkbook(e.target.result), null);
           } else {
-            callback(parseExcelUpload(e.target.result, options.preferredSheet, options.headerColumn || 'asset_name'), null);
+            callback(parseExcelUpload(e.target.result, options), null);
           }
         } catch (err) {
           callback(null, 'Could not read Excel file: ' + (err.message || 'unknown error'));
@@ -674,7 +703,9 @@
       return;
     }
     var textReader = new FileReader();
-    textReader.onload = function(e) { callback(parseCSV(e.target.result), null); };
+    textReader.onload = function(e) {
+      callback(parseCSV(e.target.result, options.expectedHeaders, options.nameColumn || 'asset_name'), null);
+    };
     textReader.readAsText(file);
   }
 
@@ -786,7 +817,7 @@
   setupDropZone('fuel-drop', 'fuel-file', function(file) {
     document.getElementById('fuel-filename').style.display = 'block';
     document.getElementById('fuel-filename').textContent = '📎 ' + file.name;
-    readUploadFile(file, { preferredSheet: 'Fuel Data' }, function(parsed, err) {
+    readUploadFile(file, { preferredSheet: 'Fuel Data', expectedHeaders: FUEL_HEADER_KEYS, nameColumn: 'asset_name' }, function(parsed, err) {
       if (err) { showResult('fuel-result', err, 'error'); return; }
       fuelRows = parsed.rows;
       if (fuelRows.length === 0) { showResult('fuel-result', 'No valid rows found. Check your file matches the template.', 'error'); return; }
@@ -850,7 +881,7 @@
   setupDropZone('tel-drop', 'tel-file', function(file) {
     document.getElementById('tel-filename').style.display = 'block';
     document.getElementById('tel-filename').textContent = '📎 ' + file.name;
-    readUploadFile(file, { preferredSheet: 'Telematics Data' }, function(parsed, err) {
+    readUploadFile(file, { preferredSheet: 'Telematics Data', expectedHeaders: TEL_HEADER_KEYS, nameColumn: 'asset_name' }, function(parsed, err) {
       if (err) { showResult('tel-result', err, 'error'); return; }
       telRows = parsed.rows;
       if (telRows.length === 0) { showResult('tel-result', 'No valid rows found. Check your file matches the template.', 'error'); return; }
