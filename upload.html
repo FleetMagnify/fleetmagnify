@@ -102,7 +102,8 @@
   .info-strip p strong { color: #C8D0DB; font-weight: 600; }
 
   /* ── UPLOAD GRID ── */
-  .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+  .upload-panel-full { grid-column: 1 / -1; }
 
   /* ── UPLOAD PANEL ── */
   .upload-panel {
@@ -194,6 +195,9 @@
   }
   .result-box.success { background: rgba(14,165,122,0.10); border: 1px solid rgba(14,165,122,0.25); color: #6DDBB8; display: block; }
   .result-box.error { background: rgba(226,75,74,0.10); border: 1px solid rgba(226,75,74,0.28); color: #F0A8A7; display: block; }
+  .result-skipped { margin-top: 8px; font-size: 12px; color: #C8A060; line-height: 1.55; }
+  .preview-sheet-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3A4A5C; padding: 10px 14px 0; }
+  .preview-sheet-block + .preview-sheet-block { border-top: 1px solid rgba(255,255,255,0.05); margin-top: 4px; }
 
   /* Action row */
   .panel-actions { display: flex; align-items: center; gap: 10px; }
@@ -219,7 +223,7 @@
     display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
   }
   .help-title::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.05); }
-  .help-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .help-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
   .help-card {
     background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.06);
     border-radius: 12px; padding: 20px;
@@ -400,6 +404,61 @@
         </div>
       </div>
 
+      <!-- ── TRUCK FUEL & MILEAGE ── -->
+      <div class="upload-panel upload-panel-full">
+        <div class="panel-header">
+          <div class="panel-tag">🚛 Truck Fleet</div>
+          <div class="panel-title">Truck Fuel Purchases &amp; Mileage</div>
+          <div class="panel-sub">Import BP fuel purchase and eROAD mileage data for on-road vehicles. Excel file with <strong>Fuel Purchases</strong> and <strong>Eroad Mileage</strong> sheets.</div>
+        </div>
+        <div class="panel-body">
+          <div class="template-row">
+            <div class="template-info">
+              <div class="template-icon">📄</div>
+              <div>
+                <div class="template-label">Truck Data Template</div>
+                <div class="template-desc">Two-sheet Excel — Fuel Purchases and Eroad Mileage</div>
+              </div>
+            </div>
+            <button class="btn-download" id="truck-template-btn">⬇ Download</button>
+          </div>
+
+          <div class="drop-zone" id="truck-drop">
+            <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" id="truck-file">
+            <div class="drop-icon">📂</div>
+            <div class="drop-text"><strong>Click to browse</strong> or drag and drop</div>
+            <div class="drop-formats">Accepts .xlsx files only (two sheets required)</div>
+            <div class="drop-filename" id="truck-filename"></div>
+          </div>
+
+          <div class="preview-wrap" id="truck-preview">
+            <div class="preview-head">
+              <span class="preview-head-label">Preview</span>
+              <span class="preview-head-count" id="truck-count"></span>
+            </div>
+            <div class="preview-sheet-block">
+              <div class="preview-sheet-label">Fuel Purchases</div>
+              <div class="preview-scroll">
+                <table class="preview-table" id="truck-fuel-preview-table"></table>
+              </div>
+            </div>
+            <div class="preview-sheet-block">
+              <div class="preview-sheet-label">Eroad Mileage</div>
+              <div class="preview-scroll">
+                <table class="preview-table" id="truck-mileage-preview-table"></table>
+              </div>
+            </div>
+          </div>
+
+          <div class="result-box" id="truck-result"></div>
+
+          <div class="panel-actions">
+            <button class="btn-clear" id="truck-clear-btn">Clear</button>
+            <button class="btn-import" id="truck-import-btn" disabled>Import Truck Data</button>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- HELP SECTION -->
@@ -419,7 +478,12 @@
         <div class="help-card">
           <div class="help-card-icon">📅</div>
           <h4>Date Format</h4>
-          <p>All dates must use the format YYYY-MM-DD. Example: 2026-06-15. Duplicate a row for each date — do not change asset_id or asset_name.</p>
+          <p>All dates must use the format YYYY-MM-DD. Example: 2026-06-15. Duplicate a row for each date — do not change asset_name or vehicle_name.</p>
+        </div>
+        <div class="help-card">
+          <div class="help-card-icon">🚛</div>
+          <h4>Truck Template Sheets</h4>
+          <p><strong>Fuel Purchases:</strong> vehicle_name · purchase_date · litres · cost_nzd · source<br><strong>Eroad Mileage:</strong> vehicle_name · reading_date · odometer_km · source</p>
         </div>
       </div>
     </div>
@@ -442,6 +506,10 @@
   var currentUser = null;
   var fuelRows = [];
   var telRows = [];
+  var truckFuelRows = [];
+  var truckMileageRows = [];
+  var truckFuelHeaders = [];
+  var truckMileageHeaders = [];
 
   // ── Auth ──
   async function init() {
@@ -466,25 +534,43 @@
   }
   function findAssetIdByName(assets, name) {
     var n = (name || '').trim().toLowerCase();
+    if (!n) return null;
     var match = assets.find(function(a) { return (a.asset_name || '').trim().toLowerCase() === n; });
     return match ? match.id : null;
   }
-  function resolveAssetId(assets, row) {
-    var rawId = (row.asset_id || '').trim();
-    if (rawId) {
-      var id = parseInt(rawId, 10);
-      if (!isNaN(id)) {
-        var byId = assets.find(function(a) { return Number(a.id) === id; });
-        if (byId) return byId.id;
-      }
-    }
-    return findAssetIdByName(assets, row.asset_name);
+
+  function findVehicleIdByName(assets, name) {
+    return findAssetIdByName(assets, name);
   }
 
+  function parseOptionalFloat(raw) {
+    if (raw === '' || raw == null || String(raw).trim() === '') return null;
+    var n = parseFloat(String(raw).trim());
+    return isNaN(n) ? null : n;
+  }
+
+  function formatImportResult(imported, skippedDetails, label) {
+    var msg = imported > 0
+      ? (imported + ' ' + label + ' imported successfully.')
+      : 'No rows could be imported.';
+    if (skippedDetails.length) {
+      msg += ' ' + skippedDetails.length + ' row' + (skippedDetails.length !== 1 ? 's' : '') + ' skipped:';
+      msg += '<div class="result-skipped">' + skippedDetails.map(function(s) { return esc(s); }).join('<br>') + '</div>';
+    }
+    return msg;
+  }
+
+  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var FUEL_NOTE = 'Each row is one asset on one date. Duplicate a row for each date you have data for. Do not change asset_id or asset_name.';
   var TEL_NOTE = 'Each row is one asset on one date. Duplicate a row for each date you have data for. Do not change asset_id or asset_name.';
   var FUEL_HEADERS = ['asset_id', 'asset_name', 'record_date', 'litres', 'cost_per_litre', 'total_cost', 'supplier'];
   var TEL_HEADERS = ['asset_id', 'asset_name', 'record_date', 'total_engine_hours', 'operating_hours', 'idle_hours', 'odometer_km'];
+  var TRUCK_FUEL_NOTE = 'Each row is one fuel purchase. vehicle_name must match an asset in your fleet. Do not change vehicle_name.';
+  var TRUCK_MILEAGE_NOTE = 'Each row is one odometer reading. vehicle_name must match an asset in your fleet.';
+  var TRUCK_FUEL_HEADERS = ['vehicle_name', 'purchase_date', 'litres', 'cost_nzd', 'source'];
+  var TRUCK_MILEAGE_HEADERS = ['vehicle_name', 'reading_date', 'odometer_km', 'source'];
+  var FUEL_PREVIEW_COLS = ['asset_name', 'record_date', 'litres', 'cost_per_litre', 'total_cost', 'supplier'];
+  var TEL_PREVIEW_COLS = ['asset_name', 'record_date', 'total_engine_hours', 'operating_hours', 'idle_hours', 'odometer_km'];
 
   // ── CSV / Excel parser ──
   function parseCSV(text) {
@@ -502,43 +588,67 @@
     for (var i = headerIdx + 1; i < lines.length; i++) {
       var vals = lines[i].split(',').map(function(v) { return v.trim().replace(/\r/g,''); });
       if (vals.every(function(v) { return !v; })) continue;
-      var row = {};
+      var row = { _rowNum: i + 1 };
       headers.forEach(function(hdr, idx) { row[hdr] = vals[idx] !== undefined ? vals[idx] : ''; });
       if ((row.asset_name || '').trim() || (row.asset_id || '').trim()) rows.push(row);
     }
     return { headers: headers, rows: rows };
   }
 
-  function parseExcelUpload(arrayBuffer) {
-    var workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
-    var sheet = workbook.Sheets[workbook.SheetNames[0]];
-    if (!sheet) return { headers: [], rows: [] };
+  function parseExcelSheetFromWorkbook(workbook, preferredSheetName, headerColumn) {
+    headerColumn = headerColumn || 'asset_name';
+    var sheetName = workbook.SheetNames[0];
+    if (preferredSheetName && workbook.SheetNames.indexOf(preferredSheetName) !== -1) {
+      sheetName = preferredSheetName;
+    }
+    var sheet = workbook.Sheets[sheetName];
+    if (!sheet) return { headers: [], rows: [], sheetName: sheetName };
     var sheetRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
     var headerIdx = -1;
     var headers = [];
     for (var i = 0; i < sheetRows.length; i++) {
       var normalized = (sheetRows[i] || []).map(function(c) { return String(c).trim().toLowerCase(); });
-      if (normalized.indexOf('asset_name') !== -1) {
+      if (normalized.indexOf(headerColumn) !== -1) {
         headerIdx = i;
         headers = normalized;
         break;
       }
     }
-    if (headerIdx === -1) return { headers: [], rows: [] };
+    if (headerIdx === -1) return { headers: [], rows: [], sheetName: sheetName };
     var rows = [];
     for (var j = headerIdx + 1; j < sheetRows.length; j++) {
       var vals = sheetRows[j] || [];
       if (vals.every(function(v) { return String(v).trim() === ''; })) continue;
-      var row = {};
+      var row = { _rowNum: j + 1 };
       headers.forEach(function(hdr, idx) {
         if (hdr) row[hdr] = vals[idx] != null ? String(vals[idx]).trim() : '';
       });
-      if ((row.asset_name || '').trim() || (row.asset_id || '').trim()) rows.push(row);
+      var nameVal = row[headerColumn] || '';
+      if (String(nameVal).trim()) rows.push(row);
     }
-    return { headers: headers, rows: rows };
+    return { headers: headers, rows: rows, sheetName: sheetName };
   }
 
-  function readUploadFile(file, callback) {
+  function parseExcelUpload(arrayBuffer, preferredSheetName, headerColumn) {
+    var workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+    return parseExcelSheetFromWorkbook(workbook, preferredSheetName, headerColumn);
+  }
+
+  function parseTruckWorkbook(arrayBuffer) {
+    var workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+    var fuel = parseExcelSheetFromWorkbook(workbook, 'Fuel Purchases', 'vehicle_name');
+    var mileage = parseExcelSheetFromWorkbook(workbook, 'Eroad Mileage', 'vehicle_name');
+    if (!fuel.rows.length && workbook.SheetNames.length > 0 && fuel.sheetName !== 'Fuel Purchases') {
+      fuel = parseExcelSheetFromWorkbook(workbook, workbook.SheetNames[0], 'vehicle_name');
+    }
+    if (!mileage.rows.length && workbook.SheetNames.length > 1) {
+      mileage = parseExcelSheetFromWorkbook(workbook, workbook.SheetNames[1], 'vehicle_name');
+    }
+    return { fuel: fuel, mileage: mileage };
+  }
+
+  function readUploadFile(file, options, callback) {
+    options = options || {};
     if (/\.xlsx$/i.test(file.name)) {
       if (typeof XLSX === 'undefined') {
         callback(null, 'Excel library failed to load. Please refresh the page.');
@@ -547,7 +657,11 @@
       var reader = new FileReader();
       reader.onload = function(e) {
         try {
-          callback(parseExcelUpload(e.target.result), null);
+          if (options.mode === 'truck') {
+            callback(parseTruckWorkbook(e.target.result), null);
+          } else {
+            callback(parseExcelUpload(e.target.result, options.preferredSheet, options.headerColumn || 'asset_name'), null);
+          }
         } catch (err) {
           callback(null, 'Could not read Excel file: ' + (err.message || 'unknown error'));
         }
@@ -555,9 +669,18 @@
       reader.readAsArrayBuffer(file);
       return;
     }
+    if (!/\.csv$/i.test(file.name)) {
+      callback(null, 'Unsupported file type. Please upload .xlsx or .csv');
+      return;
+    }
     var textReader = new FileReader();
     textReader.onload = function(e) { callback(parseCSV(e.target.result), null); };
     textReader.readAsText(file);
+  }
+
+  function previewColumns(allHeaders, preferred) {
+    var cols = preferred.filter(function(h) { return allHeaders.indexOf(h) !== -1; });
+    return cols.length ? cols : allHeaders;
   }
 
   function renderPreview(tableEl, headers, rows) {
@@ -567,6 +690,22 @@
       return '<tr>' + headers.map(function(h) { return '<td>' + esc(r[h] || '') + '</td>'; }).join('') + '</tr>';
     }).join('') + '</tbody>';
     tableEl.innerHTML = thead + tbody;
+  }
+
+  function skippedRowMessage(r, nameField, sheetLabel) {
+    var name = (r[nameField] || '').trim() || '(blank)';
+    var prefix = sheetLabel ? sheetLabel + ' row ' : 'Row ';
+    return prefix + (r._rowNum || '?') + ': "' + name + '" — no matching asset';
+  }
+
+  async function getTruckAssets() {
+    var { data } = await supabase
+      .from('assets')
+      .select('id, asset_name')
+      .eq('user_id', currentUser.id)
+      .in('asset_type', ON_ROAD_TYPES)
+      .order('asset_name');
+    return data || [];
   }
 
   // ── Templates ──
@@ -616,21 +755,49 @@
     buildTelematicsTemplate();
   });
 
+  async function buildTruckTemplate() {
+    if (typeof XLSX === 'undefined') {
+      showToast('Excel library failed to load. Please refresh the page.', 'error');
+      return;
+    }
+    var vehicles = await getTruckAssets();
+    var fuelRows = [[TRUCK_FUEL_NOTE], TRUCK_FUEL_HEADERS];
+    var mileageRows = [[TRUCK_MILEAGE_NOTE], TRUCK_MILEAGE_HEADERS];
+    if (vehicles.length) {
+      vehicles.forEach(function(v) {
+        fuelRows.push([v.asset_name, '', '', '', '']);
+        mileageRows.push([v.asset_name, '', '', '']);
+      });
+    } else {
+      fuelRows.push(['Truck 01', '', '', '', '']);
+      mileageRows.push(['Truck 01', '', '', '']);
+    }
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(fuelRows), 'Fuel Purchases');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(mileageRows), 'Eroad Mileage');
+    XLSX.writeFile(wb, 'FleetMagnify_Truck_Template.xlsx');
+  }
+
+  document.getElementById('truck-template-btn').addEventListener('click', function() {
+    buildTruckTemplate();
+  });
+
   // ── FUEL FILE ──
   setupDropZone('fuel-drop', 'fuel-file', function(file) {
     document.getElementById('fuel-filename').style.display = 'block';
     document.getElementById('fuel-filename').textContent = '📎 ' + file.name;
-    readUploadFile(file, function(parsed, err) {
+    readUploadFile(file, { preferredSheet: 'Fuel Data' }, function(parsed, err) {
       if (err) { showResult('fuel-result', err, 'error'); return; }
       fuelRows = parsed.rows;
       if (fuelRows.length === 0) { showResult('fuel-result', 'No valid rows found. Check your file matches the template.', 'error'); return; }
-      renderPreview(document.getElementById('fuel-preview-table'), parsed.headers, fuelRows);
+      var cols = previewColumns(parsed.headers, FUEL_PREVIEW_COLS);
+      renderPreview(document.getElementById('fuel-preview-table'), cols, fuelRows);
       document.getElementById('fuel-count').textContent = fuelRows.length + ' row' + (fuelRows.length !== 1 ? 's' : '') + ' found';
       document.getElementById('fuel-preview').classList.add('visible');
       document.getElementById('fuel-import-btn').disabled = false;
       document.getElementById('fuel-result').className = 'result-box';
     });
-  });
+  }, /\.(csv|xlsx)$/i);
 
   document.getElementById('fuel-clear-btn').addEventListener('click', function() {
     fuelRows = [];
@@ -645,52 +812,56 @@
     if (!fuelRows.length) return;
     this.disabled = true; this.textContent = 'Importing...';
     var assets = await getAssets();
-    var records = []; var skipped = 0;
+    var records = [];
+    var skippedDetails = [];
     fuelRows.forEach(function(r) {
-      var assetId = resolveAssetId(assets, r);
-      if (!assetId) { skipped++; return; }
+      var assetId = findAssetIdByName(assets, r.asset_name);
+      if (!assetId) {
+        skippedDetails.push(skippedRowMessage(r, 'asset_name'));
+        return;
+      }
       records.push({
         user_id: currentUser.id,
-        asset_id: assetId,
+        asset_id: Number(assetId),
         record_date: r.record_date || null,
-        litres: parseFloat(r.litres) || null,
-        cost_per_litre: parseFloat(r.cost_per_litre) || null,
-        total_cost: parseFloat(r.total_cost) || null,
+        litres: parseOptionalFloat(r.litres),
+        cost_per_litre: parseOptionalFloat(r.cost_per_litre),
+        total_cost: parseOptionalFloat(r.total_cost),
         supplier: r.supplier || null
       });
     });
     if (records.length === 0) {
-      showResult('fuel-result', 'No rows could be matched to your assets. Check asset_id or asset_name in your file.', 'error');
+      showResultHtml('fuel-result', formatImportResult(0, skippedDetails, 'fuel record'), 'error');
       this.disabled = false; this.textContent = 'Import Fuel Data'; return;
     }
     var { error } = await supabase.from('fuel_records').insert(records);
     this.disabled = false; this.textContent = 'Import Fuel Data';
     if (error) { showResult('fuel-result', 'Import failed: ' + error.message, 'error'); return; }
-    var msg = records.length + ' fuel record' + (records.length !== 1 ? 's' : '') + ' imported successfully.';
-    if (skipped > 0) msg += ' ' + skipped + ' row' + (skipped !== 1 ? 's' : '') + ' skipped (asset not found).';
-    showResult('fuel-result', msg, 'success');
+    showResultHtml('fuel-result', formatImportResult(records.length, skippedDetails, 'fuel record' + (records.length !== 1 ? 's' : '')), 'success');
     showToast(records.length + ' fuel records imported', 'success');
     fuelRows = [];
     document.getElementById('fuel-preview').classList.remove('visible');
     document.getElementById('fuel-file').value = '';
     document.getElementById('fuel-filename').style.display = 'none';
+    document.getElementById('fuel-import-btn').disabled = true;
   });
 
   // ── TELEMATICS FILE ──
   setupDropZone('tel-drop', 'tel-file', function(file) {
     document.getElementById('tel-filename').style.display = 'block';
     document.getElementById('tel-filename').textContent = '📎 ' + file.name;
-    readUploadFile(file, function(parsed, err) {
+    readUploadFile(file, { preferredSheet: 'Telematics Data' }, function(parsed, err) {
       if (err) { showResult('tel-result', err, 'error'); return; }
       telRows = parsed.rows;
       if (telRows.length === 0) { showResult('tel-result', 'No valid rows found. Check your file matches the template.', 'error'); return; }
-      renderPreview(document.getElementById('tel-preview-table'), parsed.headers, telRows);
+      var cols = previewColumns(parsed.headers, TEL_PREVIEW_COLS);
+      renderPreview(document.getElementById('tel-preview-table'), cols, telRows);
       document.getElementById('tel-count').textContent = telRows.length + ' row' + (telRows.length !== 1 ? 's' : '') + ' found';
       document.getElementById('tel-preview').classList.add('visible');
       document.getElementById('tel-import-btn').disabled = false;
       document.getElementById('tel-result').className = 'result-box';
     });
-  });
+  }, /\.(csv|xlsx)$/i);
 
   document.getElementById('tel-clear-btn').addEventListener('click', function() {
     telRows = [];
@@ -705,39 +876,163 @@
     if (!telRows.length) return;
     this.disabled = true; this.textContent = 'Importing...';
     var assets = await getAssets();
-    var records = []; var skipped = 0;
+    var records = [];
+    var skippedDetails = [];
     telRows.forEach(function(r) {
-      var assetId = resolveAssetId(assets, r);
-      if (!assetId) { skipped++; return; }
+      var assetId = findAssetIdByName(assets, r.asset_name);
+      if (!assetId) {
+        skippedDetails.push(skippedRowMessage(r, 'asset_name'));
+        return;
+      }
       records.push({
         user_id: currentUser.id,
-        asset_id: assetId,
+        asset_id: Number(assetId),
         record_date: r.record_date || null,
-        total_engine_hours: parseFloat(r.total_engine_hours) || null,
-        operating_hours: parseFloat(r.operating_hours) || null,
-        idle_hours: parseFloat(r.idle_hours) || null,
-        odometer_km: parseFloat(r.odometer_km) || null
+        total_engine_hours: parseOptionalFloat(r.total_engine_hours),
+        operating_hours: parseOptionalFloat(r.operating_hours),
+        idle_hours: parseOptionalFloat(r.idle_hours),
+        odometer_km: parseOptionalFloat(r.odometer_km)
       });
     });
     if (records.length === 0) {
-      showResult('tel-result', 'No rows could be matched to your assets. Check asset_id or asset_name in your file.', 'error');
+      showResultHtml('tel-result', formatImportResult(0, skippedDetails, 'telematics record'), 'error');
       this.disabled = false; this.textContent = 'Import Telematics Data'; return;
     }
     var { error } = await supabase.from('telematics_records').insert(records);
     this.disabled = false; this.textContent = 'Import Telematics Data';
     if (error) { showResult('tel-result', 'Import failed: ' + error.message, 'error'); return; }
-    var msg = records.length + ' telematics record' + (records.length !== 1 ? 's' : '') + ' imported successfully.';
-    if (skipped > 0) msg += ' ' + skipped + ' row' + (skipped !== 1 ? 's' : '') + ' skipped (asset not found).';
-    showResult('tel-result', msg, 'success');
+    showResultHtml('tel-result', formatImportResult(records.length, skippedDetails, 'telematics record' + (records.length !== 1 ? 's' : '')), 'success');
     showToast(records.length + ' telematics records imported', 'success');
     telRows = [];
     document.getElementById('tel-preview').classList.remove('visible');
     document.getElementById('tel-file').value = '';
     document.getElementById('tel-filename').style.display = 'none';
+    document.getElementById('tel-import-btn').disabled = true;
   });
 
+  // ── TRUCK FILE ──
+  setupDropZone('truck-drop', 'truck-file', function(file) {
+    document.getElementById('truck-filename').style.display = 'block';
+    document.getElementById('truck-filename').textContent = '📎 ' + file.name;
+    readUploadFile(file, { mode: 'truck' }, function(parsed, err) {
+      if (err) { showResult('truck-result', err, 'error'); return; }
+      truckFuelRows = parsed.fuel.rows;
+      truckMileageRows = parsed.mileage.rows;
+      truckFuelHeaders = previewColumns(parsed.fuel.headers, TRUCK_FUEL_HEADERS);
+      truckMileageHeaders = previewColumns(parsed.mileage.headers, TRUCK_MILEAGE_HEADERS);
+      var totalRows = truckFuelRows.length + truckMileageRows.length;
+      if (totalRows === 0) {
+        showResult('truck-result', 'No valid rows found. Check sheet names (Fuel Purchases, Eroad Mileage) and column headers.', 'error');
+        return;
+      }
+      renderPreview(document.getElementById('truck-fuel-preview-table'), truckFuelHeaders, truckFuelRows);
+      renderPreview(document.getElementById('truck-mileage-preview-table'), truckMileageHeaders, truckMileageRows);
+      document.getElementById('truck-count').textContent =
+        truckFuelRows.length + ' fuel · ' + truckMileageRows.length + ' mileage row' + (truckMileageRows.length !== 1 ? 's' : '');
+      document.getElementById('truck-preview').classList.add('visible');
+      document.getElementById('truck-import-btn').disabled = false;
+      document.getElementById('truck-result').className = 'result-box';
+    });
+  }, /\.xlsx$/i);
+
+  document.getElementById('truck-clear-btn').addEventListener('click', function() {
+    truckFuelRows = [];
+    truckMileageRows = [];
+    document.getElementById('truck-file').value = '';
+    document.getElementById('truck-filename').style.display = 'none';
+    document.getElementById('truck-preview').classList.remove('visible');
+    document.getElementById('truck-import-btn').disabled = true;
+    document.getElementById('truck-result').className = 'result-box';
+  });
+
+  document.getElementById('truck-import-btn').addEventListener('click', async function() {
+    if (!truckFuelRows.length && !truckMileageRows.length) return;
+    this.disabled = true; this.textContent = 'Importing...';
+    var assets = await getAssets();
+    var fuelRecords = [];
+    var mileageRecords = [];
+    var skippedDetails = [];
+
+    truckFuelRows.forEach(function(r) {
+      var vehicleId = findVehicleIdByName(assets, r.vehicle_name);
+      if (!vehicleId) {
+        skippedDetails.push(skippedRowMessage(r, 'vehicle_name', 'Fuel Purchases'));
+        return;
+      }
+      fuelRecords.push({
+        user_id: currentUser.id,
+        vehicle_id: Number(vehicleId),
+        purchase_date: r.purchase_date || null,
+        litres: parseOptionalFloat(r.litres),
+        cost_nzd: parseOptionalFloat(r.cost_nzd),
+        source: r.source || null
+      });
+    });
+
+    truckMileageRows.forEach(function(r) {
+      var vehicleId = findVehicleIdByName(assets, r.vehicle_name);
+      if (!vehicleId) {
+        skippedDetails.push(skippedRowMessage(r, 'vehicle_name', 'Eroad Mileage'));
+        return;
+      }
+      mileageRecords.push({
+        user_id: currentUser.id,
+        vehicle_id: Number(vehicleId),
+        reading_date: r.reading_date || null,
+        odometer_km: parseOptionalFloat(r.odometer_km),
+        source: r.source || null
+      });
+    });
+
+    if (!fuelRecords.length && !mileageRecords.length) {
+      showResultHtml('truck-result', formatTruckImportResult(0, 0, skippedDetails), 'error');
+      this.disabled = false; this.textContent = 'Import Truck Data'; return;
+    }
+
+    var fuelError = null;
+    var mileageError = null;
+    if (fuelRecords.length) {
+      var fuelInsert = await supabase.from('fuel_purchases').insert(fuelRecords);
+      fuelError = fuelInsert.error;
+    }
+    if (!fuelError && mileageRecords.length) {
+      var mileageInsert = await supabase.from('eroad_mileage').insert(mileageRecords);
+      mileageError = mileageInsert.error;
+    }
+
+    this.disabled = false; this.textContent = 'Import Truck Data';
+
+    if (fuelError || mileageError) {
+      var errMsg = fuelError ? fuelError.message : mileageError.message;
+      showResult('truck-result', 'Import failed: ' + errMsg, 'error');
+      return;
+    }
+
+    showResultHtml('truck-result', formatTruckImportResult(fuelRecords.length, mileageRecords.length, skippedDetails), 'success');
+    showToast(fuelRecords.length + ' fuel + ' + mileageRecords.length + ' mileage records imported', 'success');
+    truckFuelRows = [];
+    truckMileageRows = [];
+    document.getElementById('truck-preview').classList.remove('visible');
+    document.getElementById('truck-file').value = '';
+    document.getElementById('truck-filename').style.display = 'none';
+    document.getElementById('truck-import-btn').disabled = true;
+  });
+
+  function formatTruckImportResult(fuelCount, mileageCount, skippedDetails) {
+    var parts = [];
+    if (fuelCount) parts.push(fuelCount + ' fuel purchase' + (fuelCount !== 1 ? 's' : ''));
+    if (mileageCount) parts.push(mileageCount + ' mileage record' + (mileageCount !== 1 ? 's' : ''));
+    var msg = parts.length ? parts.join(' and ') + ' imported successfully.' : 'No records imported.';
+    if (skippedDetails.length) {
+      msg += ' ' + skippedDetails.length + ' row' + (skippedDetails.length !== 1 ? 's' : '') + ' skipped:';
+      msg += '<div class="result-skipped">' + skippedDetails.map(function(s) { return esc(s); }).join('<br>') + '</div>';
+    }
+    return msg;
+  }
+
   // ── Drop zone helper ──
-  function setupDropZone(zoneId, inputId, onFile) {
+  function setupDropZone(zoneId, inputId, onFile, acceptPattern) {
+    acceptPattern = acceptPattern || /\.(csv|xlsx)$/i;
     var zone = document.getElementById(zoneId);
     var input = document.getElementById(inputId);
     zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('drag-over'); });
@@ -745,8 +1040,8 @@
     zone.addEventListener('drop', function(e) {
       e.preventDefault(); zone.classList.remove('drag-over');
       var file = e.dataTransfer.files[0];
-      if (file && file.name.endsWith('.csv')) onFile(file);
-      else showToast('Please upload a .csv file', 'error');
+      if (file && acceptPattern.test(file.name)) onFile(file);
+      else showToast('Unsupported file type for this upload', 'error');
     });
     input.addEventListener('change', function() {
       if (this.files[0]) onFile(this.files[0]);
@@ -760,10 +1055,14 @@
   });
 
   // ── Result box ──
-  function showResult(id, msg, type) {
+  function showResultHtml(id, html, type) {
     var el = document.getElementById(id);
-    el.textContent = msg;
+    el.innerHTML = html;
     el.className = 'result-box ' + type;
+  }
+
+  function showResult(id, msg, type) {
+    showResultHtml(id, esc(msg), type);
   }
 
   // ── Toast ──
