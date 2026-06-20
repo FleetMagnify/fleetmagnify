@@ -575,7 +575,60 @@
   var TEL_HEADER_KEYS = ['asset_name', 'record_date'];
   var TRUCK_FUEL_HEADER_KEYS = ['vehicle_name', 'purchase_date'];
   var TRUCK_MILEAGE_HEADER_KEYS = ['vehicle_name', 'reading_date'];
+  var TRUCK_FUEL_HEADER_SIGNATURE = [
+    { canonical: 'vehicle_name', aliases: ['vehicle_name', 'asset_name', 'vehicle', 'rego', 'registration'] },
+    { canonical: 'purchase_date', aliases: ['purchase_date', 'date', 'transaction_date', 'record_date'] }
+  ];
+  var TRUCK_MILEAGE_HEADER_SIGNATURE = [
+    { canonical: 'vehicle_name', aliases: ['vehicle_name', 'asset_name', 'vehicle', 'rego', 'registration'] },
+    { canonical: 'reading_date', aliases: ['reading_date', 'date', 'record_date'] }
+  ];
+  var VEHICLE_NAME_ALIASES = ['vehicle_name', 'asset_name', 'vehicle', 'rego', 'registration'];
   var HEADER_SCAN_LIMIT = 15;
+
+  function findHeaderRowIndexBySignature(sheetRows, signature) {
+    var limit = Math.min(sheetRows.length, HEADER_SCAN_LIMIT);
+    for (var i = 0; i < limit; i++) {
+      var normalized = (sheetRows[i] || []).map(normalizeHeaderCell);
+      var matches = signature.every(function(group) {
+        return group.aliases.some(function(alias) { return normalized.indexOf(alias) !== -1; });
+      });
+      if (matches) return i;
+    }
+    return -1;
+  }
+
+  function buildCanonicalHeaders(rawHeaderRow, signature) {
+    var used = {};
+    return (rawHeaderRow || []).map(function(cell) {
+      var normalized = normalizeHeaderCell(cell);
+      if (!normalized) return '';
+      var canonical = normalized;
+      for (var i = 0; i < signature.length; i++) {
+        if (signature[i].aliases.indexOf(normalized) !== -1) {
+          canonical = signature[i].canonical;
+          break;
+        }
+      }
+      if (used[canonical]) return '';
+      if (canonical) used[canonical] = true;
+      return canonical;
+    });
+  }
+
+  function getRowVehicleName(row) {
+    for (var i = 0; i < VEHICLE_NAME_ALIASES.length; i++) {
+      var val = String(row[VEHICLE_NAME_ALIASES[i]] || '').trim();
+      if (val) return val;
+    }
+    return '';
+  }
+
+  function rowHasData(row) {
+    return Object.keys(row).some(function(key) {
+      return key !== '_rowNum' && String(row[key] || '').trim() !== '';
+    });
+  }
 
   function normalizeHeaderCell(cell) {
     return String(cell).trim().toLowerCase().replace(/\s+/g, '_');
@@ -641,17 +694,22 @@
     return { headers: headers.filter(Boolean), rows: rows };
   }
 
-  function parseExcelSheetFromWorkbook(workbook, preferredSheetName, expectedHeaders, nameColumn) {
+  function parseExcelSheetFromWorkbook(workbook, preferredSheetName, expectedHeaders, nameColumn, headerSignature) {
     expectedHeaders = expectedHeaders || FUEL_HEADER_KEYS;
     nameColumn = nameColumn || 'asset_name';
+    headerSignature = headerSignature || null;
     var sheetName = findWorkbookSheetName(workbook, preferredSheetName) || workbook.SheetNames[0] || null;
     if (!sheetName) return { headers: [], rows: [], sheetName: null, headerFound: false };
     var sheet = workbook.Sheets[sheetName];
     if (!sheet) return { headers: [], rows: [], sheetName: sheetName, headerFound: false };
     var sheetRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-    var headerIdx = findHeaderRowIndex(sheetRows, expectedHeaders);
+    var headerIdx = headerSignature
+      ? findHeaderRowIndexBySignature(sheetRows, headerSignature)
+      : findHeaderRowIndex(sheetRows, expectedHeaders);
     if (headerIdx === -1) return { headers: [], rows: [], sheetName: sheetName, headerFound: false };
-    var headers = (sheetRows[headerIdx] || []).map(normalizeHeaderCell);
+    var headers = headerSignature
+      ? buildCanonicalHeaders(sheetRows[headerIdx], headerSignature)
+      : (sheetRows[headerIdx] || []).map(normalizeHeaderCell);
     var rows = [];
     for (var j = headerIdx + 1; j < sheetRows.length; j++) {
       var vals = sheetRows[j] || [];
@@ -660,18 +718,24 @@
       headers.forEach(function(hdr, idx) {
         if (hdr) row[hdr] = vals[idx] != null ? String(vals[idx]).trim() : '';
       });
-      if (String(row[nameColumn] || '').trim()) rows.push(row);
+      if (headerSignature) {
+        var vehicleName = getRowVehicleName(row);
+        if (vehicleName) row.vehicle_name = vehicleName;
+        if (rowHasData(row)) rows.push(row);
+      } else if (String(row[nameColumn] || '').trim()) {
+        rows.push(row);
+      }
     }
     return { headers: headers.filter(Boolean), rows: rows, sheetName: sheetName, headerFound: true };
   }
 
-  function findSheetByHeaderSignature(workbook, expectedHeaders, nameColumn, excludeSheetName) {
+  function findSheetByHeaderSignature(workbook, expectedHeaders, nameColumn, excludeSheetName, headerSignature) {
     var exclude = excludeSheetName ? normalizeSheetName(excludeSheetName) : null;
     var best = { headers: [], rows: [], sheetName: null, headerFound: false };
     for (var i = 0; i < workbook.SheetNames.length; i++) {
       var candidateName = workbook.SheetNames[i];
       if (exclude && normalizeSheetName(candidateName) === exclude) continue;
-      var result = parseExcelSheetFromWorkbook(workbook, candidateName, expectedHeaders, nameColumn);
+      var result = parseExcelSheetFromWorkbook(workbook, candidateName, expectedHeaders, nameColumn, headerSignature);
       if (!result.headerFound) continue;
       if (!best.headerFound || result.rows.length > best.rows.length) {
         best = result;
@@ -680,35 +744,52 @@
     return best;
   }
 
-  function parseTruckSheet(workbook, preferredSheetName, expectedHeaders, nameColumn) {
+  function parseTruckSheet(workbook, preferredSheetName, expectedHeaders, nameColumn, headerSignature) {
     var namedSheet = findWorkbookSheetName(workbook, preferredSheetName);
     if (namedSheet) {
-      var namedResult = parseExcelSheetFromWorkbook(workbook, namedSheet, expectedHeaders, nameColumn);
+      var namedResult = parseExcelSheetFromWorkbook(workbook, namedSheet, expectedHeaders, nameColumn, headerSignature);
       if (namedResult.headerFound) return namedResult;
     }
-    return findSheetByHeaderSignature(workbook, expectedHeaders, nameColumn, null);
+    return findSheetByHeaderSignature(workbook, expectedHeaders, nameColumn, null, headerSignature);
   }
 
   function parseExcelUpload(arrayBuffer, options) {
     options = options || {};
     var workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
-    return parseExcelSheetFromWorkbook(
+    var result = parseExcelSheetFromWorkbook(
       workbook,
       options.preferredSheet,
       options.expectedHeaders,
       options.nameColumn || 'asset_name'
     );
+    if (!result.headerFound && options.preferredSheet === 'Fuel Data') {
+      var probeSheet = findWorkbookSheetName(workbook, 'Fuel Purchases') || workbook.SheetNames[0];
+      if (probeSheet) {
+        var truckProbe = parseExcelSheetFromWorkbook(
+          workbook, probeSheet, TRUCK_FUEL_HEADER_KEYS, 'vehicle_name', TRUCK_FUEL_HEADER_SIGNATURE
+        );
+        if (truckProbe.headerFound) result.wrongSectionHint = 'truck-fuel';
+      }
+    }
+    return result;
   }
 
   function parseTruckWorkbook(arrayBuffer) {
     var workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
-    var fuel = parseTruckSheet(workbook, 'Fuel Purchases', TRUCK_FUEL_HEADER_KEYS, 'vehicle_name');
-    var mileage = parseTruckSheet(workbook, 'Eroad Mileage', TRUCK_MILEAGE_HEADER_KEYS, 'vehicle_name');
+    var fuel = parseTruckSheet(workbook, 'Fuel Purchases', TRUCK_FUEL_HEADER_KEYS, 'vehicle_name', TRUCK_FUEL_HEADER_SIGNATURE);
+    var mileage = parseTruckSheet(workbook, 'Eroad Mileage', TRUCK_MILEAGE_HEADER_KEYS, 'vehicle_name', TRUCK_MILEAGE_HEADER_SIGNATURE);
     if (fuel.sheetName && mileage.sheetName &&
         normalizeSheetName(fuel.sheetName) === normalizeSheetName(mileage.sheetName)) {
-      mileage = findSheetByHeaderSignature(workbook, TRUCK_MILEAGE_HEADER_KEYS, 'vehicle_name', fuel.sheetName);
+      mileage = findSheetByHeaderSignature(workbook, TRUCK_MILEAGE_HEADER_KEYS, 'vehicle_name', fuel.sheetName, TRUCK_MILEAGE_HEADER_SIGNATURE);
     }
     return { fuel: fuel, mileage: mileage };
+  }
+
+  function detectTruckFuelHeaders(headers) {
+    var normalized = (headers || []).map(normalizeHeaderCell);
+    return TRUCK_FUEL_HEADER_SIGNATURE.every(function(group) {
+      return group.aliases.some(function(alias) { return normalized.indexOf(alias) !== -1; });
+    });
   }
 
   function readUploadFile(file, options, callback) {
@@ -855,7 +936,14 @@
     readUploadFile(file, { preferredSheet: 'Fuel Data', expectedHeaders: FUEL_HEADER_KEYS, nameColumn: 'asset_name' }, function(parsed, err) {
       if (err) { showResult('fuel-result', err, 'error'); return; }
       fuelRows = parsed.rows;
-      if (fuelRows.length === 0) { showResult('fuel-result', 'No valid rows found. Check your file matches the template.', 'error'); return; }
+      if (fuelRows.length === 0) {
+        if (parsed.wrongSectionHint === 'truck-fuel' || detectTruckFuelHeaders(parsed.headers)) {
+          showResult('fuel-result', 'This file looks like Truck Fuel Purchases data (vehicle_name, purchase_date). Use the "Truck Fuel Purchases & Mileage" section below instead of Fuel Supplier Records.', 'error');
+        } else {
+          showResult('fuel-result', 'No valid rows found. Check your file matches the template.', 'error');
+        }
+        return;
+      }
       var cols = previewColumns(parsed.headers, FUEL_PREVIEW_COLS);
       renderPreview(document.getElementById('fuel-preview-table'), cols, fuelRows);
       document.getElementById('fuel-count').textContent = fuelRows.length + ' row' + (fuelRows.length !== 1 ? 's' : '') + ' found';
@@ -1031,15 +1119,16 @@
     var skippedDetails = [];
 
     truckFuelRows.forEach(function(r) {
-      var vehicleId = findVehicleIdByName(assets, r.vehicle_name);
+      var vehicleName = getRowVehicleName(r);
+      var vehicleId = findVehicleIdByName(assets, vehicleName);
       if (!vehicleId) {
-        skippedDetails.push(skippedRowMessage(r, 'vehicle_name', 'Fuel Purchases'));
+        skippedDetails.push(skippedRowMessage(Object.assign({}, r, { vehicle_name: vehicleName || r.vehicle_name }), 'vehicle_name', 'Fuel Purchases'));
         return;
       }
       fuelRecords.push({
         user_id: currentUser.id,
         vehicle_id: Number(vehicleId),
-        purchase_date: r.purchase_date || null,
+        purchase_date: r.purchase_date || r.record_date || r.date || null,
         litres: parseOptionalFloat(r.litres),
         cost_nzd: parseOptionalFloat(r.cost_nzd),
         source: r.source || null
@@ -1047,9 +1136,10 @@
     });
 
     truckMileageRows.forEach(function(r) {
-      var vehicleId = findVehicleIdByName(assets, r.vehicle_name);
+      var vehicleName = getRowVehicleName(r);
+      var vehicleId = findVehicleIdByName(assets, vehicleName);
       if (!vehicleId) {
-        skippedDetails.push(skippedRowMessage(r, 'vehicle_name', 'Eroad Mileage'));
+        skippedDetails.push(skippedRowMessage(Object.assign({}, r, { vehicle_name: vehicleName || r.vehicle_name }), 'vehicle_name', 'Eroad Mileage'));
         return;
       }
       mileageRecords.push({
