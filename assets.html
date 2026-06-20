@@ -194,6 +194,53 @@
   .form-hint.emphasis { color: #6B7785; }
   .form-group.field-hidden,
   .form-group[hidden] { display: none !important; }
+  .telematics-section {
+    margin-top: 4px;
+    margin-bottom: 8px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .telematics-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #3A4A5C;
+    margin-bottom: 14px;
+  }
+  .telematics-provider-fields { display: none; }
+  .telematics-provider-fields.visible { display: block; }
+  .telematics-coming-soon {
+    display: none;
+    font-size: 12.5px;
+    color: #5A6474;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 9px;
+    padding: 12px 14px;
+    line-height: 1.5;
+  }
+  .telematics-coming-soon.visible { display: block; }
+  .asset-name-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .telematics-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 100px;
+    background: rgba(14,165,122,0.12);
+    border: 1px solid rgba(14,165,122,0.28);
+    color: #0EA57A;
+    white-space: nowrap;
+  }
+  .telematics-badge.visionlink {
+    background: rgba(100,130,255,0.10);
+    border-color: rgba(100,130,255,0.25);
+    color: #8BA4FF;
+  }
   @media (max-width: 900px) {
     .sidebar { display: none; } .main { margin-left: 0; } .page-content { padding: 20px; }
     .stats-row { grid-template-columns: 1fr 1fr; } .upload-card { flex-direction: column; align-items: flex-start; } .form-row { grid-template-columns: 1fr; }
@@ -481,6 +528,29 @@
       <input type="number" id="asset-target-utilisation" placeholder="e.g. 75" step="1" min="0" max="100">
       <div class="form-hint" id="hint-target-utilisation">Target percentage for utilisation reporting — compared against actual operating hours.</div>
     </div>
+    <div class="telematics-section" id="telematics-section">
+      <div class="telematics-section-title">Telematics Connection</div>
+      <div class="form-group">
+        <label for="telematics-provider">Telematics Provider</label>
+        <select id="telematics-provider">
+          <option value="">None</option>
+          <option value="eRoad">eRoad</option>
+          <option value="VisionLink">VisionLink</option>
+        </select>
+      </div>
+      <div id="telematics-eroad-fields" class="telematics-provider-fields">
+        <div class="form-group">
+          <label for="eroad-api-key">eRoad API Key</label>
+          <input type="password" id="eroad-api-key" placeholder="Paste your eRoad API key" autocomplete="off">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label for="eroad-machine-id">eRoad Machine ID</label>
+          <input type="text" id="eroad-machine-id" placeholder="e.g. machine ID from MyEROAD">
+          <div class="form-hint">Generate an API key in MyEROAD under Administration &gt; API Keys, and find the Machine ID under the vehicle's details in MyEROAD.</div>
+        </div>
+      </div>
+      <div id="telematics-visionlink-msg" class="telematics-coming-soon">VisionLink connection coming soon</div>
+    </div>
     <div class="modal-actions">
       <button type="button" class="btn-cancel" id="cancel-modal-btn">Cancel</button>
       <button type="submit" class="btn-save" id="save-asset-btn">Add Asset</button>
@@ -530,6 +600,7 @@
   var allAssets = [];
   var pendingDeleteId = null;
   var editingAssetId = null;
+  var editingHasEroadKey = false;
   var importMachineryRows = [];
   var importTrucksRows = [];
   var pendingImportPlan = null;
@@ -586,7 +657,7 @@
       var hasCustomRate = a.idle_burn_rate_lph !== null && a.idle_burn_rate_lph !== undefined;
       var displayRate = hasCustomRate ? a.idle_burn_rate_lph : (DEFAULT_IDLE_RATES[a.asset_type] || 3.0);
       var row = '<tr>' +
-        '<td class="asset-name-cell">' + esc(a.asset_name || '—') + '</td>' +
+        '<td class="asset-name-cell"><div class="asset-name-wrap">' + esc(a.asset_name || '—') + renderTelematicsBadge(a.telematics_provider) + '</div></td>' +
         '<td><span class="asset-type-badge">' + esc(a.asset_type || '—') + '</span></td>' +
         '<td>' + esc(a.make || '—') + '</td>' +
         '<td>' + esc(a.model || '—') + '</td>' +
@@ -759,6 +830,66 @@
       '<tr>' + cols.map(function(c) { return '<th>' + c + '</th>'; }).join('') + '</tr>';
   }
 
+  function renderTelematicsBadge(provider) {
+    var p = (provider || '').trim();
+    if (!p) return '';
+    var cls = p === 'VisionLink' ? 'telematics-badge visionlink' : 'telematics-badge';
+    return '<span class="' + cls + '" title="Telematics: ' + esc(p) + ' connected">📡 ' + esc(p) + '</span>';
+  }
+
+  function updateTelematicsProviderFields() {
+    var provider = (document.getElementById('telematics-provider').value || '').trim();
+    var eroadFields = document.getElementById('telematics-eroad-fields');
+    var visionMsg = document.getElementById('telematics-visionlink-msg');
+    eroadFields.classList.toggle('visible', provider === 'eRoad');
+    visionMsg.classList.toggle('visible', provider === 'VisionLink');
+  }
+
+  function resetTelematicsFields() {
+    document.getElementById('telematics-provider').value = '';
+    document.getElementById('eroad-api-key').value = '';
+    document.getElementById('eroad-api-key').placeholder = 'Paste your eRoad API key';
+    document.getElementById('eroad-machine-id').value = '';
+    editingHasEroadKey = false;
+    updateTelematicsProviderFields();
+  }
+
+  function populateTelematicsFields(asset) {
+    var provider = (asset.telematics_provider || '').trim();
+    setSelectValue('telematics-provider', provider);
+    editingHasEroadKey = !!(asset.eroad_api_key);
+    document.getElementById('eroad-api-key').value = '';
+    document.getElementById('eroad-api-key').placeholder = editingHasEroadKey
+      ? '••••••••  (leave blank to keep current key)'
+      : 'Paste your eRoad API key';
+    document.getElementById('eroad-machine-id').value = asset.eroad_machine_id || '';
+    updateTelematicsProviderFields();
+  }
+
+  function appendTelematicsToPayload(payload, isEditing) {
+    var provider = (document.getElementById('telematics-provider').value || '').trim();
+    if (!provider) {
+      payload.telematics_provider = null;
+      payload.eroad_api_key = null;
+      payload.eroad_machine_id = null;
+      return;
+    }
+    payload.telematics_provider = provider;
+    if (provider === 'eRoad') {
+      var apiKey = document.getElementById('eroad-api-key').value.trim();
+      var machineId = document.getElementById('eroad-machine-id').value.trim();
+      payload.eroad_machine_id = machineId || null;
+      if (apiKey) {
+        payload.eroad_api_key = apiKey;
+      } else if (!isEditing) {
+        payload.eroad_api_key = null;
+      }
+    } else {
+      payload.eroad_api_key = null;
+      payload.eroad_machine_id = null;
+    }
+  }
+
   function updateFormForAssetType() {
     var state = applyAssetTypeFieldVisibility(document.getElementById('asset-type').value);
     var assetType = state.assetType;
@@ -845,6 +976,7 @@
     if (supportsIsOnRoad) {
       payload.is_on_road = onRoad;
     }
+    appendTelematicsToPayload(payload, editingAssetId != null);
     return payload;
   }
 
@@ -877,6 +1009,7 @@
     ASSET_FIELD_IDS.forEach(function(id) { document.getElementById(id).value = ''; });
     document.getElementById('asset-type').selectedIndex = 0;
     document.getElementById('fuel-type').selectedIndex = 0;
+    resetTelematicsFields();
     applyAssetTypeFieldVisibility('');
     updateFormForAssetType();
   }
@@ -920,6 +1053,7 @@
     document.getElementById('asset-service-cost').value = asset.service_cost_per_hour != null ? asset.service_cost_per_hour : '';
     document.getElementById('asset-available-hours').value = asset.available_hours_per_week != null ? asset.available_hours_per_week : '';
     document.getElementById('asset-target-utilisation').value = asset.target_utilisation_percent != null ? asset.target_utilisation_percent : '';
+    populateTelematicsFields(asset);
     applyAssetTypeFieldVisibility(asset.asset_type);
     updateFormForAssetType();
     document.getElementById('add-modal').classList.add('open');
@@ -940,6 +1074,7 @@
     }
   });
   document.getElementById('asset-type').addEventListener('change', updateFormForAssetType);
+  document.getElementById('telematics-provider').addEventListener('change', updateTelematicsProviderFields);
 
   document.getElementById('asset-form').addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -953,6 +1088,15 @@
       errEl.textContent = 'Please fill in Asset Name, Asset Type, and Fuel Type.';
       errEl.classList.add('visible');
       return;
+    }
+
+    if (payload.telematics_provider === 'eRoad') {
+      var hasKey = !!payload.eroad_api_key || (isEditing && editingHasEroadKey);
+      if (!hasKey || !payload.eroad_machine_id) {
+        errEl.textContent = 'eRoad connection requires an API key and Machine ID.';
+        errEl.classList.add('visible');
+        return;
+      }
     }
 
     saveBtn.disabled = true;
