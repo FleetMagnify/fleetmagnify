@@ -119,10 +119,6 @@
     background: rgba(14,165,122,0.15); border: 1px solid rgba(14,165,122,0.30);
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
-  .trust-row { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
-  .trust-item { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #4A5568; }
-  .trust-item svg { flex-shrink: 0; }
-  .trust-sep { width: 1px; height: 14px; background: rgba(255,255,255,0.07); }
 
   /* ── HERO VISUAL ── */
   .hero-visual { position: relative; }
@@ -139,64 +135,19 @@
     position: absolute; inset: 0;
     background: linear-gradient(to bottom, transparent 45%, rgba(8,12,18,0.55) 100%);
   }
-  .float-card {
-    position: absolute;
-    background: rgba(10,16,26,0.96);
-    border: 1px solid rgba(255,255,255,0.09);
-    border-radius: 14px; padding: 16px 20px;
-    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-  }
-  .float-card.savings { bottom: -20px; left: -22px; }
-  .float-card.idle    { top: -18px; right: -18px; }
-  .float-label {
-    font-size: 10px; font-weight: 700; letter-spacing: 0.11em;
-    text-transform: uppercase; color: #0EA57A; margin-bottom: 5px;
-  }
-  .float-value { font-size: 30px; font-weight: 800; color: #F0F2F5; letter-spacing: -1.2px; line-height: 1; }
-  .float-sub { font-size: 11px; color: #4A5568; margin-top: 3px; }
-  .float-badge {
-    display: inline-flex; align-items: center; gap: 4px;
-    background: rgba(14,165,122,0.12); border: 1px solid rgba(14,165,122,0.22);
-    color: #0EA57A; font-size: 11px; font-weight: 600;
-    padding: 3px 9px; border-radius: 100px; margin-top: 7px;
-  }
 
-  /* ── LOGO STRIP ── */
-  .logos {
-    padding: 36px 3rem;
+  /* ── PILOT STRIP ── */
+  .pilot-strip {
+    padding: 28px 3rem;
     border-top: 1px solid rgba(255,255,255,0.04);
     border-bottom: 1px solid rgba(255,255,255,0.04);
     background: rgba(255,255,255,0.012);
+    text-align: center;
   }
-  .logos-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; gap: 16px; }
-  .logos-label {
-    font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em;
-    text-transform: uppercase; color: #2E3A4A; white-space: nowrap; flex-shrink: 0;
+  .pilot-strip-inner { max-width: 1280px; margin: 0 auto; }
+  .pilot-strip p {
+    font-size: 14px; font-weight: 500; color: #0EA57A; letter-spacing: -0.1px;
   }
-  .logos-divider { width: 1px; height: 20px; background: rgba(255,255,255,0.06); flex-shrink: 0; }
-  .logos-list { display: flex; align-items: center; gap: 40px; overflow: hidden; }
-  .logos-list span { font-size: 12.5px; font-weight: 600; color: #253040; white-space: nowrap; letter-spacing: -0.1px; }
-
-  /* ── STATS ── */
-  .stats { padding: 72px 3rem; }
-  .stats-inner {
-    max-width: 1280px; margin: 0 auto;
-    display: grid; grid-template-columns: repeat(4,1fr);
-    gap: 1px; background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.05);
-    border-radius: 16px; overflow: hidden;
-  }
-  .stat {
-    padding: 36px 32px; background: #080C12;
-    border-right: 1px solid rgba(255,255,255,0.04);
-  }
-  .stat:last-child { border-right: none; }
-  .stat-num {
-    font-size: 46px; font-weight: 800; letter-spacing: -2.2px;
-    color: #F0F2F5; line-height: 1; margin-bottom: 9px;
-  }
-  .stat-num em { color: #0EA57A; font-style: normal; }
-  .stat-desc { font-size: 13px; color: #4A5568; line-height: 1.55; }
 
   /* ── FEATURES ── */
   .features { padding: 100px 3rem; }
@@ -373,7 +324,6 @@
     border-radius: 10px; cursor: pointer; transition: all 0.2s; font-family: inherit;
   }
   .btn-cta-sec:hover { border-color: rgba(255,255,255,0.22); color: #F0F2F5; }
-  .cta-note { font-size: 12px; color: #2E3A4A; margin-top: 22px; position: relative; }
 
   /* ── FOOTER ── */
   footer {
@@ -501,10 +451,7 @@
     .hero-inner { grid-template-columns: 1fr; gap: 48px; }
     .hero h1 { font-size: 44px; }
     .hero-visual { display: none; }
-    .logos { padding: 28px 1.5rem; }
-    .logos-list { gap: 24px; }
-    .stats { padding: 48px 1.5rem; }
-    .stats-inner { grid-template-columns: repeat(2,1fr); }
+    .pilot-strip { padding: 24px 1.5rem; }
     .features { padding: 64px 1.5rem; }
     .features-grid { grid-template-columns: 1fr; }
     .section-title { font-size: 36px; }
@@ -577,30 +524,6 @@
           Watch 2-min overview
         </button>
       </div>
-      <div class="trust-row">
-        <div class="trust-item">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-            <circle cx="6.5" cy="6.5" r="5.5" stroke="#0EA57A" stroke-width="1.2"/>
-            <path d="M4 6.5L5.8 8.5L9 5" stroke="#0EA57A" stroke-width="1.3" stroke-linecap="round"/>
-          </svg>
-          ISO 27001 Certified
-        </div>
-        <div class="trust-sep"></div>
-        <div class="trust-item">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-            <rect x="2" y="5.5" width="9" height="6" rx="1.5" stroke="#0EA57A" stroke-width="1.2"/>
-            <path d="M4.5 5.5V4A2 2 0 016.5 2v0A2 2 0 018.5 4V5.5" stroke="#0EA57A" stroke-width="1.2"/>
-          </svg>
-          Bank-level Encryption
-        </div>
-        <div class="trust-sep"></div>
-        <div class="trust-item">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-            <path d="M6.5 1.5L8 4.5L11.5 5L9 7.5L9.5 11L6.5 9.5L3.5 11L4 7.5L1.5 5L5 4.5L6.5 1.5Z" stroke="#0EA57A" stroke-width="1.1" stroke-linejoin="round"/>
-          </svg>
-          SOC 2 Type II
-        </div>
-      </div>
     </div>
 
     <!-- Right visual -->
@@ -612,62 +535,15 @@
         >
         <div class="hero-img-overlay"></div>
       </div>
-      <div class="float-card savings">
-        <div class="float-label">Monthly Cost Savings</div>
-        <div class="float-value">$21,840</div>
-        <div class="float-sub">avg. per fleet · 30-day rolling</div>
-        <div class="float-badge">
-          <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
-            <path d="M4.5 7V2M4.5 2L2 4.5M4.5 2L7 4.5" stroke="#0EA57A" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          +18.2% vs last quarter
-        </div>
-      </div>
-      <div class="float-card idle">
-        <div class="float-label">Idle Reduction</div>
-        <div class="float-value">34%</div>
-        <div class="float-sub">avg. after 90 days</div>
-      </div>
     </div>
 
   </div>
 </section>
 
-<!-- ── LOGO STRIP ───────────────────────────────── -->
-<div class="logos">
-  <div class="logos-inner">
-    <span class="logos-label">Trusted by</span>
-    <div class="logos-divider"></div>
-    <div class="logos-list">
-      <span>Caterpillar Fleet Co.</span>
-      <span>Komatsu Pacific</span>
-      <span>Volvo Construction</span>
-      <span>Liebherr Group</span>
-      <span>John Deere Fleet</span>
-      <span>Hitachi Mining</span>
-    </div>
-  </div>
-</div>
-
-<!-- ── STATS ────────────────────────────────────── -->
-<div class="stats">
-  <div class="stats-inner">
-    <div class="stat">
-      <div class="stat-num">$<em>2.4</em>B</div>
-      <div class="stat-desc">Fleet operating costs<br>analysed to date</div>
-    </div>
-    <div class="stat">
-      <div class="stat-num"><em>34</em>%</div>
-      <div class="stat-desc">Average idle reduction<br>within 90 days</div>
-    </div>
-    <div class="stat">
-      <div class="stat-num"><em>8,200</em>+</div>
-      <div class="stat-desc">Assets actively<br>monitored globally</div>
-    </div>
-    <div class="stat">
-      <div class="stat-num"><em>99.98</em>%</div>
-      <div class="stat-desc">Platform uptime<br>SLA guaranteed</div>
-    </div>
+<!-- ── PILOT ────────────────────────────────────── -->
+<div class="pilot-strip">
+  <div class="pilot-strip-inner">
+    <p>Currently piloting with New Zealand fleet operators</p>
   </div>
 </div>
 
@@ -858,7 +734,7 @@
 <section class="how">
   <div class="how-inner">
     <div class="section-eyebrow"><div class="dash"></div> How It Works</div>
-    <h2 class="section-title">Up and running<br>in 48 hours.</h2>
+    <h2 class="section-title">Up and running<br>quickly.</h2>
     <div class="how-grid">
       <div class="how-step">
         <div class="step-num">Step 01 &nbsp;— Connect</div>
@@ -878,8 +754,7 @@
         <div class="step-num">Step 03 &nbsp;— Analyse</div>
         <h3>Recover cost, every month</h3>
         <p>Access live dashboards, schedule automated reports, and identify
-        the highest-cost assets on any job. Most clients recover their
-        subscription cost within the first billing cycle.</p>
+        the highest-cost assets on any job.</p>
       </div>
     </div>
   </div>
@@ -892,14 +767,13 @@
       <div class="cta-glow"></div>
       <h2>Ready to magnify<br>your fleet performance?</h2>
       <p>
-        Join leading fleet operators already recovering thousands every month.<br>
-        Onboarding takes under 48 hours. No lock-in contracts.
+        See how FleetMagnify fits your operation.<br>
+        Request a demo to walk through the platform with our team.
       </p>
       <div class="cta-btns">
         <a class="btn-cta-main" href="signup.html">Request Enterprise Demo</a>
         <button class="btn-cta-sec">Talk to Sales</button>
       </div>
-      <p class="cta-note">No credit card required &nbsp;·&nbsp; 14-day free trial &nbsp;·&nbsp; Cancel anytime</p>
     </div>
   </div>
 </section>
