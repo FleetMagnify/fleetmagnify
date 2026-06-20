@@ -74,6 +74,18 @@
   .upload-preview { display: none; margin-top: 14px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; overflow: hidden; }
   .upload-preview.visible { display: block; }
   .upload-preview-title { font-size: 11px; font-weight: 700; color: #3A4A5C; letter-spacing: 0.08em; text-transform: uppercase; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .preview-sheet-block { padding: 14px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .preview-sheet-block:last-of-type { border-bottom: none; }
+  .preview-sheet-label { font-size: 12px; font-weight: 700; color: #0EA57A; margin-bottom: 10px; letter-spacing: 0.02em; }
+  .import-warnings { display: none; margin-top: 14px; background: rgba(239,159,39,0.06); border: 1px solid rgba(239,159,39,0.22); border-radius: 8px; padding: 14px 16px; }
+  .import-warnings.visible { display: block; }
+  .import-warnings h4 { font-size: 12px; font-weight: 700; color: #EF9F27; margin-bottom: 8px; }
+  .import-warnings ul { margin: 0; padding-left: 18px; font-size: 12px; color: #9BA4B0; line-height: 1.6; }
+  .import-results { display: none; margin-top: 14px; background: rgba(14,165,122,0.06); border: 1px solid rgba(14,165,122,0.22); border-radius: 8px; padding: 14px 16px; }
+  .import-results.visible { display: block; }
+  .import-results h4 { font-size: 12px; font-weight: 700; color: #0EA57A; margin-bottom: 8px; }
+  .import-results p { font-size: 12.5px; color: #9BA4B0; line-height: 1.55; margin-bottom: 8px; }
+  .import-results ul { margin: 0; padding-left: 18px; font-size: 12px; color: #6B7785; line-height: 1.6; }
   .preview-table { width: 100%; border-collapse: collapse; }
   .preview-table th, .preview-table td { padding: 8px 12px; text-align: left; font-size: 11.5px; }
   .preview-table th { color: #3A4A5C; font-weight: 600; }
@@ -225,10 +237,10 @@
         <div class="page-header-text">
           <div class="page-eyebrow"><div class="dash"></div> Fleet Assets</div>
           <h1 class="page-title">Your Assets</h1>
-          <p class="page-sub">Manage your fleet. Add assets manually or import in bulk via CSV.</p>
+          <p class="page-sub">Manage your fleet. Add assets manually or import in bulk via Excel.</p>
         </div>
         <div class="page-actions">
-          <button class="btn-secondary" id="csv-toggle-btn"><span>📤</span> Import CSV</button>
+          <button class="btn-secondary" id="excel-toggle-btn"><span>📤</span> Import Excel</button>
           <button class="btn-teal" id="add-asset-btn"><span>+</span> Add Asset</button>
         </div>
       </div>
@@ -256,34 +268,50 @@
         <p><strong>Idle Burn Rate:</strong> Litres per hour each asset burns while idling. Used by Fuel Analyst and Idle Cost Analyst to split invoiced fuel into operating vs. idle cost. If left blank, a sensible default is used based on asset type — set your own value once you have real-world data for more accurate results.</p>
       </div>
 
-      <div class="upload-card" id="csv-section" style="display:none; flex-direction: column;">
+      <div class="upload-card" id="excel-section" style="display:none; flex-direction: column;">
         <div style="display:flex; align-items:center; justify-content:space-between; width:100%; gap:24px; flex-wrap:wrap;">
           <div class="upload-card-text">
-            <h3>Bulk Import via CSV</h3>
-            <p>Download the template, fill in your asset details, then upload it to import your entire fleet at once. The template includes all columns for both construction and on-road assets — fill in only the fields relevant to each row's asset type and leave the rest blank.</p>
+            <h3>Bulk Import via Excel</h3>
+            <p>Download the template with separate <strong>Machinery</strong> and <strong>Trucks</strong> sheets, fill in your assets, then upload the completed file to import your entire fleet at once.</p>
           </div>
           <div class="upload-card-actions">
             <button class="btn-secondary" id="download-template-btn">⬇ Download Template</button>
           </div>
         </div>
         <div class="upload-zone visible" id="upload-zone">
-          <input type="file" id="csv-file-input" accept=".csv">
-          <label for="csv-file-input">
+          <input type="file" id="excel-file-input" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+          <label for="excel-file-input">
             <div class="upload-icon">📂</div>
-            <div class="upload-zone-text"><strong>Click to browse</strong> or drag and drop your CSV file here</div>
-            <div style="font-size:11px; color:#2E3A4A; margin-top:4px;">Accepts .csv files only</div>
+            <div class="upload-zone-text"><strong>Click to browse</strong> or drag and drop your Excel file here</div>
+            <div style="font-size:11px; color:#2E3A4A; margin-top:4px;">Accepts .xlsx files only</div>
           </label>
         </div>
+        <div class="import-warnings" id="import-warnings">
+          <h4>Rows with issues (will be skipped on import)</h4>
+          <ul id="import-warnings-list"></ul>
+        </div>
         <div class="upload-preview" id="upload-preview">
-          <div class="upload-preview-title">Preview — first 5 rows</div>
-          <div style="overflow-x:auto;"><table class="preview-table" id="preview-table"></table></div>
+          <div class="upload-preview-title">Preview — first 5 rows per sheet</div>
+          <div class="preview-sheet-block">
+            <div class="preview-sheet-label">Machinery</div>
+            <div style="overflow-x:auto;"><table class="preview-table" id="preview-machinery-table"></table></div>
+          </div>
+          <div class="preview-sheet-block">
+            <div class="preview-sheet-label">Trucks</div>
+            <div style="overflow-x:auto;"><table class="preview-table" id="preview-trucks-table"></table></div>
+          </div>
           <div class="upload-actions">
             <span class="upload-count" id="upload-count"></span>
             <div style="display:flex; gap:8px;">
-              <button class="btn-secondary" id="clear-csv-btn">Clear</button>
-              <button class="btn-teal" id="import-csv-btn">Import All Assets</button>
+              <button class="btn-secondary" id="clear-excel-btn">Clear</button>
+              <button class="btn-teal" id="import-excel-btn">Import All Assets</button>
             </div>
           </div>
+        </div>
+        <div class="import-results" id="import-results">
+          <h4>Import complete</h4>
+          <p id="import-results-summary"></p>
+          <ul id="import-results-skipped"></ul>
         </div>
       </div>
 
@@ -450,6 +478,7 @@
 
 <script src="js/supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script>
 (function() {
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
@@ -457,7 +486,8 @@
   var allAssets = [];
   var pendingDeleteId = null;
   var editingAssetId = null;
-  var csvRows = [];
+  var importMachineryRows = [];
+  var importTrucksRows = [];
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var ON_ROAD_TYPE_SET = { 'Light Vehicle': true, 'Rigid Truck': true, 'Semi Trailer': true };
@@ -502,7 +532,7 @@
     var count = document.getElementById('table-count');
     count.textContent = assets.length + ' asset' + (assets.length !== 1 ? 's' : '');
     if (assets.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="' + colCount + '"><div class="empty-state"><div class="empty-icon">🚧</div><div class="empty-title">No assets yet</div><div class="empty-sub">Add your first asset using the button above,<br>or import your fleet via CSV.</div></div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="' + colCount + '"><div class="empty-state"><div class="empty-icon">🚧</div><div class="empty-title">No assets yet</div><div class="empty-sub">Add your first asset using the button above,<br>or import your fleet via Excel.</div></div></td></tr>';
       return;
     }
     tbody.innerHTML = assets.map(function(a) {
@@ -921,43 +951,55 @@
     loadAssets();
   });
 
-  document.getElementById('csv-toggle-btn').addEventListener('click', function() {
-    var section = document.getElementById('csv-section');
+  document.getElementById('excel-toggle-btn').addEventListener('click', function() {
+    var section = document.getElementById('excel-section');
     section.style.display = section.style.display === 'none' ? 'flex' : 'none';
   });
 
-  var CSV_COLUMNS = [
+  var MACHINERY_SHEET = 'Machinery';
+  var TRUCKS_SHEET = 'Trucks';
+  var MACHINERY_COLUMNS = [
     'asset_name', 'asset_type', 'make', 'model', 'year', 'fuel_type', 'registration',
     'idle_burn_rate_lph', 'purchase_price', 'expected_life_hours', 'service_cost_per_hour',
-    'available_hours_per_week', 'target_utilisation_percent', 'expected_life_km', 'service_cost_per_km'
+    'available_hours_per_week', 'target_utilisation_percent'
   ];
+  var TRUCKS_COLUMNS = [
+    'asset_name', 'asset_type', 'make', 'model', 'year', 'fuel_type', 'registration',
+    'idle_burn_rate_lph', 'purchase_price', 'expected_life_km', 'service_cost_per_km'
+  ];
+  var MACHINERY_TYPE_NOTE = 'Valid asset_type values: Excavator, Dump Truck, Wheel Loader, Motor Grader, Bulldozer, Crane, Forklift, Water Truck, Other';
+  var TRUCKS_TYPE_NOTE = 'Valid asset_type values: Light Vehicle, Rigid Truck, Semi Trailer';
 
-  function parseCsvNumber(raw) {
+  function parseImportNumber(raw) {
     if (raw === '' || raw == null) return null;
     var n = parseFloat(String(raw).trim());
     return isNaN(n) ? null : n;
   }
 
-  function parseCsvInt(raw) {
+  function parseImportInt(raw) {
     if (raw === '' || raw == null) return null;
     var n = parseInt(String(raw).trim(), 10);
     return isNaN(n) ? null : n;
   }
 
-  function buildCsvTemplate() {
-    var header = CSV_COLUMNS.join(',');
-    var constructionExample = [
-      'CAT 390F Excavator', 'Excavator', 'Caterpillar', '390F', '2021', 'Diesel', 'SITE-001',
-      '4.0', '285000', '20000', '7.20', '40', '75', '', ''
-    ].join(',');
-    var onRoadExample = [
-      'Kenworth T610', 'Rigid Truck', 'Kenworth', 'T610', '2022', 'Diesel', 'XYZ789',
-      '2.5', '180000', '', '', '', '', '800000', '0.15'
-    ].join(',');
-    return header + '\n' + constructionExample + '\n' + onRoadExample + '\n';
+  function buildExcelTemplate() {
+    var wb = XLSX.utils.book_new();
+    var machineryData = [
+      [MACHINERY_TYPE_NOTE],
+      MACHINERY_COLUMNS,
+      ['CAT 390F Excavator', 'Excavator', 'Caterpillar', '390F', 2021, 'Diesel', 'SITE-001', 4.0, 285000, 20000, 7.20, 40, 75]
+    ];
+    var trucksData = [
+      [TRUCKS_TYPE_NOTE],
+      TRUCKS_COLUMNS,
+      ['Kenworth T610', 'Rigid Truck', 'Kenworth', 'T610', 2022, 'Diesel', 'XYZ789', 2.5, 180000, 800000, 0.15]
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(machineryData), MACHINERY_SHEET);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(trucksData), TRUCKS_SHEET);
+    XLSX.writeFile(wb, 'FleetMagnify_Asset_Import_Template.xlsx');
   }
 
-  function buildCsvRecord(row) {
+  function buildImportRecord(row) {
     var assetType = (row.asset_type || '').trim();
     var onRoad = isOnRoadType(assetType);
     var rec = {
@@ -966,11 +1008,11 @@
       asset_type: assetType || null,
       make: (row.make || '').trim() || null,
       model: (row.model || '').trim() || null,
-      year: parseCsvInt(row.year),
+      year: parseImportInt(row.year),
       fuel_type: (row.fuel_type || '').trim() || null,
       registration: (row.registration || '').trim() || null,
-      idle_burn_rate_lph: parseCsvNumber(row.idle_burn_rate_lph),
-      purchase_price: parseCsvNumber(row.purchase_price),
+      idle_burn_rate_lph: parseImportNumber(row.idle_burn_rate_lph),
+      purchase_price: parseImportNumber(row.purchase_price),
       expected_life_hours: null,
       service_cost_per_hour: null,
       available_hours_per_week: null,
@@ -979,13 +1021,13 @@
       service_cost_per_km: null
     };
     if (onRoad) {
-      rec.expected_life_km = parseCsvNumber(row.expected_life_km);
-      rec.service_cost_per_km = parseCsvNumber(row.service_cost_per_km);
+      rec.expected_life_km = parseImportNumber(row.expected_life_km);
+      rec.service_cost_per_km = parseImportNumber(row.service_cost_per_km);
     } else {
-      rec.expected_life_hours = parseCsvNumber(row.expected_life_hours);
-      rec.service_cost_per_hour = parseCsvNumber(row.service_cost_per_hour);
-      rec.available_hours_per_week = parseCsvNumber(row.available_hours_per_week);
-      rec.target_utilisation_percent = parseCsvNumber(row.target_utilisation_percent);
+      rec.expected_life_hours = parseImportNumber(row.expected_life_hours);
+      rec.service_cost_per_hour = parseImportNumber(row.service_cost_per_hour);
+      rec.available_hours_per_week = parseImportNumber(row.available_hours_per_week);
+      rec.target_utilisation_percent = parseImportNumber(row.target_utilisation_percent);
     }
     if (supportsIsOnRoad && assetType) {
       rec.is_on_road = onRoad;
@@ -993,82 +1035,257 @@
     return rec;
   }
 
+  function parseExcelSheet(workbook, sheetName) {
+    var sheet = workbook.Sheets[sheetName];
+    if (!sheet) return [];
+    var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    var headerIdx = -1;
+    var headers = [];
+    for (var i = 0; i < rows.length; i++) {
+      var normalized = (rows[i] || []).map(function(c) { return String(c).trim().toLowerCase(); });
+      if (normalized.indexOf('asset_name') !== -1) {
+        headerIdx = i;
+        headers = normalized;
+        break;
+      }
+    }
+    if (headerIdx === -1) return [];
+    var parsed = [];
+    for (var j = headerIdx + 1; j < rows.length; j++) {
+      var vals = rows[j] || [];
+      if (vals.every(function(v) { return String(v).trim() === ''; })) continue;
+      var row = { _sheet: sheetName, _rowNum: j + 1 };
+      headers.forEach(function(h, idx) {
+        if (h) row[h] = vals[idx] != null ? String(vals[idx]).trim() : '';
+      });
+      if ((row.asset_name || '').trim()) parsed.push(row);
+    }
+    return parsed;
+  }
+
+  function validateImportRow(row, sheetKind) {
+    var issues = [];
+    var name = (row.asset_name || '').trim();
+    var type = (row.asset_type || '').trim();
+    var fuel = (row.fuel_type || '').trim();
+    if (!name) issues.push('missing Asset Name');
+    if (!type) issues.push('missing Asset Type');
+    if (!fuel) issues.push('missing Fuel Type');
+    if (type) {
+      var onRoad = isOnRoadType(type);
+      if (sheetKind === 'machinery' && onRoad) {
+        issues.push('on-road asset type "' + type + '" on Machinery sheet');
+      }
+      if (sheetKind === 'trucks' && !onRoad) {
+        issues.push('machinery asset type "' + type + '" on Trucks sheet');
+      }
+    }
+    return issues;
+  }
+
+  function formatSkippedRow(row, sheetKind, issues) {
+    var sheetLabel = sheetKind === 'machinery' ? 'Machinery' : 'Trucks';
+    var label = (row.asset_name || '').trim() || 'Row ' + row._rowNum;
+    return sheetLabel + ' row ' + row._rowNum + ' (' + label + '): ' + issues.join('; ');
+  }
+
+  function renderPreviewTable(tableId, columns, rows) {
+    var table = document.getElementById(tableId);
+    if (!rows.length) {
+      table.innerHTML = '<tbody><tr><td style="padding:12px;color:#3A4A5C;font-size:12px;">No rows found on this sheet.</td></tr></tbody>';
+      return;
+    }
+    var displayCols = columns.filter(function(c) { return c !== 'registration'; });
+    var thead = '<thead><tr>' + displayCols.map(function(h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead>';
+    var tbody = '<tbody>' + rows.slice(0, 5).map(function(r) {
+      return '<tr>' + displayCols.map(function(h) { return '<td>' + esc(r[h] || '') + '</td>'; }).join('') + '</tr>';
+    }).join('') + '</tbody>';
+    table.innerHTML = thead + tbody;
+  }
+
+  function collectImportWarnings() {
+    var warnings = [];
+    importMachineryRows.forEach(function(row) {
+      var issues = validateImportRow(row, 'machinery');
+      if (issues.length) warnings.push(formatSkippedRow(row, 'machinery', issues));
+    });
+    importTrucksRows.forEach(function(row) {
+      var issues = validateImportRow(row, 'trucks');
+      if (issues.length) warnings.push(formatSkippedRow(row, 'trucks', issues));
+    });
+    return warnings;
+  }
+
+  function showImportWarnings(warnings) {
+    var box = document.getElementById('import-warnings');
+    var list = document.getElementById('import-warnings-list');
+    if (!warnings.length) {
+      box.classList.remove('visible');
+      list.innerHTML = '';
+      return;
+    }
+    list.innerHTML = warnings.map(function(w) { return '<li>' + esc(w) + '</li>'; }).join('');
+    box.classList.add('visible');
+  }
+
+  function clearImportState() {
+    importMachineryRows = [];
+    importTrucksRows = [];
+    document.getElementById('upload-preview').classList.remove('visible');
+    document.getElementById('import-warnings').classList.remove('visible');
+    document.getElementById('import-warnings-list').innerHTML = '';
+    document.getElementById('import-results').classList.remove('visible');
+    document.getElementById('import-results-summary').textContent = '';
+    document.getElementById('import-results-skipped').innerHTML = '';
+    document.getElementById('excel-file-input').value = '';
+    document.getElementById('upload-count').textContent = '';
+    document.getElementById('preview-machinery-table').innerHTML = '';
+    document.getElementById('preview-trucks-table').innerHTML = '';
+  }
+
+  function showExcelPreview() {
+    renderPreviewTable('preview-machinery-table', MACHINERY_COLUMNS, importMachineryRows);
+    renderPreviewTable('preview-trucks-table', TRUCKS_COLUMNS, importTrucksRows);
+    var total = importMachineryRows.length + importTrucksRows.length;
+    var warnings = collectImportWarnings();
+    showImportWarnings(warnings);
+    var validCount = total - warnings.length;
+    document.getElementById('upload-count').textContent =
+      total + ' row' + (total !== 1 ? 's' : '') + ' found · ' +
+      validCount + ' ready to import' +
+      (warnings.length ? ' · ' + warnings.length + ' will be skipped' : '');
+    document.getElementById('upload-preview').classList.add('visible');
+    document.getElementById('import-results').classList.remove('visible');
+  }
+
   document.getElementById('download-template-btn').addEventListener('click', function() {
-    var blob = new Blob([buildCsvTemplate()], { type: 'text/csv' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = 'FleetMagnify_Assets_Template.csv'; a.click();
+    if (typeof XLSX === 'undefined') {
+      showToast('Excel library failed to load. Please refresh the page.', 'error');
+      return;
+    }
+    buildExcelTemplate();
   });
 
-  var csvInput = document.getElementById('csv-file-input');
+  var excelInput = document.getElementById('excel-file-input');
   var uploadZone = document.getElementById('upload-zone');
   uploadZone.addEventListener('dragover', function(e) { e.preventDefault(); this.classList.add('drag-over'); });
   uploadZone.addEventListener('dragleave', function() { this.classList.remove('drag-over'); });
   uploadZone.addEventListener('drop', function(e) {
     e.preventDefault(); this.classList.remove('drag-over');
     var file = e.dataTransfer.files[0];
-    if (file) processCSV(file);
+    if (file) processExcel(file);
   });
-  csvInput.addEventListener('change', function() { if (this.files[0]) processCSV(this.files[0]); });
+  excelInput.addEventListener('change', function() { if (this.files[0]) processExcel(this.files[0]); });
 
-  function processCSV(file) {
+  function processExcel(file) {
+    if (typeof XLSX === 'undefined') {
+      showToast('Excel library failed to load. Please refresh the page.', 'error');
+      return;
+    }
+    if (!/\.xlsx$/i.test(file.name)) {
+      showToast('Please upload a .xlsx file', 'error');
+      return;
+    }
     var reader = new FileReader();
     reader.onload = function(e) {
-      var lines = e.target.result.split('\n').filter(function(l) { return l.trim(); });
-      if (lines.length < 2) { showToast('CSV appears to be empty', 'error'); return; }
-      var headers = lines[0].split(',').map(function(h) { return h.trim().toLowerCase(); });
-      csvRows = [];
-      for (var i = 1; i < lines.length; i++) {
-        var vals = lines[i].split(',').map(function(v) { return v.trim(); });
-        var row = {};
-        headers.forEach(function(h, idx) { row[h] = vals[idx] || ''; });
-        if (row.asset_name) csvRows.push(row);
+      try {
+        var workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+        importMachineryRows = parseExcelSheet(workbook, MACHINERY_SHEET);
+        importTrucksRows = parseExcelSheet(workbook, TRUCKS_SHEET);
+        if (!importMachineryRows.length && !importTrucksRows.length) {
+          showToast('No asset rows found. Check that your file has Machinery and Trucks sheets with data.', 'error');
+          return;
+        }
+        showExcelPreview();
+      } catch (err) {
+        showToast('Could not read Excel file: ' + (err.message || 'unknown error'), 'error');
       }
-      if (csvRows.length === 0) { showToast('No valid rows found in CSV', 'error'); return; }
-      showPreview(headers, csvRows);
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
   }
 
-  function showPreview(headers, rows) {
-    var preview = document.getElementById('upload-preview');
-    var table = document.getElementById('preview-table');
-    var displayHeaders = headers.filter(function(h) { return h !== 'registration'; });
-    var thead = '<thead><tr>' + displayHeaders.map(function(h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead>';
-    var tbody = '<tbody>' + rows.slice(0,5).map(function(r) {
-      return '<tr>' + displayHeaders.map(function(h) { return '<td>' + esc(r[h] || '') + '</td>'; }).join('') + '</tr>';
-    }).join('') + '</tbody>';
-    table.innerHTML = thead + tbody;
-    document.getElementById('upload-count').textContent = csvRows.length + ' asset' + (csvRows.length !== 1 ? 's' : '') + ' ready to import';
-    preview.classList.add('visible');
-  }
+  document.getElementById('clear-excel-btn').addEventListener('click', clearImportState);
 
-  document.getElementById('clear-csv-btn').addEventListener('click', function() {
-    csvRows = [];
-    document.getElementById('upload-preview').classList.remove('visible');
-    document.getElementById('csv-file-input').value = '';
-  });
+  document.getElementById('import-excel-btn').addEventListener('click', async function() {
+    if (!importMachineryRows.length && !importTrucksRows.length) return;
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = 'Importing...';
 
-  document.getElementById('import-csv-btn').addEventListener('click', async function() {
-    if (csvRows.length === 0) return;
-    this.disabled = true; this.textContent = 'Importing...';
-    var records = csvRows.map(buildCsvRecord);
-    var { error } = await supabase.from('assets').insert(records);
-    if (error && supportsIsOnRoad && error.message && error.message.indexOf('is_on_road') !== -1) {
-      supportsIsOnRoad = false;
-      records = csvRows.map(function(r) {
-        var rec = buildCsvRecord(r);
-        delete rec.is_on_road;
-        return rec;
-      });
-      var retry = await supabase.from('assets').insert(records);
-      error = retry.error;
+    var records = [];
+    var skipped = [];
+    var machineryImported = 0;
+    var trucksImported = 0;
+
+    importMachineryRows.forEach(function(row) {
+      var issues = validateImportRow(row, 'machinery');
+      if (issues.length) {
+        skipped.push(formatSkippedRow(row, 'machinery', issues));
+        return;
+      }
+      records.push(buildImportRecord(row));
+      machineryImported++;
+    });
+
+    importTrucksRows.forEach(function(row) {
+      var issues = validateImportRow(row, 'trucks');
+      if (issues.length) {
+        skipped.push(formatSkippedRow(row, 'trucks', issues));
+        return;
+      }
+      records.push(buildImportRecord(row));
+      trucksImported++;
+    });
+
+    if (!records.length) {
+      btn.disabled = false;
+      btn.textContent = 'Import All Assets';
+      showImportWarnings(skipped);
+      showToast('No valid rows to import. Fix the issues listed above.', 'error');
+      return;
     }
-    this.disabled = false; this.textContent = 'Import All Assets';
-    if (error) { showToast('Import failed: ' + error.message, 'error'); return; }
+
+    var result = await supabase.from('assets').insert(records);
+    if (result.error && supportsIsOnRoad && result.error.message && result.error.message.indexOf('is_on_road') !== -1) {
+      supportsIsOnRoad = false;
+      records = records.map(function(rec) {
+        var copy = Object.assign({}, rec);
+        delete copy.is_on_road;
+        return copy;
+      });
+      result = await supabase.from('assets').insert(records);
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Import All Assets';
+
+    if (result.error) {
+      showToast('Import failed: ' + result.error.message, 'error');
+      return;
+    }
+
     document.getElementById('upload-preview').classList.remove('visible');
-    document.getElementById('csv-section').style.display = 'none';
-    csvRows = [];
-    showToast(records.length + ' assets imported successfully', 'success');
+    document.getElementById('import-warnings').classList.remove('visible');
+
+    var summary = machineryImported + ' machinery asset' + (machineryImported !== 1 ? 's' : '') +
+      ' and ' + trucksImported + ' truck asset' + (trucksImported !== 1 ? 's' : '') + ' imported.';
+    document.getElementById('import-results-summary').textContent = summary;
+    var skippedList = document.getElementById('import-results-skipped');
+    if (skipped.length) {
+      skippedList.innerHTML =
+        '<li style="list-style:none;margin-left:-18px;font-weight:600;color:#EF9F27;margin-bottom:6px;">Skipped rows:</li>' +
+        skipped.map(function(s) { return '<li>' + esc(s) + '</li>'; }).join('');
+    } else {
+      skippedList.innerHTML = '';
+    }
+    document.getElementById('import-results').classList.add('visible');
+
+    importMachineryRows = [];
+    importTrucksRows = [];
+    document.getElementById('excel-file-input').value = '';
+    document.getElementById('upload-count').textContent = '';
+
+    showToast(summary + (skipped.length ? ' ' + skipped.length + ' row(s) skipped.' : ''), 'success');
     loadAssets();
   });
 
