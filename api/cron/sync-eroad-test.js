@@ -1,3 +1,9 @@
+/**
+ * TEST/POC cron only — sync-eroad-test inserts a placeholder telematics row.
+ * Replace with real eRoad sync logic once API credentials are available.
+ * Scheduled via vercel.json for 2:00 AM New Zealand (UTC+13), which is 13:00 UTC
+ * the previous calendar day (cron: "0 13 * * *").
+ */
 const { createClient } = require('@supabase/supabase-js');
 
 const SUPABASE_URL = 'https://pddsgvuzvuwueuvpoytw.supabase.co';
