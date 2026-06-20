@@ -52,6 +52,11 @@
   .section-title { font-size: 18px; font-weight: 800; color: #D8DFE8; letter-spacing: -0.5px; margin-bottom: 5px; }
   .section-desc { font-size: 13px; color: #4A5568; line-height: 1.55; max-width: 520px; }
   .section-body { padding: 22px 26px; }
+  .account-subsection { padding-bottom: 22px; margin-bottom: 22px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .account-subsection:last-of-type { padding-bottom: 0; margin-bottom: 0; border-bottom: none; }
+  .subsection-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .subsection-title { font-size: 13px; font-weight: 700; color: #C8D0DB; letter-spacing: -0.2px; }
+  .header-badges { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
 
   .status-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 100px; white-space: nowrap; flex-shrink: 0; }
   .status-badge.connected { background: rgba(14,165,122,0.12); border: 1px solid rgba(14,165,122,0.28); color: #0EA57A; }
@@ -165,33 +170,64 @@
     <h1 class="page-title">Fleet Integrations</h1>
     <p class="page-sub">Connect fuel providers and telematics systems to automatically sync data into FleetMagnify.</p>
 
-    <!-- SECTION 1: Fuel Provider -->
+    <!-- SECTION 1: Account-Level Connections -->
     <div class="section-card">
       <div class="section-header">
         <div>
-          <div class="section-tag">⛽ Account Level</div>
-          <div class="section-title">Fuel Provider Connection</div>
-          <div class="section-desc">One company-wide connection covering all fuel cards on your BP account. Not configured per asset.</div>
+          <div class="section-tag">🏢 Account Level</div>
+          <div class="section-title">Account-Level Connections</div>
+          <div class="section-desc">Fuel and telematics providers are configured once for your whole company. Per-asset settings below identify individual vehicles.</div>
         </div>
-        <span class="status-badge disconnected" id="fuel-status-badge">Not connected</span>
+        <div class="header-badges">
+          <span class="status-badge disconnected" id="fuel-status-badge">Fuel: Not connected</span>
+          <span class="status-badge disconnected" id="telematics-status-badge">Telematics: Not connected</span>
+        </div>
       </div>
       <div class="section-body">
-        <form id="fuel-provider-form">
-          <div class="form-group">
-            <label for="fuel-provider">Fuel Provider</label>
-            <select id="fuel-provider">
-              <option value="">None</option>
-              <option value="BP">BP</option>
-            </select>
-          </div>
-          <div id="bp-fields" class="provider-fields">
+        <form id="account-connections-form">
+          <div class="account-subsection">
+            <div class="subsection-header">
+              <div class="subsection-title">⛽ Fuel Provider</div>
+            </div>
             <div class="form-group">
-              <label for="bp-api-key">BP API Key</label>
-              <input type="password" id="bp-api-key" placeholder="Paste your BP API key" autocomplete="off">
-              <div class="form-hint">This is a single account-level connection covering all fuel cards on your BP account.</div>
+              <label for="fuel-provider">Fuel Provider</label>
+              <select id="fuel-provider">
+                <option value="">None</option>
+                <option value="BP">BP</option>
+              </select>
+            </div>
+            <div id="bp-fields" class="provider-fields">
+              <div class="form-group">
+                <label for="bp-api-key">BP API Key</label>
+                <input type="password" id="bp-api-key" placeholder="Paste your BP API key" autocomplete="off">
+                <div class="form-hint">This is a single account-level connection covering all fuel cards on your BP account.</div>
+              </div>
             </div>
           </div>
-          <button type="submit" class="btn-save" id="save-fuel-btn">Save Fuel Connection</button>
+
+          <div class="account-subsection">
+            <div class="subsection-header">
+              <div class="subsection-title">📡 Telematics Provider</div>
+            </div>
+            <div class="form-group">
+              <label for="telematics-provider">Telematics Provider</label>
+              <select id="telematics-provider">
+                <option value="">None</option>
+                <option value="eRoad">eRoad</option>
+                <option value="VisionLink">VisionLink</option>
+              </select>
+            </div>
+            <div id="account-eroad-fields" class="provider-fields">
+              <div class="form-group">
+                <label for="account-eroad-api-key">eRoad API Key</label>
+                <input type="password" id="account-eroad-api-key" placeholder="Paste your eRoad API key" autocomplete="off">
+                <div class="form-hint">Generate this in MyEROAD under Administration &gt; My Organization &gt; Partner Gateway. A Client Administrator role is required.</div>
+              </div>
+            </div>
+            <div id="account-visionlink-msg" class="coming-soon-msg">VisionLink connection coming soon</div>
+          </div>
+
+          <button type="submit" class="btn-save" id="save-account-btn">Save Account Connections</button>
         </form>
       </div>
     </div>
@@ -211,7 +247,7 @@
             <tr>
               <th>Asset Name</th>
               <th>Asset Type</th>
-              <th>Telematics Provider</th>
+              <th>Machine ID</th>
               <th></th>
             </tr>
           </thead>
@@ -231,26 +267,11 @@
     <p class="modal-sub" id="modal-asset-sub"></p>
     <div id="modal-error" class="form-error"></div>
     <form id="connection-form">
-      <div class="form-group">
-        <label for="modal-telematics-provider">Telematics Provider</label>
-        <select id="modal-telematics-provider">
-          <option value="">None</option>
-          <option value="eRoad">eRoad</option>
-          <option value="VisionLink">VisionLink</option>
-        </select>
+      <div class="form-group" id="field-eroad-machine-id" hidden>
+        <label for="modal-eroad-machine-id">eRoad Machine ID</label>
+        <input type="text" id="modal-eroad-machine-id" placeholder="e.g. machine ID from MyEROAD">
+        <div class="form-hint">Find this under the vehicle's details in MyEROAD. This identifies which vehicle this asset corresponds to when querying eRoad's API.</div>
       </div>
-      <div id="modal-eroad-fields" class="provider-fields">
-        <div class="form-group">
-          <label for="modal-eroad-api-key">eRoad API Key</label>
-          <input type="password" id="modal-eroad-api-key" placeholder="Paste your eRoad API key" autocomplete="off">
-        </div>
-        <div class="form-group">
-          <label for="modal-eroad-machine-id">eRoad Machine ID</label>
-          <input type="text" id="modal-eroad-machine-id" placeholder="e.g. machine ID from MyEROAD">
-          <div class="form-hint">Generate an API key in MyEROAD under Administration &gt; API Keys, and find the Machine ID under the vehicle's details in MyEROAD.</div>
-        </div>
-      </div>
-      <div id="modal-visionlink-msg" class="coming-soon-msg">VisionLink connection coming soon</div>
       <div class="form-group" id="field-bp-card" hidden>
         <label for="modal-bp-card-number">BP Fuel Card Number</label>
         <input type="text" id="modal-bp-card-number" placeholder="e.g. card number on BP invoice">
@@ -277,8 +298,9 @@
   var currentUser = null;
   var allAssets = [];
   var editingAssetId = null;
-  var editingHasEroadKey = false;
   var storedHasBpKey = false;
+  var storedHasEroadKey = false;
+  var accountTelematicsProvider = '';
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var ON_ROAD_TYPE_SET = { 'Light Vehicle': true, 'Rigid Truck': true, 'Semi Trailer': true };
@@ -292,7 +314,8 @@
       : currentUser.email.split('@')[0];
     document.getElementById('user-name').textContent = name;
     document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
-    await Promise.all([loadCompanyIntegration(), loadAssets()]);
+    await loadCompanyIntegration();
+    await loadAssets();
   }
 
   function isOnRoadType(assetType) {
@@ -314,8 +337,8 @@
     toastTimer = setTimeout(function() { toast.classList.remove('show'); }, 3500);
   }
 
-  function setStatusBadge(el, connected) {
-    el.textContent = connected ? 'Connected' : 'Not connected';
+  function setStatusBadge(el, connected, prefix) {
+    el.textContent = (prefix ? prefix + ': ' : '') + (connected ? 'Connected' : 'Not connected');
     el.className = 'status-badge ' + (connected ? 'connected' : 'disconnected');
   }
 
@@ -324,55 +347,86 @@
     document.getElementById('bp-fields').classList.toggle('visible', provider === 'BP');
   }
 
-  function updateFuelStatusBadge() {
-    var badge = document.getElementById('fuel-status-badge');
-    setStatusBadge(badge, storedHasBpKey);
+  function updateAccountTelematicsFields() {
+    var provider = (document.getElementById('telematics-provider').value || '').trim();
+    document.getElementById('account-eroad-fields').classList.toggle('visible', provider === 'eRoad');
+    document.getElementById('account-visionlink-msg').classList.toggle('visible', provider === 'VisionLink');
+  }
+
+  function updateAccountStatusBadges() {
+    setStatusBadge(document.getElementById('fuel-status-badge'), storedHasBpKey, 'Fuel');
+    var telConnected = accountTelematicsProvider === 'VisionLink' ||
+      (accountTelematicsProvider === 'eRoad' && storedHasEroadKey);
+    setStatusBadge(document.getElementById('telematics-status-badge'), telConnected, 'Telematics');
   }
 
   async function loadCompanyIntegration() {
     var result = await supabase
       .from('company_integrations')
-      .select('fuel_provider, bp_api_key')
+      .select('fuel_provider, bp_api_key, telematics_provider, eroad_api_key')
       .eq('user_id', currentUser.id)
       .maybeSingle();
 
     if (result.error && result.error.code !== 'PGRST116') {
-      showToast('Could not load fuel provider settings', 'error');
+      showToast('Could not load account connection settings', 'error');
       return;
     }
 
     var row = result.data;
     storedHasBpKey = !!(row && row.bp_api_key);
+    storedHasEroadKey = !!(row && row.eroad_api_key);
+    accountTelematicsProvider = (row && row.telematics_provider) ? row.telematics_provider : '';
+
     document.getElementById('fuel-provider').value = (row && row.fuel_provider) ? row.fuel_provider : '';
     document.getElementById('bp-api-key').value = '';
     document.getElementById('bp-api-key').placeholder = storedHasBpKey
       ? '••••••••  (leave blank to keep current key)'
       : 'Paste your BP API key';
+
+    document.getElementById('telematics-provider').value = accountTelematicsProvider;
+    document.getElementById('account-eroad-api-key').value = '';
+    document.getElementById('account-eroad-api-key').placeholder = storedHasEroadKey
+      ? '••••••••  (leave blank to keep current key)'
+      : 'Paste your eRoad API key';
+
     updateFuelProviderFields();
-    updateFuelStatusBadge();
+    updateAccountTelematicsFields();
+    updateAccountStatusBadges();
   }
 
   document.getElementById('fuel-provider').addEventListener('change', updateFuelProviderFields);
+  document.getElementById('telematics-provider').addEventListener('change', updateAccountTelematicsFields);
 
-  document.getElementById('fuel-provider-form').addEventListener('submit', async function(e) {
+  document.getElementById('account-connections-form').addEventListener('submit', async function(e) {
     e.preventDefault();
-    var btn = document.getElementById('save-fuel-btn');
-    var provider = (document.getElementById('fuel-provider').value || '').trim();
-    var apiKey = document.getElementById('bp-api-key').value.trim();
+    var btn = document.getElementById('save-account-btn');
+    var fuelProvider = (document.getElementById('fuel-provider').value || '').trim();
+    var bpApiKey = document.getElementById('bp-api-key').value.trim();
+    var telProvider = (document.getElementById('telematics-provider').value || '').trim();
+    var eroadApiKey = document.getElementById('account-eroad-api-key').value.trim();
 
-    if (provider === 'BP' && !apiKey && !storedHasBpKey) {
+    if (fuelProvider === 'BP' && !bpApiKey && !storedHasBpKey) {
       showToast('Please enter your BP API key', 'error');
+      return;
+    }
+    if (telProvider === 'eRoad' && !eroadApiKey && !storedHasEroadKey) {
+      showToast('Please enter your eRoad API key', 'error');
       return;
     }
 
     var payload = {
       user_id: currentUser.id,
-      fuel_provider: provider || null,
-      bp_api_key: provider === 'BP' ? (apiKey || null) : null
+      fuel_provider: fuelProvider || null,
+      bp_api_key: fuelProvider === 'BP' ? (bpApiKey || null) : null,
+      telematics_provider: telProvider || null,
+      eroad_api_key: telProvider === 'eRoad' ? (eroadApiKey || null) : null
     };
 
-    if (provider === 'BP' && !apiKey && storedHasBpKey) {
+    if (fuelProvider === 'BP' && !bpApiKey && storedHasBpKey) {
       delete payload.bp_api_key;
+    }
+    if (telProvider === 'eRoad' && !eroadApiKey && storedHasEroadKey) {
+      delete payload.eroad_api_key;
     }
 
     btn.disabled = true;
@@ -388,31 +442,46 @@
     if (existing.data) {
       var updatePayload = {
         fuel_provider: payload.fuel_provider,
-        bp_api_key: payload.bp_api_key
+        bp_api_key: payload.bp_api_key,
+        telematics_provider: payload.telematics_provider,
+        eroad_api_key: payload.eroad_api_key
       };
       if (payload.bp_api_key === undefined) delete updatePayload.bp_api_key;
+      if (payload.eroad_api_key === undefined) delete updatePayload.eroad_api_key;
       result = await supabase.from('company_integrations').update(updatePayload).eq('user_id', currentUser.id);
     } else {
       if (payload.bp_api_key === undefined) payload.bp_api_key = null;
+      if (payload.eroad_api_key === undefined) payload.eroad_api_key = null;
       result = await supabase.from('company_integrations').insert(payload);
     }
 
     btn.disabled = false;
-    btn.textContent = 'Save Fuel Connection';
+    btn.textContent = 'Save Account Connections';
 
     if (result.error) {
       showToast('Failed to save: ' + result.error.message, 'error');
       return;
     }
 
-    if (provider !== 'BP') storedHasBpKey = false;
-    else if (apiKey) storedHasBpKey = true;
-    updateFuelStatusBadge();
+    if (fuelProvider !== 'BP') storedHasBpKey = false;
+    else if (bpApiKey) storedHasBpKey = true;
+
+    accountTelematicsProvider = telProvider;
+    if (telProvider !== 'eRoad') storedHasEroadKey = false;
+    else if (eroadApiKey) storedHasEroadKey = true;
+
     document.getElementById('bp-api-key').value = '';
     document.getElementById('bp-api-key').placeholder = storedHasBpKey
       ? '••••••••  (leave blank to keep current key)'
       : 'Paste your BP API key';
-    showToast('Fuel provider connection saved', 'success');
+    document.getElementById('account-eroad-api-key').value = '';
+    document.getElementById('account-eroad-api-key').placeholder = storedHasEroadKey
+      ? '••••••••  (leave blank to keep current key)'
+      : 'Paste your eRoad API key';
+
+    updateAccountStatusBadges();
+    renderAssetsTable();
+    showToast('Account connections saved', 'success');
   });
 
   async function loadAssets() {
@@ -420,7 +489,7 @@
     tbody.innerHTML = '<tr class="loading-row"><td colspan="4">Loading assets...</td></tr>';
     var result = await supabase
       .from('assets')
-      .select('id, asset_name, asset_type, telematics_provider, eroad_api_key, eroad_machine_id, bp_card_number')
+      .select('id, asset_name, asset_type, eroad_machine_id, bp_card_number')
       .eq('user_id', currentUser.id)
       .order('asset_name');
 
@@ -434,15 +503,15 @@
     renderAssetsTable();
   }
 
-  function renderProviderCell(asset) {
-    var provider = (asset.telematics_provider || '').trim();
-    if (!provider) {
-      return '<div class="provider-cell"><span class="status-badge disconnected">Not connected</span></div>';
+  function renderMachineIdCell(asset) {
+    var hasMachineId = !!(asset.eroad_machine_id && String(asset.eroad_machine_id).trim());
+    if (accountTelematicsProvider !== 'eRoad') {
+      return '<span class="status-badge disconnected">N/A</span>';
     }
-    return '<div class="provider-cell">' +
-      '<span>' + esc(provider) + '</span>' +
-      '<span class="status-badge connected">Connected</span>' +
-    '</div>';
+    if (hasMachineId) {
+      return '<span class="status-badge connected">Machine ID set</span>';
+    }
+    return '<span class="status-badge disconnected">Not configured</span>';
   }
 
   function renderAssetsTable() {
@@ -456,7 +525,7 @@
       return '<tr>' +
         '<td class="asset-name-cell">' + esc(a.asset_name || '—') + '</td>' +
         '<td><span class="asset-type-badge">' + esc(a.asset_type || '—') + '</span></td>' +
-        '<td>' + renderProviderCell(a) + '</td>' +
+        '<td>' + renderMachineIdCell(a) + '</td>' +
         '<td><button type="button" class="btn-manage" data-id="' + a.id + '">Manage Connection</button></td>' +
       '</tr>';
     }).join('');
@@ -466,32 +535,28 @@
     });
   }
 
-  function updateModalProviderFields() {
-    var provider = (document.getElementById('modal-telematics-provider').value || '').trim();
-    document.getElementById('modal-eroad-fields').classList.toggle('visible', provider === 'eRoad');
-    document.getElementById('modal-visionlink-msg').classList.toggle('visible', provider === 'VisionLink');
-  }
-
   function openConnectionModal(assetId) {
     var asset = allAssets.find(function(a) { return Number(a.id) === Number(assetId); });
     if (!asset) { showToast('Asset not found', 'error'); return; }
 
     editingAssetId = asset.id;
-    editingHasEroadKey = !!(asset.eroad_api_key);
     var onRoad = isOnRoadType(asset.asset_type);
+    var showEroad = accountTelematicsProvider === 'eRoad';
 
     document.getElementById('modal-asset-title').textContent = 'Manage Connection';
     document.getElementById('modal-asset-sub').textContent = asset.asset_name || 'Asset';
     document.getElementById('modal-error').classList.remove('visible');
     document.getElementById('modal-error').textContent = '';
 
-    document.getElementById('modal-telematics-provider').value = (asset.telematics_provider || '').trim();
-    document.getElementById('modal-eroad-api-key').value = '';
-    document.getElementById('modal-eroad-api-key').placeholder = editingHasEroadKey
-      ? '••••••••  (leave blank to keep current key)'
-      : 'Paste your eRoad API key';
     document.getElementById('modal-eroad-machine-id').value = asset.eroad_machine_id || '';
     document.getElementById('modal-bp-card-number').value = asset.bp_card_number || '';
+
+    var machineField = document.getElementById('field-eroad-machine-id');
+    if (showEroad) {
+      machineField.removeAttribute('hidden');
+    } else {
+      machineField.setAttribute('hidden', 'hidden');
+    }
 
     var bpField = document.getElementById('field-bp-card');
     if (onRoad) {
@@ -500,17 +565,14 @@
       bpField.setAttribute('hidden', 'hidden');
     }
 
-    updateModalProviderFields();
     document.getElementById('connection-modal').classList.add('open');
   }
 
   function closeConnectionModal() {
     document.getElementById('connection-modal').classList.remove('open');
     editingAssetId = null;
-    editingHasEroadKey = false;
   }
 
-  document.getElementById('modal-telematics-provider').addEventListener('change', updateModalProviderFields);
   document.getElementById('modal-cancel-btn').addEventListener('click', closeConnectionModal);
   document.getElementById('connection-modal').addEventListener('click', function(e) {
     if (e.target === this) closeConnectionModal();
@@ -524,34 +586,23 @@
     var saveBtn = document.getElementById('modal-save-btn');
     var asset = allAssets.find(function(a) { return Number(a.id) === Number(editingAssetId); });
     var onRoad = asset && isOnRoadType(asset.asset_type);
-    var provider = (document.getElementById('modal-telematics-provider').value || '').trim();
+    var showEroad = accountTelematicsProvider === 'eRoad';
 
     var payload = {};
 
-    if (!provider) {
-      payload.telematics_provider = null;
-      payload.eroad_api_key = null;
-      payload.eroad_machine_id = null;
-    } else {
-      payload.telematics_provider = provider;
-      if (provider === 'eRoad') {
-        var apiKey = document.getElementById('modal-eroad-api-key').value.trim();
-        var machineId = document.getElementById('modal-eroad-machine-id').value.trim();
-        if (!machineId || (!apiKey && !editingHasEroadKey)) {
-          errEl.textContent = 'eRoad connection requires an API key and Machine ID.';
-          errEl.classList.add('visible');
-          return;
-        }
-        payload.eroad_machine_id = machineId;
-        if (apiKey) payload.eroad_api_key = apiKey;
-      } else {
-        payload.eroad_api_key = null;
-        payload.eroad_machine_id = null;
-      }
+    if (showEroad) {
+      var machineId = document.getElementById('modal-eroad-machine-id').value.trim();
+      payload.eroad_machine_id = machineId || null;
     }
 
     if (onRoad) {
       payload.bp_card_number = document.getElementById('modal-bp-card-number').value.trim() || null;
+    }
+
+    if (!Object.keys(payload).length) {
+      errEl.textContent = 'No fields available to save for this asset. Configure account-level telematics or add an on-road asset type.';
+      errEl.classList.add('visible');
+      return;
     }
 
     errEl.classList.remove('visible');
@@ -563,7 +614,7 @@
       .update(payload)
       .eq('id', Number(editingAssetId))
       .eq('user_id', currentUser.id)
-      .select('id, asset_name, asset_type, telematics_provider, eroad_api_key, eroad_machine_id, bp_card_number')
+      .select('id, asset_name, asset_type, eroad_machine_id, bp_card_number')
       .single();
 
     saveBtn.disabled = false;
