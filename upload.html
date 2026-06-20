@@ -300,7 +300,7 @@
 
     <div class="info-strip">
       <div class="info-strip-icon">💡</div>
-      <p><strong>Before uploading:</strong> Make sure your assets are added in the <a href="assets.html" style="color:#0EA57A;">Assets</a> page first. Asset names in your CSV must match exactly to link correctly. Dates should be in YYYY-MM-DD format (e.g. 2026-06-01).</p>
+      <p><strong>Before uploading:</strong> Make sure your assets are added in the <a href="assets.html" style="color:#0EA57A;">Assets</a> page first. Download the template to get one row per asset with asset_id and asset_name pre-filled — duplicate rows for each date. Dates should be in YYYY-MM-DD format (e.g. 2026-06-01).</p>
     </div>
 
     <div class="upload-grid">
@@ -318,17 +318,17 @@
               <div class="template-icon">📄</div>
               <div>
                 <div class="template-label">Fuel Data Template</div>
-                <div class="template-desc">CSV with required column headers</div>
+                <div class="template-desc">Excel with your assets pre-filled — one row per asset</div>
               </div>
             </div>
             <button class="btn-download" id="fuel-template-btn">⬇ Download</button>
           </div>
 
           <div class="drop-zone" id="fuel-drop">
-            <input type="file" accept=".csv" id="fuel-file">
+            <input type="file" accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" id="fuel-file">
             <div class="drop-icon">📂</div>
             <div class="drop-text"><strong>Click to browse</strong> or drag and drop</div>
-            <div class="drop-formats">Accepts .csv files only</div>
+            <div class="drop-formats">Accepts .xlsx and .csv files</div>
             <div class="drop-filename" id="fuel-filename"></div>
           </div>
 
@@ -364,17 +364,17 @@
               <div class="template-icon">📄</div>
               <div>
                 <div class="template-label">Telematics Data Template</div>
-                <div class="template-desc">CSV with required column headers</div>
+                <div class="template-desc">Excel with your assets pre-filled — one row per asset</div>
               </div>
             </div>
             <button class="btn-download" id="tel-template-btn">⬇ Download</button>
           </div>
 
           <div class="drop-zone" id="tel-drop">
-            <input type="file" accept=".csv" id="tel-file">
+            <input type="file" accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" id="tel-file">
             <div class="drop-icon">📂</div>
             <div class="drop-text"><strong>Click to browse</strong> or drag and drop</div>
-            <div class="drop-formats">Accepts .csv files only</div>
+            <div class="drop-formats">Accepts .xlsx and .csv files</div>
             <div class="drop-filename" id="tel-filename"></div>
           </div>
 
@@ -405,18 +405,18 @@
       <div class="help-grid">
         <div class="help-card">
           <div class="help-card-icon">⛽</div>
-          <h4>Fuel CSV Columns</h4>
-          <p>asset_name · record_date · litres · cost_per_litre · total_cost · supplier</p>
+          <h4>Fuel Template Columns</h4>
+          <p>asset_id · asset_name · record_date · litres · cost_per_litre · total_cost · supplier</p>
         </div>
         <div class="help-card">
           <div class="help-card-icon">📡</div>
-          <h4>Telematics CSV Columns</h4>
-          <p>asset_name · record_date · total_engine_hours · operating_hours · idle_hours · odometer_km</p>
+          <h4>Telematics Template Columns</h4>
+          <p>asset_id · asset_name · record_date · total_engine_hours · operating_hours · idle_hours · odometer_km</p>
         </div>
         <div class="help-card">
           <div class="help-card-icon">📅</div>
           <h4>Date Format</h4>
-          <p>All dates must use the format YYYY-MM-DD. Example: 2026-06-15. Asset names must match exactly as entered in your Assets page.</p>
+          <p>All dates must use the format YYYY-MM-DD. Example: 2026-06-15. Duplicate a row for each date — do not change asset_id or asset_name.</p>
         </div>
       </div>
     </div>
@@ -432,6 +432,7 @@
 
 <script src="js/supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script>
 (function() {
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
@@ -449,42 +450,111 @@
       : currentUser.email.split('@')[0];
     document.getElementById('user-name').textContent = name;
     document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+    await getAssets();
   }
 
   // ── Asset lookup cache ──
   var assetCache = null;
   async function getAssets() {
     if (assetCache) return assetCache;
-    var { data } = await supabase.from('assets').select('id, asset_name').eq('user_id', currentUser.id);
+    var { data } = await supabase.from('assets').select('id, asset_name').eq('user_id', currentUser.id).order('asset_name');
     assetCache = data || [];
     return assetCache;
   }
-  function findAssetId(assets, name) {
+  function findAssetIdByName(assets, name) {
     var n = (name || '').trim().toLowerCase();
     var match = assets.find(function(a) { return (a.asset_name || '').trim().toLowerCase() === n; });
     return match ? match.id : null;
   }
+  function resolveAssetId(assets, row) {
+    var rawId = (row.asset_id || '').trim();
+    if (rawId) {
+      var id = parseInt(rawId, 10);
+      if (!isNaN(id)) {
+        var byId = assets.find(function(a) { return Number(a.id) === id; });
+        if (byId) return byId.id;
+      }
+    }
+    return findAssetIdByName(assets, row.asset_name);
+  }
 
-  // ── CSV parser ──
+  var FUEL_NOTE = 'Each row is one asset on one date. Duplicate a row for each date you have data for. Do not change asset_id or asset_name.';
+  var TEL_NOTE = 'Each row is one asset on one date. Duplicate a row for each date you have data for. Do not change asset_id or asset_name.';
+  var FUEL_HEADERS = ['asset_id', 'asset_name', 'record_date', 'litres', 'cost_per_litre', 'total_cost', 'supplier'];
+  var TEL_HEADERS = ['asset_id', 'asset_name', 'record_date', 'total_engine_hours', 'operating_hours', 'idle_hours', 'odometer_km'];
+
+  // ── CSV / Excel parser ──
   function parseCSV(text) {
     var lines = text.split('\n').map(function(l) { return l.trim(); }).filter(Boolean);
     if (lines.length < 2) return { headers: [], rows: [] };
-    var headers = lines[0].split(',').map(function(h) { return h.trim().toLowerCase().replace(/\r/g,''); });
+    var headerIdx = 0;
+    for (var h = 0; h < lines.length; h++) {
+      if (lines[h].toLowerCase().indexOf('asset_name') !== -1) {
+        headerIdx = h;
+        break;
+      }
+    }
+    var headers = lines[headerIdx].split(',').map(function(hdr) { return hdr.trim().toLowerCase().replace(/\r/g,''); });
     var rows = [];
-    for (var i = 1; i < lines.length; i++) {
+    for (var i = headerIdx + 1; i < lines.length; i++) {
       var vals = lines[i].split(',').map(function(v) { return v.trim().replace(/\r/g,''); });
       if (vals.every(function(v) { return !v; })) continue;
       var row = {};
-      headers.forEach(function(h, idx) { row[h] = vals[idx] !== undefined ? vals[idx] : ''; });
-      rows.push(row);
+      headers.forEach(function(hdr, idx) { row[hdr] = vals[idx] !== undefined ? vals[idx] : ''; });
+      if ((row.asset_name || '').trim() || (row.asset_id || '').trim()) rows.push(row);
     }
     return { headers: headers, rows: rows };
   }
 
-  function readFile(file, callback) {
-    var reader = new FileReader();
-    reader.onload = function(e) { callback(e.target.result); };
-    reader.readAsText(file);
+  function parseExcelUpload(arrayBuffer) {
+    var workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+    var sheet = workbook.Sheets[workbook.SheetNames[0]];
+    if (!sheet) return { headers: [], rows: [] };
+    var sheetRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    var headerIdx = -1;
+    var headers = [];
+    for (var i = 0; i < sheetRows.length; i++) {
+      var normalized = (sheetRows[i] || []).map(function(c) { return String(c).trim().toLowerCase(); });
+      if (normalized.indexOf('asset_name') !== -1) {
+        headerIdx = i;
+        headers = normalized;
+        break;
+      }
+    }
+    if (headerIdx === -1) return { headers: [], rows: [] };
+    var rows = [];
+    for (var j = headerIdx + 1; j < sheetRows.length; j++) {
+      var vals = sheetRows[j] || [];
+      if (vals.every(function(v) { return String(v).trim() === ''; })) continue;
+      var row = {};
+      headers.forEach(function(hdr, idx) {
+        if (hdr) row[hdr] = vals[idx] != null ? String(vals[idx]).trim() : '';
+      });
+      if ((row.asset_name || '').trim() || (row.asset_id || '').trim()) rows.push(row);
+    }
+    return { headers: headers, rows: rows };
+  }
+
+  function readUploadFile(file, callback) {
+    if (/\.xlsx$/i.test(file.name)) {
+      if (typeof XLSX === 'undefined') {
+        callback(null, 'Excel library failed to load. Please refresh the page.');
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          callback(parseExcelUpload(e.target.result), null);
+        } catch (err) {
+          callback(null, 'Could not read Excel file: ' + (err.message || 'unknown error'));
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      return;
+    }
+    var textReader = new FileReader();
+    textReader.onload = function(e) { callback(parseCSV(e.target.result), null); };
+    textReader.readAsText(file);
   }
 
   function renderPreview(tableEl, headers, rows) {
@@ -497,34 +567,58 @@
   }
 
   // ── Templates ──
+  async function buildFuelTemplate() {
+    if (typeof XLSX === 'undefined') {
+      showToast('Excel library failed to load. Please refresh the page.', 'error');
+      return;
+    }
+    var assets = await getAssets();
+    var rows = [[FUEL_NOTE], FUEL_HEADERS];
+    if (assets.length) {
+      assets.forEach(function(a) {
+        rows.push([a.id, a.asset_name, '', '', '', '', '']);
+      });
+    } else {
+      rows.push(['', 'CAT 390F Excavator #1', '', '', '', '', '']);
+    }
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Fuel Data');
+    XLSX.writeFile(wb, 'FleetMagnify_Fuel_Template.xlsx');
+  }
+
+  async function buildTelematicsTemplate() {
+    if (typeof XLSX === 'undefined') {
+      showToast('Excel library failed to load. Please refresh the page.', 'error');
+      return;
+    }
+    var assets = await getAssets();
+    var rows = [[TEL_NOTE], TEL_HEADERS];
+    if (assets.length) {
+      assets.forEach(function(a) {
+        rows.push([a.id, a.asset_name, '', '', '', '', '']);
+      });
+    } else {
+      rows.push(['', 'CAT 390F Excavator #1', '', '', '', '', '']);
+    }
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Telematics Data');
+    XLSX.writeFile(wb, 'FleetMagnify_Telematics_Template.xlsx');
+  }
+
   document.getElementById('fuel-template-btn').addEventListener('click', function() {
-    var csv = 'asset_name,record_date,litres,cost_per_litre,total_cost,supplier\n' +
-      'CAT 390F Excavator #1,2026-06-01,850.5,1.85,1573.43,BP Fleet\n' +
-      'Komatsu HD785 Dump Truck,2026-06-03,1200,1.82,2184,Caltex\n';
-    downloadCSV(csv, 'FleetMagnify_Fuel_Template.csv');
+    buildFuelTemplate();
   });
 
   document.getElementById('tel-template-btn').addEventListener('click', function() {
-    var csv = 'asset_name,record_date,total_engine_hours,operating_hours,idle_hours,odometer_km\n' +
-      'CAT 390F Excavator #1,2026-06-01,10.5,7.2,3.3,\n' +
-      'Komatsu HD785 Dump Truck,2026-06-01,12,9.5,2.5,1245\n';
-    downloadCSV(csv, 'FleetMagnify_Telematics_Template.csv');
+    buildTelematicsTemplate();
   });
-
-  function downloadCSV(content, filename) {
-    var blob = new Blob([content], { type: 'text/csv' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    a.click();
-  }
 
   // ── FUEL FILE ──
   setupDropZone('fuel-drop', 'fuel-file', function(file) {
     document.getElementById('fuel-filename').style.display = 'block';
     document.getElementById('fuel-filename').textContent = '📎 ' + file.name;
-    readFile(file, function(text) {
-      var parsed = parseCSV(text);
+    readUploadFile(file, function(parsed, err) {
+      if (err) { showResult('fuel-result', err, 'error'); return; }
       fuelRows = parsed.rows;
       if (fuelRows.length === 0) { showResult('fuel-result', 'No valid rows found. Check your file matches the template.', 'error'); return; }
       renderPreview(document.getElementById('fuel-preview-table'), parsed.headers, fuelRows);
@@ -550,7 +644,7 @@
     var assets = await getAssets();
     var records = []; var skipped = 0;
     fuelRows.forEach(function(r) {
-      var assetId = findAssetId(assets, r.asset_name);
+      var assetId = resolveAssetId(assets, r);
       if (!assetId) { skipped++; return; }
       records.push({
         user_id: currentUser.id,
@@ -563,7 +657,7 @@
       });
     });
     if (records.length === 0) {
-      showResult('fuel-result', 'No rows could be matched to your assets. Check that asset names in your CSV match exactly.', 'error');
+      showResult('fuel-result', 'No rows could be matched to your assets. Check asset_id or asset_name in your file.', 'error');
       this.disabled = false; this.textContent = 'Import Fuel Data'; return;
     }
     var { error } = await supabase.from('fuel_records').insert(records);
@@ -583,8 +677,8 @@
   setupDropZone('tel-drop', 'tel-file', function(file) {
     document.getElementById('tel-filename').style.display = 'block';
     document.getElementById('tel-filename').textContent = '📎 ' + file.name;
-    readFile(file, function(text) {
-      var parsed = parseCSV(text);
+    readUploadFile(file, function(parsed, err) {
+      if (err) { showResult('tel-result', err, 'error'); return; }
       telRows = parsed.rows;
       if (telRows.length === 0) { showResult('tel-result', 'No valid rows found. Check your file matches the template.', 'error'); return; }
       renderPreview(document.getElementById('tel-preview-table'), parsed.headers, telRows);
@@ -610,7 +704,7 @@
     var assets = await getAssets();
     var records = []; var skipped = 0;
     telRows.forEach(function(r) {
-      var assetId = findAssetId(assets, r.asset_name);
+      var assetId = resolveAssetId(assets, r);
       if (!assetId) { skipped++; return; }
       records.push({
         user_id: currentUser.id,
@@ -623,7 +717,7 @@
       });
     });
     if (records.length === 0) {
-      showResult('tel-result', 'No rows could be matched to your assets. Check that asset names in your CSV match exactly.', 'error');
+      showResult('tel-result', 'No rows could be matched to your assets. Check asset_id or asset_name in your file.', 'error');
       this.disabled = false; this.textContent = 'Import Telematics Data'; return;
     }
     var { error } = await supabase.from('telematics_records').insert(records);

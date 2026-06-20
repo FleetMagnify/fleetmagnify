@@ -154,6 +154,13 @@
   .confirm-icon { font-size: 36px; margin-bottom: 14px; }
   .confirm-modal h2 { font-size: 20px; }
   .confirm-modal .modal-sub { margin-bottom: 20px; }
+  .import-confirm-modal { max-width: 640px; text-align: left; }
+  .import-confirm-section { margin-bottom: 18px; }
+  .import-confirm-section h3 { font-size: 11px; font-weight: 700; color: #9BA4B0; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .import-confirm-item { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; font-size: 12px; color: #6B7785; line-height: 1.5; }
+  .import-confirm-item strong { color: #C8D0DB; font-weight: 600; }
+  .import-change { margin-top: 4px; padding-left: 10px; border-left: 2px solid rgba(14,165,122,0.35); font-size: 11.5px; }
+  .import-change em { color: #3A4A5C; font-style: normal; }
   .btn-danger { flex: 2; background: rgba(226,75,74,0.15); border: 1px solid rgba(226,75,74,0.30); color: #F0A8A7; font-size: 14px; font-weight: 700; padding: 12px; border-radius: 9px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
   .btn-danger:hover { background: rgba(226,75,74,0.25); }
   .form-error { display: none; background: rgba(226,75,74,0.10); border: 1px solid rgba(226,75,74,0.28); color: #F0A8A7; font-size: 13px; line-height: 1.5; padding: 11px 14px; border-radius: 9px; margin-bottom: 16px; }
@@ -272,7 +279,7 @@
         <div style="display:flex; align-items:center; justify-content:space-between; width:100%; gap:24px; flex-wrap:wrap;">
           <div class="upload-card-text">
             <h3>Bulk Import via Excel</h3>
-            <p>Download the template with separate <strong>Machinery</strong> and <strong>Trucks</strong> sheets, fill in your assets, then upload the completed file to import your entire fleet at once.</p>
+            <p>Download the template with your existing assets pre-filled on separate <strong>Machinery</strong> and <strong>Trucks</strong> sheets. Upload to update existing assets (by asset_id) or add new ones. Blank cells leave current values unchanged.</p>
           </div>
           <div class="upload-card-actions">
             <button class="btn-secondary" id="download-template-btn">⬇ Download Template</button>
@@ -491,6 +498,19 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="import-confirm-modal">
+  <div class="modal import-confirm-modal">
+    <div class="modal-eyebrow">Bulk Import</div>
+    <h2>Review changes before importing</h2>
+    <p class="modal-sub">Existing assets with a matching asset_id will be updated. Rows without a matching asset_id will be added as new assets. Blank cells leave the current database value unchanged.</p>
+    <div id="import-confirm-content"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel" id="import-confirm-cancel">Cancel</button>
+      <button type="button" class="btn-save" id="import-confirm-proceed">Confirm Import</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast">
   <span class="toast-icon" id="toast-icon">✓</span>
   <span id="toast-msg"></span>
@@ -509,6 +529,7 @@
   var editingAssetId = null;
   var importMachineryRows = [];
   var importTrucksRows = [];
+  var pendingImportPlan = null;
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var ON_ROAD_TYPE_SET = { 'Light Vehicle': true, 'Rigid Truck': true, 'Semi Trailer': true };
@@ -1003,6 +1024,78 @@
   ];
   var MACHINERY_TYPE_NOTE = 'Valid asset_type values: Excavator, Dump Truck, Wheel Loader, Motor Grader, Bulldozer, Crane, Forklift, Water Truck, Other';
   var TRUCKS_TYPE_NOTE = 'Valid asset_type values: Light Vehicle, Rigid Truck, Semi Trailer';
+  var ASSET_ID_NOTE = 'asset_id is pre-filled for existing assets — do not edit when updating; leave blank for new assets.';
+  var MACHINERY_HEADERS = ['asset_id'].concat(MACHINERY_COLUMNS);
+  var TRUCKS_HEADERS = ['asset_id'].concat(TRUCKS_COLUMNS);
+  var EDITABLE_IMPORT_FIELDS = [
+    'asset_name', 'asset_type', 'make', 'model', 'year', 'fuel_type', 'registration',
+    'idle_burn_rate_lph', 'current_value', 'estimated_end_of_life_value', 'estimated_annual_repair_cost',
+    'expected_life_hours', 'service_cost_per_hour', 'available_hours_per_week', 'target_utilisation_percent',
+    'expected_life_km', 'service_cost_per_km', 'current_odometer', 'estimated_annual_km'
+  ];
+  var IMPORT_FIELD_LABELS = {
+    asset_name: 'Asset Name', asset_type: 'Asset Type', make: 'Make', model: 'Model', year: 'Year',
+    fuel_type: 'Fuel Type', registration: 'Registration', idle_burn_rate_lph: 'Idle Burn Rate',
+    current_value: 'Current Value', estimated_end_of_life_value: 'End of Life Value',
+    estimated_annual_repair_cost: 'Annual Repair Cost', expected_life_hours: 'Expected Life (hours)',
+    service_cost_per_hour: 'Service Cost / hour', available_hours_per_week: 'Available Hours / week',
+    target_utilisation_percent: 'Target Utilisation %', expected_life_km: 'Expected Life (km)',
+    service_cost_per_km: 'Service Cost / km', current_odometer: 'Current Odometer',
+    estimated_annual_km: 'Estimated Annual km'
+  };
+
+  function hasCellValue(row, key) {
+    var v = row[key];
+    return v != null && String(v).trim() !== '';
+  }
+
+  function getAssetIdFromRow(row) {
+    if (!hasCellValue(row, 'asset_id')) return null;
+    var n = parseInt(String(row.asset_id).trim(), 10);
+    return isNaN(n) ? null : n;
+  }
+
+  function findExistingAssetById(id) {
+    if (id == null) return null;
+    return allAssets.find(function(a) { return Number(a.id) === Number(id); }) || null;
+  }
+
+  function getTemplateHeaders(isTruck) {
+    return isTruck ? TRUCKS_HEADERS.slice() : MACHINERY_HEADERS.slice();
+  }
+
+  function assetToTemplateValues(asset, headers) {
+    return headers.map(function(col) {
+      if (col === 'asset_id') return asset.id;
+      var v = asset[col];
+      return v == null ? '' : v;
+    });
+  }
+
+  function buildExcelTemplate() {
+    var wb = XLSX.utils.book_new();
+    var machineryAssets = allAssets.filter(function(a) { return !isOnRoadType(a.asset_type); });
+    var truckAssets = allAssets.filter(function(a) { return isOnRoadType(a.asset_type); });
+    var machineryHeaders = getTemplateHeaders(false);
+    var trucksHeaders = getTemplateHeaders(true);
+    var machineryData = [[MACHINERY_TYPE_NOTE + ' · ' + ASSET_ID_NOTE], machineryHeaders];
+    var trucksData = [[TRUCKS_TYPE_NOTE + ' · ' + ASSET_ID_NOTE], trucksHeaders];
+
+    if (machineryAssets.length) {
+      machineryAssets.forEach(function(a) { machineryData.push(assetToTemplateValues(a, machineryHeaders)); });
+    } else {
+      machineryData.push(['', 'CAT 390F Excavator', 'Excavator', 'Caterpillar', '390F', 2021, 'Diesel', 'SITE-001', 4.0, 220000, 25000, 12000, 20000, 7.20, 40, 75]);
+    }
+    if (truckAssets.length) {
+      truckAssets.forEach(function(a) { trucksData.push(assetToTemplateValues(a, trucksHeaders)); });
+    } else {
+      trucksData.push(['', 'Kenworth T610', 'Rigid Truck', 'Kenworth', 'T610', 2022, 'Diesel', 'XYZ789', 2.5, 145000, 18000, 15000, 800000, 0.08, 185000, 80000]);
+    }
+
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(machineryData), MACHINERY_SHEET);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(trucksData), TRUCKS_SHEET);
+    XLSX.writeFile(wb, 'FleetMagnify_Asset_Import_Template.xlsx');
+  }
 
   function parseImportNumber(raw) {
     if (raw === '' || raw == null) return null;
@@ -1014,23 +1107,6 @@
     if (raw === '' || raw == null) return null;
     var n = parseInt(String(raw).trim(), 10);
     return isNaN(n) ? null : n;
-  }
-
-  function buildExcelTemplate() {
-    var wb = XLSX.utils.book_new();
-    var machineryData = [
-      [MACHINERY_TYPE_NOTE],
-      MACHINERY_COLUMNS,
-      ['CAT 390F Excavator', 'Excavator', 'Caterpillar', '390F', 2021, 'Diesel', 'SITE-001', 4.0, 220000, 25000, 12000, 20000, 7.20, 40, 75]
-    ];
-    var trucksData = [
-      [TRUCKS_TYPE_NOTE],
-      TRUCKS_COLUMNS,
-      ['Kenworth T610', 'Rigid Truck', 'Kenworth', 'T610', 2022, 'Diesel', 'XYZ789', 2.5, 145000, 18000, 15000, 800000, 0.08, 185000, 80000]
-    ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(machineryData), MACHINERY_SHEET);
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(trucksData), TRUCKS_SHEET);
-    XLSX.writeFile(wb, 'FleetMagnify_Asset_Import_Template.xlsx');
   }
 
   function buildImportRecord(row) {
@@ -1073,6 +1149,184 @@
       rec.is_on_road = onRoad;
     }
     return rec;
+  }
+
+  function parseFieldForPatch(key, raw) {
+    if (key === 'year') return parseImportInt(raw);
+    if (['asset_name', 'asset_type', 'make', 'model', 'fuel_type', 'registration'].indexOf(key) !== -1) {
+      return String(raw).trim() || null;
+    }
+    return parseImportNumber(raw);
+  }
+
+  function buildPartialUpdateFromRow(row) {
+    var patch = {};
+    EDITABLE_IMPORT_FIELDS.forEach(function(key) {
+      if (!hasCellValue(row, key)) return;
+      patch[key] = parseFieldForPatch(key, row[key]);
+    });
+    if (hasCellValue(row, 'asset_type') && supportsIsOnRoad) {
+      patch.is_on_road = isOnRoadType(row.asset_type);
+    }
+    return patch;
+  }
+
+  function validateSheetTypeForAsset(sheetKind, assetType) {
+    var issues = [];
+    if (!assetType) return issues;
+    var onRoad = isOnRoadType(assetType);
+    if (sheetKind === 'machinery' && onRoad) {
+      issues.push('on-road asset type "' + assetType + '" on Machinery sheet');
+    }
+    if (sheetKind === 'trucks' && !onRoad) {
+      issues.push('machinery asset type "' + assetType + '" on Trucks sheet');
+    }
+    return issues;
+  }
+
+  function computeFieldChanges(existing, patch) {
+    var changes = [];
+    Object.keys(patch).forEach(function(key) {
+      if (key === 'is_on_road') return;
+      var oldV = existing[key];
+      var newV = patch[key];
+      var oldStr = oldV == null ? '' : String(oldV);
+      var newStr = newV == null ? '' : String(newV);
+      if (oldStr !== newStr) {
+        changes.push({
+          field: key,
+          label: IMPORT_FIELD_LABELS[key] || key,
+          from: oldStr || '—',
+          to: newStr || '—'
+        });
+      }
+    });
+    return changes;
+  }
+
+  function classifyImportRow(row, sheetKind) {
+    var existing = findExistingAssetById(getAssetIdFromRow(row));
+    if (existing) {
+      var effectiveType = hasCellValue(row, 'asset_type') ? row.asset_type.trim() : existing.asset_type;
+      var sheetIssues = validateSheetTypeForAsset(sheetKind, effectiveType);
+      if (sheetIssues.length) {
+        return { action: 'skip', issues: sheetIssues, row: row, sheetKind: sheetKind };
+      }
+      var patch = buildPartialUpdateFromRow(row);
+      if (!Object.keys(patch).length) {
+        return { action: 'noop', existing: existing, row: row, sheetKind: sheetKind };
+      }
+      return {
+        action: 'update',
+        existing: existing,
+        patch: patch,
+        changes: computeFieldChanges(existing, patch),
+        row: row,
+        sheetKind: sheetKind
+      };
+    }
+    var issues = validateImportRow(row, sheetKind);
+    if (issues.length) {
+      return { action: 'skip', issues: issues, row: row, sheetKind: sheetKind };
+    }
+    return { action: 'insert', record: buildImportRecord(row), row: row, sheetKind: sheetKind };
+  }
+
+  function buildImportPlan() {
+    var plan = { updates: [], inserts: [], skipped: [] };
+    importMachineryRows.forEach(function(row) {
+      var item = classifyImportRow(row, 'machinery');
+      if (item.action === 'update') plan.updates.push(item);
+      else if (item.action === 'insert') plan.inserts.push(item);
+      else if (item.action === 'skip') plan.skipped.push(item);
+    });
+    importTrucksRows.forEach(function(row) {
+      var item = classifyImportRow(row, 'trucks');
+      if (item.action === 'update') plan.updates.push(item);
+      else if (item.action === 'insert') plan.inserts.push(item);
+      else if (item.action === 'skip') plan.skipped.push(item);
+    });
+    return plan;
+  }
+
+  function renderImportConfirmModal(plan) {
+    var html = '';
+    if (plan.updates.length) {
+      html += '<div class="import-confirm-section"><h3>Assets to update (' + plan.updates.length + ')</h3>';
+      plan.updates.forEach(function(u) {
+        var name = esc(u.existing.asset_name || 'Asset #' + u.existing.id);
+        html += '<div class="import-confirm-item"><strong>' + name + '</strong> (ID ' + esc(String(u.existing.id)) + ')';
+        if (u.changes.length) {
+          u.changes.forEach(function(c) {
+            html += '<div class="import-change">' + esc(c.label) + ': <em>' + esc(c.from) + '</em> → ' + esc(c.to) + '</div>';
+          });
+        } else {
+          html += '<div class="import-change">No field values changed (blank cells only).</div>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    if (plan.inserts.length) {
+      html += '<div class="import-confirm-section"><h3>New assets to create (' + plan.inserts.length + ')</h3>';
+      plan.inserts.forEach(function(ins) {
+        var name = esc((ins.row.asset_name || '').trim() || 'Row ' + ins.row._rowNum);
+        var sheetLabel = ins.sheetKind === 'machinery' ? 'Machinery' : 'Trucks';
+        html += '<div class="import-confirm-item"><strong>' + name + '</strong> — ' + esc(sheetLabel) + ' sheet, row ' + ins.row._rowNum + '</div>';
+      });
+      html += '</div>';
+    }
+    document.getElementById('import-confirm-content').innerHTML = html;
+  }
+
+  function closeImportConfirmModal() {
+    document.getElementById('import-confirm-modal').classList.remove('open');
+    pendingImportPlan = null;
+  }
+
+  async function executeImportPlan(plan) {
+    var updated = 0;
+    var created = 0;
+    var skipped = plan.skipped.map(function(s) {
+      return formatSkippedRow(s.row, s.sheetKind, s.issues);
+    });
+
+    for (var i = 0; i < plan.updates.length; i++) {
+      var u = plan.updates[i];
+      var patch = Object.assign({}, u.patch);
+      var result = await supabase.from('assets').update(patch).eq('id', u.existing.id).eq('user_id', currentUser.id).select();
+      if (result.error && supportsIsOnRoad && result.error.message && result.error.message.indexOf('is_on_road') !== -1) {
+        supportsIsOnRoad = false;
+        delete patch.is_on_road;
+        result = await supabase.from('assets').update(patch).eq('id', u.existing.id).eq('user_id', currentUser.id).select();
+      }
+      if (result.error) {
+        skipped.push('Update failed for ' + (u.existing.asset_name || 'ID ' + u.existing.id) + ': ' + result.error.message);
+        continue;
+      }
+      if (result.data && result.data.length) updated++;
+    }
+
+    if (plan.inserts.length) {
+      var records = plan.inserts.map(function(ins) { return ins.record; });
+      var insertResult = await supabase.from('assets').insert(records).select();
+      if (insertResult.error && supportsIsOnRoad && insertResult.error.message && insertResult.error.message.indexOf('is_on_road') !== -1) {
+        supportsIsOnRoad = false;
+        records = records.map(function(rec) {
+          var copy = Object.assign({}, rec);
+          delete copy.is_on_road;
+          return copy;
+        });
+        insertResult = await supabase.from('assets').insert(records).select();
+      }
+      if (insertResult.error) {
+        skipped.push('Insert failed: ' + insertResult.error.message);
+      } else {
+        created = insertResult.data ? insertResult.data.length : plan.inserts.length;
+      }
+    }
+
+    return { updated: updated, created: created, skipped: skipped };
   }
 
   function parseExcelSheet(workbook, sheetName) {
@@ -1144,16 +1398,9 @@
   }
 
   function collectImportWarnings() {
-    var warnings = [];
-    importMachineryRows.forEach(function(row) {
-      var issues = validateImportRow(row, 'machinery');
-      if (issues.length) warnings.push(formatSkippedRow(row, 'machinery', issues));
+    return buildImportPlan().skipped.map(function(s) {
+      return formatSkippedRow(s.row, s.sheetKind, s.issues);
     });
-    importTrucksRows.forEach(function(row) {
-      var issues = validateImportRow(row, 'trucks');
-      if (issues.length) warnings.push(formatSkippedRow(row, 'trucks', issues));
-    });
-    return warnings;
   }
 
   function showImportWarnings(warnings) {
@@ -1184,16 +1431,21 @@
   }
 
   function showExcelPreview() {
-    renderPreviewTable('preview-machinery-table', MACHINERY_COLUMNS, importMachineryRows);
-    renderPreviewTable('preview-trucks-table', TRUCKS_COLUMNS, importTrucksRows);
+    renderPreviewTable('preview-machinery-table', MACHINERY_HEADERS, importMachineryRows);
+    renderPreviewTable('preview-trucks-table', TRUCKS_HEADERS, importTrucksRows);
     var total = importMachineryRows.length + importTrucksRows.length;
-    var warnings = collectImportWarnings();
+    var plan = buildImportPlan();
+    var warnings = plan.skipped.map(function(s) {
+      return formatSkippedRow(s.row, s.sheetKind, s.issues);
+    });
     showImportWarnings(warnings);
-    var validCount = total - warnings.length;
+    var actionable = plan.updates.length + plan.inserts.length;
     document.getElementById('upload-count').textContent =
       total + ' row' + (total !== 1 ? 's' : '') + ' found · ' +
-      validCount + ' ready to import' +
-      (warnings.length ? ' · ' + warnings.length + ' will be skipped' : '');
+      plan.updates.length + ' update' + (plan.updates.length !== 1 ? 's' : '') + ' · ' +
+      plan.inserts.length + ' new' +
+      (warnings.length ? ' · ' + warnings.length + ' will be skipped' : '') +
+      (actionable ? '' : ' · nothing to import');
     document.getElementById('upload-preview').classList.add('visible');
     document.getElementById('import-results').classList.remove('visible');
   }
@@ -1246,75 +1498,64 @@
 
   document.getElementById('clear-excel-btn').addEventListener('click', clearImportState);
 
-  document.getElementById('import-excel-btn').addEventListener('click', async function() {
+  document.getElementById('import-excel-btn').addEventListener('click', function() {
     if (!importMachineryRows.length && !importTrucksRows.length) return;
-    var btn = this;
-    btn.disabled = true;
-    btn.textContent = 'Importing...';
-
-    var records = [];
-    var skipped = [];
-    var machineryImported = 0;
-    var trucksImported = 0;
-
-    importMachineryRows.forEach(function(row) {
-      var issues = validateImportRow(row, 'machinery');
-      if (issues.length) {
-        skipped.push(formatSkippedRow(row, 'machinery', issues));
-        return;
-      }
-      records.push(buildImportRecord(row));
-      machineryImported++;
-    });
-
-    importTrucksRows.forEach(function(row) {
-      var issues = validateImportRow(row, 'trucks');
-      if (issues.length) {
-        skipped.push(formatSkippedRow(row, 'trucks', issues));
-        return;
-      }
-      records.push(buildImportRecord(row));
-      trucksImported++;
-    });
-
-    if (!records.length) {
-      btn.disabled = false;
-      btn.textContent = 'Import All Assets';
-      showImportWarnings(skipped);
+    var plan = buildImportPlan();
+    if (!plan.updates.length && !plan.inserts.length) {
+      showImportWarnings(plan.skipped.map(function(s) {
+        return formatSkippedRow(s.row, s.sheetKind, s.issues);
+      }));
       showToast('No valid rows to import. Fix the issues listed above.', 'error');
       return;
     }
+    pendingImportPlan = plan;
+    renderImportConfirmModal(plan);
+    document.getElementById('import-confirm-modal').classList.add('open');
+  });
 
-    var result = await supabase.from('assets').insert(records);
-    if (result.error && supportsIsOnRoad && result.error.message && result.error.message.indexOf('is_on_road') !== -1) {
-      supportsIsOnRoad = false;
-      records = records.map(function(rec) {
-        var copy = Object.assign({}, rec);
-        delete copy.is_on_road;
-        return copy;
-      });
-      result = await supabase.from('assets').insert(records);
-    }
+  document.getElementById('import-confirm-cancel').addEventListener('click', closeImportConfirmModal);
+  document.getElementById('import-confirm-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeImportConfirmModal();
+  });
+  document.getElementById('import-confirm-proceed').addEventListener('click', async function() {
+    if (!pendingImportPlan) return;
+    var plan = pendingImportPlan;
+    var btn = document.getElementById('import-excel-btn');
+    var proceedBtn = this;
+    closeImportConfirmModal();
+    btn.disabled = true;
+    btn.textContent = 'Importing...';
+    proceedBtn.disabled = true;
+
+    var outcome = await executeImportPlan(plan);
 
     btn.disabled = false;
     btn.textContent = 'Import All Assets';
+    proceedBtn.disabled = false;
 
-    if (result.error) {
-      showToast('Import failed: ' + result.error.message, 'error');
+    if (!outcome.updated && !outcome.created) {
+      showImportWarnings(outcome.skipped);
+      showToast('Import failed. See skipped rows for details.', 'error');
       return;
     }
 
     document.getElementById('upload-preview').classList.remove('visible');
     document.getElementById('import-warnings').classList.remove('visible');
 
-    var summary = machineryImported + ' machinery asset' + (machineryImported !== 1 ? 's' : '') +
-      ' and ' + trucksImported + ' truck asset' + (trucksImported !== 1 ? 's' : '') + ' imported.';
+    var parts = [];
+    if (outcome.updated) {
+      parts.push(outcome.updated + ' asset' + (outcome.updated !== 1 ? 's' : '') + ' updated');
+    }
+    if (outcome.created) {
+      parts.push(outcome.created + ' new asset' + (outcome.created !== 1 ? 's' : '') + ' created');
+    }
+    var summary = parts.join(' and ') + '.';
     document.getElementById('import-results-summary').textContent = summary;
     var skippedList = document.getElementById('import-results-skipped');
-    if (skipped.length) {
+    if (outcome.skipped.length) {
       skippedList.innerHTML =
         '<li style="list-style:none;margin-left:-18px;font-weight:600;color:#EF9F27;margin-bottom:6px;">Skipped rows:</li>' +
-        skipped.map(function(s) { return '<li>' + esc(s) + '</li>'; }).join('');
+        outcome.skipped.map(function(s) { return '<li>' + esc(s) + '</li>'; }).join('');
     } else {
       skippedList.innerHTML = '';
     }
@@ -1325,7 +1566,7 @@
     document.getElementById('excel-file-input').value = '';
     document.getElementById('upload-count').textContent = '';
 
-    showToast(summary + (skipped.length ? ' ' + skipped.length + ' row(s) skipped.' : ''), 'success');
+    showToast(summary + (outcome.skipped.length ? ' ' + outcome.skipped.length + ' row(s) skipped.' : ''), 'success');
     loadAssets();
   });
 
