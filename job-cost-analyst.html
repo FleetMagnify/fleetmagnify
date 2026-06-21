@@ -89,6 +89,11 @@
   .kpi-value { font-size: 22px; font-weight: 800; letter-spacing: -0.8px; line-height: 1; color: #D8DFE8; }
   .kpi-card.grand .kpi-value { font-size: 32px; color: #0EA57A; }
   .kpi-value.amber { color: #EF9F27; }
+  .kpi-value.unavailable { color: #EF9F27; cursor: help; }
+  .kpi-value.partial-total { color: #EF9F27; line-height: 1.25; cursor: help; }
+  .kpi-partial-suffix { font-size: 11px; font-weight: 600; letter-spacing: 0; display: block; }
+  .cell-missing { color: #EF9F27; cursor: help; }
+  .cell-partial-suffix { font-size: 10.5px; font-weight: 600; margin-left: 4px; }
 
   table { width: 100%; border-collapse: collapse; }
   thead th { padding: 11px 14px; text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #2E3A4A; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.01); white-space: nowrap; }
@@ -562,7 +567,7 @@
     });
 
     var byAsset = {};
-    var totals = { fuel: 0, idle: 0, depr: 0, service: 0, maint: 0, emissions: 0 };
+    var totals = { fuel: 0, idle: 0, depr: 0, deprMissing: null, service: 0, servMissing: null, maint: 0, maintMissing: null, emissions: 0 };
 
     jobAssignments.forEach(function(row) {
       var asset = allAssets.find(function(a) { return a.id === row.asset_id; });
@@ -577,20 +582,51 @@
       var idleCosts = FCM.calcIdleHourCosts(asset, idleHours, costPerLitre, idleRate, totalEngineHours);
       var emissionsKg = fuel.litres * getEmissionFactor(asset.fuel_type);
 
-      byAsset[row.asset_id] = byAsset[row.asset_id] || { asset: asset, days: 0, fuel: 0, idle: 0, depr: 0, service: 0, maint: 0, emissions: 0 };
+      byAsset[row.asset_id] = byAsset[row.asset_id] || {
+        asset: asset, days: 0, fuel: 0, idle: 0,
+        depr: 0, deprMissing: null,
+        service: 0, servMissing: null,
+        maint: 0, maintMissing: null,
+        emissions: 0
+      };
       byAsset[row.asset_id].days += 1;
       byAsset[row.asset_id].fuel += fuel.cost;
       byAsset[row.asset_id].idle += idleCosts.fuel;
-      byAsset[row.asset_id].depr += idleCosts.depreciation !== null ? idleCosts.depreciation : 0;
-      byAsset[row.asset_id].service += idleCosts.servicing !== null ? idleCosts.servicing : 0;
-      byAsset[row.asset_id].maint += idleCosts.maintenance !== null ? idleCosts.maintenance : 0;
+
+      if (idleCosts.depreciation !== null) {
+        byAsset[row.asset_id].depr += idleCosts.depreciation;
+      } else {
+        byAsset[row.asset_id].deprMissing = idleCosts.depreciationMissing;
+      }
+      if (idleCosts.servicing !== null) {
+        byAsset[row.asset_id].service += idleCosts.servicing;
+      } else {
+        byAsset[row.asset_id].servMissing = idleCosts.servicingMissing;
+      }
+      if (idleCosts.maintenance !== null) {
+        byAsset[row.asset_id].maint += idleCosts.maintenance;
+      } else {
+        byAsset[row.asset_id].maintMissing = idleCosts.maintenanceMissing;
+      }
       byAsset[row.asset_id].emissions += emissionsKg;
 
       totals.fuel += fuel.cost;
       totals.idle += idleCosts.fuel;
-      totals.depr += idleCosts.depreciation !== null ? idleCosts.depreciation : 0;
-      totals.service += idleCosts.servicing !== null ? idleCosts.servicing : 0;
-      totals.maint += idleCosts.maintenance !== null ? idleCosts.maintenance : 0;
+      if (idleCosts.depreciation !== null) {
+        totals.depr += idleCosts.depreciation;
+      } else {
+        totals.deprMissing = idleCosts.depreciationMissing;
+      }
+      if (idleCosts.servicing !== null) {
+        totals.service += idleCosts.servicing;
+      } else {
+        totals.servMissing = idleCosts.servicingMissing;
+      }
+      if (idleCosts.maintenance !== null) {
+        totals.maint += idleCosts.maintenance;
+      } else {
+        totals.maintMissing = idleCosts.maintenanceMissing;
+      }
       totals.emissions += emissionsKg;
     });
 
@@ -599,36 +635,54 @@
       return {
         name: b.asset.asset_name,
         days: b.days,
-        fuel: b.fuel, idle: b.idle, depr: b.depr, service: b.service, maint: b.maint,
-        total: b.fuel + b.idle + b.depr + b.service + b.maint,
+        fuel: b.fuel, idle: b.idle,
+        depr: b.depr, deprMissing: b.deprMissing,
+        service: b.service, servMissing: b.servMissing,
+        maint: b.maint, maintMissing: b.maintMissing,
+        total: calcPartialAssetTotal(b.fuel, b.idle, b.depr, b.deprMissing, b.service, b.servMissing, b.maint, b.maintMissing),
         emissions: b.emissions
       };
     });
     costTotals = totals;
-    totals.grand = totals.fuel + totals.idle + totals.depr + totals.service + totals.maint;
+    totals.grand = calcPartialAssetTotal(totals.fuel, totals.idle, totals.depr, totals.deprMissing, totals.service, totals.servMissing, totals.maint, totals.maintMissing);
 
     document.getElementById('kpi-fuel').textContent = fmtMoney(totals.fuel);
     document.getElementById('kpi-idle').textContent = fmtMoney(totals.idle);
-    document.getElementById('kpi-depr').textContent = fmtMoney(totals.depr);
-    document.getElementById('kpi-service').textContent = fmtMoney(totals.service);
-    document.getElementById('kpi-maintenance').textContent = fmtMoney(totals.maint);
+    setKpiMoneyOrMissing('kpi-depr', totals.depr, totals.deprMissing);
+    setKpiMoneyOrMissing('kpi-service', totals.service, totals.servMissing);
+    setKpiMoneyOrMissing('kpi-maintenance', totals.maint, totals.maintMissing);
     document.getElementById('kpi-emissions').textContent = (totals.emissions / 1000).toFixed(2) + ' t';
-    document.getElementById('kpi-grand').textContent = fmtMoney(totals.grand);
+    setKpiGrandTotal('kpi-grand', totals.grand, totals.deprMissing, totals.servMissing, totals.maintMissing);
 
     if (costBreakdown.length === 0) {
       document.getElementById('breakdown-tbody').innerHTML = '<tr><td colspan="8" class="empty-state">No cost data available.</td></tr>';
       return;
     }
     document.getElementById('breakdown-tbody').innerHTML = costBreakdown.map(function(r) {
-      return '<tr><td class="cell-strong">' + esc(r.name) + '</td><td>' + r.days + '</td>' +
-        '<td>' + fmtMoney(r.fuel) + '</td><td>' + fmtMoney(r.idle) + '</td><td>' + fmtMoney(r.depr) + '</td>' +
-        '<td>' + fmtMoney(r.service) + '</td><td>' + fmtMoney(r.maint) + '</td><td class="cell-teal">' + fmtMoney(r.total) + '</td></tr>';
+      var unavailable = unavailableComponents(r.deprMissing, r.servMissing, r.maintMissing);
+      var totalCell = unavailable.length === 0
+        ? '<td class="cell-teal">' + fmtMoney(r.total) + '</td>'
+        : '<td class="cell-amber" title="' + esc(partialTotalTooltip(unavailable)) + '">' + fmtMoney(r.total) +
+          '<span class="cell-partial-suffix">' + esc(partialTotalSuffix(unavailable)) + '</span></td>';
+      return '<tr>' +
+        '<td class="cell-strong">' + esc(r.name) + '</td>' +
+        '<td>' + r.days + '</td>' +
+        '<td>' + fmtMoney(r.fuel) + '</td>' +
+        '<td>' + fmtMoney(r.idle) + '</td>' +
+        cellValueOrMissing(r.depr, r.deprMissing) +
+        cellValueOrMissing(r.service, r.servMissing) +
+        cellValueOrMissing(r.maint, r.maintMissing) +
+        totalCell +
+        '</tr>';
     }).join('');
   }
 
   function setKpisEmpty() {
     ['kpi-fuel','kpi-idle','kpi-depr','kpi-service','kpi-maintenance','kpi-emissions','kpi-grand'].forEach(function(id) {
-      document.getElementById(id).textContent = '—';
+      var el = document.getElementById(id);
+      el.className = 'kpi-value';
+      el.removeAttribute('title');
+      el.textContent = '—';
     });
   }
 
@@ -820,7 +874,65 @@
     btn.disabled = false; btn.textContent = 'Export Job Report';
   }
 
-  function fmtMoney(n) { return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+  function fmtMoney(n) { return '$' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+
+  function unavailableComponents(deprMissing, servMissing, maintMissing) {
+    var list = [];
+    if (deprMissing && deprMissing.length) list.push({ label: 'depreciation cost', fields: deprMissing });
+    if (servMissing && servMissing.length) list.push({ label: 'servicing cost', fields: servMissing });
+    if (maintMissing && maintMissing.length) list.push({ label: 'maintenance cost', fields: maintMissing });
+    return list;
+  }
+
+  function partialTotalSuffix(unavailable) {
+    return '(partial — ' + unavailable.map(function(c) { return c.label; }).join(', ') + ' unavailable)';
+  }
+
+  function partialTotalTooltip(unavailable) {
+    return unavailable.map(function(c) { return FCM.formatMissingMessage(c.fields); }).join(' ');
+  }
+
+  function calcPartialAssetTotal(fuel, idle, depr, deprMissing, service, servMissing, maint, maintMissing) {
+    var total = fuel + idle;
+    if (!deprMissing || !deprMissing.length) total += depr;
+    if (!servMissing || !servMissing.length) total += service;
+    if (!maintMissing || !maintMissing.length) total += maint;
+    return total;
+  }
+
+  function cellValueOrMissing(value, missingFields) {
+    if (missingFields && missingFields.length) {
+      return '<td class="cell-missing" title="' + esc(FCM.formatMissingMessage(missingFields)) + '">—</td>';
+    }
+    return '<td>' + fmtMoney(value) + '</td>';
+  }
+
+  function setKpiMoneyOrMissing(elId, value, missingFields) {
+    var el = document.getElementById(elId);
+    if (missingFields && missingFields.length) {
+      el.className = 'kpi-value unavailable';
+      el.textContent = '—';
+      el.setAttribute('title', FCM.formatMissingMessage(missingFields));
+      return;
+    }
+    el.className = 'kpi-value';
+    el.removeAttribute('title');
+    el.textContent = fmtMoney(value);
+  }
+
+  function setKpiGrandTotal(elId, value, deprMissing, servMissing, maintMissing) {
+    var el = document.getElementById(elId);
+    var unavailable = unavailableComponents(deprMissing, servMissing, maintMissing);
+    if (unavailable.length === 0) {
+      el.className = 'kpi-value';
+      el.removeAttribute('title');
+      el.textContent = fmtMoney(value);
+      return;
+    }
+    el.className = 'kpi-value partial-total';
+    el.setAttribute('title', partialTotalTooltip(unavailable));
+    el.innerHTML = fmtMoney(value) + ' <span class="kpi-partial-suffix">' + esc(partialTotalSuffix(unavailable)) + '</span>';
+  }
   function formatDateShort(d) { return new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }); }
   function formatDateLong(d) {
     if (!d) return '—';
