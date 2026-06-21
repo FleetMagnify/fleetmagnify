@@ -42,8 +42,21 @@
   .hero-compare { font-size: 13.5px; color: #5A6474; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .hero-compare .up { color: #EF9F27; font-weight: 700; }
   .hero-compare .down { color: #0EA57A; font-weight: 700; }
+  .hero-compare .neutral { color: #5A6474; font-weight: 500; }
 
-  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .kpi-section {
+    display: flex; align-items: stretch; gap: 0; margin-bottom: 24px;
+  }
+  .kpi-pair { flex: 1; min-width: 0; }
+  .kpi-pair-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #3A4A5C; margin-bottom: 10px;
+  }
+  .kpi-pair-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .kpi-pair-divider {
+    width: 1px; flex-shrink: 0; align-self: stretch;
+    background: rgba(255,255,255,0.08); margin: 0 20px;
+  }
   .kpi-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 20px 22px; }
   .kpi-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3A4A5C; margin-bottom: 10px; line-height: 1.35; }
   .kpi-value { font-size: 26px; font-weight: 800; letter-spacing: -1px; color: #D8DFE8; line-height: 1; margin-bottom: 4px; }
@@ -55,6 +68,10 @@
   .chart-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 22px; }
   .chart-title { font-size: 14px; font-weight: 700; color: #C8D0DB; margin-bottom: 16px; }
   .chart-wrap { height: 260px; position: relative; }
+  .chart-excluded {
+    font-size: 11px; color: #3A4A5C; margin-top: 10px; line-height: 1.45;
+  }
+  .chart-excluded[hidden] { display: none; }
 
   .table-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; overflow: hidden; }
   .table-header { padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.05); }
@@ -80,7 +97,12 @@
 
   .dashboard-content[hidden] { display: none !important; }
 
-  @media (max-width: 1100px) { .kpi-row { grid-template-columns: 1fr 1fr; } .charts-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 1100px) {
+    .kpi-section { flex-direction: column; }
+    .kpi-pair-divider { width: 100%; height: 1px; margin: 4px 0 18px; }
+    .charts-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 700px) { .kpi-pair-cards { grid-template-columns: 1fr; } }
   @media (max-width: 900px) { .sidebar { display: none; } .main { margin-left: 0; } .page-content { padding: 20px; } .hero-value { font-size: 36px; } }
 </style>
 </head>
@@ -145,18 +167,45 @@
         <div class="hero-compare" id="hero-compare"></div>
       </div>
 
-      <div class="kpi-row">
-        <div class="kpi-card"><div class="kpi-label">Total Fuel Cost MTD</div><div class="kpi-value" id="kpi-fuel">—</div></div>
-        <div class="kpi-card"><div class="kpi-label">Total Idle Cost MTD</div><div class="kpi-value amber" id="kpi-idle">—</div><div class="kpi-sub">fuel + depreciation + servicing + maintenance</div></div>
-        <div class="kpi-card"><div class="kpi-label">Total Emissions MTD</div><div class="kpi-value teal" id="kpi-emissions">—</div><div class="kpi-sub">tonnes CO₂</div></div>
-        <div class="kpi-card"><div class="kpi-label">Average Fleet Utilisation MTD</div><div class="kpi-value" id="kpi-util">—</div><div class="kpi-sub" id="kpi-util-sub">—</div></div>
+      <div class="kpi-section">
+        <div class="kpi-pair">
+          <div class="kpi-pair-label">Cost</div>
+          <div class="kpi-pair-cards">
+            <div class="kpi-card"><div class="kpi-label">Total Fuel Cost MTD</div><div class="kpi-value" id="kpi-fuel">—</div></div>
+            <div class="kpi-card"><div class="kpi-label">Total Idle Cost MTD</div><div class="kpi-value amber" id="kpi-idle">—</div><div class="kpi-sub">fuel + depreciation + servicing + maintenance</div></div>
+          </div>
+        </div>
+        <div class="kpi-pair-divider" aria-hidden="true"></div>
+        <div class="kpi-pair">
+          <div class="kpi-pair-label">Performance</div>
+          <div class="kpi-pair-cards">
+            <div class="kpi-card"><div class="kpi-label">Total Emissions MTD</div><div class="kpi-value teal" id="kpi-emissions">—</div><div class="kpi-sub">tonnes CO₂</div></div>
+            <div class="kpi-card"><div class="kpi-label">Average Fleet Utilisation MTD</div><div class="kpi-value" id="kpi-util">—</div><div class="kpi-sub" id="kpi-util-sub">—</div></div>
+          </div>
+        </div>
       </div>
 
       <div class="charts-grid">
-        <div class="chart-card"><div class="chart-title">Fuel Cost by Asset (Month to Date)</div><div class="chart-wrap"><canvas id="chart-fuel"></canvas></div></div>
-        <div class="chart-card"><div class="chart-title">Idle Cost by Asset (Month to Date)</div><div class="chart-wrap"><canvas id="chart-idle"></canvas></div></div>
-        <div class="chart-card"><div class="chart-title">Emissions by Asset (Month to Date)</div><div class="chart-wrap"><canvas id="chart-emissions"></canvas></div></div>
-        <div class="chart-card"><div class="chart-title">Utilisation by Asset (Month to Date)</div><div class="chart-wrap"><canvas id="chart-util"></canvas></div></div>
+        <div class="chart-card">
+          <div class="chart-title">Fuel Cost by Asset (Month to Date)</div>
+          <div class="chart-wrap"><canvas id="chart-fuel"></canvas></div>
+          <p class="chart-excluded" id="chart-fuel-excluded" hidden></p>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Idle Cost by Asset (Month to Date)</div>
+          <div class="chart-wrap"><canvas id="chart-idle"></canvas></div>
+          <p class="chart-excluded" id="chart-idle-excluded" hidden></p>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Emissions by Asset (Month to Date)</div>
+          <div class="chart-wrap"><canvas id="chart-emissions"></canvas></div>
+          <p class="chart-excluded" id="chart-emissions-excluded" hidden></p>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Utilisation by Asset (Month to Date)</div>
+          <div class="chart-wrap"><canvas id="chart-util"></canvas></div>
+          <p class="chart-excluded" id="chart-util-excluded" hidden></p>
+        </div>
       </div>
 
       <div class="table-card">
@@ -243,6 +292,30 @@
   }
   function fmtMoney(n) { return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
 
+  function chartLabel(asset) {
+    return String(asset.asset_name || '').trim() || 'Unnamed asset';
+  }
+
+  function monthName(offset) {
+    var d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + offset);
+    return d.toLocaleDateString('en-AU', { month: 'long' });
+  }
+
+  function renderExclusionNote(elementId, excludedCount) {
+    var el = document.getElementById(elementId);
+    if (!el) return;
+    if (excludedCount <= 0) {
+      el.textContent = '';
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    el.textContent = excludedCount + ' asset' + (excludedCount === 1 ? '' : 's') +
+      ' excluded — no data recorded this month';
+  }
+
   function computeAssetMetrics(assets, fuelRows, telRows, latestTelRows, dateFrom, dateTo) {
     var weeks = daysInRange(dateFrom, dateTo) / 7;
     var engineHoursMap = {};
@@ -281,7 +354,8 @@
       var target = asset.target_utilisation_percent != null ? parseFloat(asset.target_utilisation_percent) : null;
 
       return {
-        id: asset.id, name: asset.asset_name,
+        id: asset.id,
+        name: chartLabel(asset),
         fuelCost: fuelCost,
         idleFuelCost: idleCosts.fuel,
         deprCost: idleCosts.depreciation !== null ? idleCosts.depreciation : 0,
@@ -290,7 +364,11 @@
         idleTotal: idleCosts.total,
         totalCost: fuelCost + idleCosts.total,
         emissionsKg: emissionsKg, utilRate: utilRate, target: target,
-        opHours: opHours, available: available
+        opHours: opHours, available: available, litres: litres,
+        hasFuelData: assetFuel.length > 0,
+        hasIdleData: assetTel.length > 0,
+        hasEmissionsData: assetFuel.length > 0 && litres > 0,
+        hasUtilData: assetTel.length > 0
       };
     });
 
@@ -353,19 +431,17 @@
 
     document.getElementById('hero-total').textContent = fmtMoney(curMetrics.totals.grand);
     var compareEl = document.getElementById('hero-compare');
-    if (prevData.fuel.length > 0 || prevData.tel.length > 0) {
+    var hasPrevData = prevData.fuel.length > 0 || prevData.tel.length > 0;
+    if (!hasPrevData) {
+      compareEl.innerHTML = '<span class="neutral">First month of tracking — month-over-month comparison available from ' +
+        esc(monthName(1)) + '.</span>';
+    } else {
       var prevTotal = prevMetrics.totals.grand;
       var curTotal = curMetrics.totals.grand;
-      if (prevTotal > 0) {
-        var pct = ((curTotal - prevTotal) / prevTotal) * 100;
-        var increased = pct > 0;
-        compareEl.innerHTML = '<span class="' + (increased ? 'up' : 'down') + '">' +
-          (increased ? '↑' : '↓') + ' ' + Math.abs(pct).toFixed(1) + '%</span> vs same period last month (' + fmtMoney(prevTotal) + ')';
-      } else {
-        compareEl.textContent = 'No comparable data for the same period last month.';
-      }
-    } else {
-      compareEl.textContent = 'No data available for the same period last month.';
+      var diff = curTotal - prevTotal;
+      var increased = diff > 0;
+      compareEl.innerHTML = '<span class="' + (increased ? 'up' : 'down') + '">' +
+        (increased ? '↑' : '↓') + ' ' + fmtMoney(Math.abs(diff)) + '</span> vs ' + esc(monthName(-1));
     }
 
     document.getElementById('kpi-fuel').textContent = fmtMoney(curMetrics.totals.fuel);
@@ -376,30 +452,53 @@
       ? 'Fleet avg target: ' + curMetrics.totals.avgTarget.toFixed(0) + '%' : 'No fleet target set';
 
     renderCharts(curMetrics.assets);
-    renderTopTable(curMetrics.assets);
+    renderTopTable(curMetrics.assets.filter(function(a) { return a.totalCost > 0; }));
   }
 
   function destroyCharts() {
     Object.keys(charts).forEach(function(k) { if (charts[k]) { charts[k].destroy(); charts[k] = null; } });
   }
 
-  function renderCharts(assets) {
+  function chartTickOptions() {
+    return {
+      color: '#4A5568',
+      font: { size: 10 },
+      maxRotation: 45,
+      autoSkip: false,
+      callback: function(value) {
+        var label = this.getLabelForValue(value);
+        return typeof label === 'string' ? label : String(label);
+      }
+    };
+  }
+
+  function renderCharts(allAssets) {
     destroyCharts();
-    var labels = assets.map(function(a) { return a.name; });
+    var totalCount = allAssets.length;
+    var fuelAssets = allAssets.filter(function(a) { return a.hasFuelData; });
+    var idleAssets = allAssets.filter(function(a) { return a.hasIdleData; });
+    var emissionsAssets = allAssets.filter(function(a) { return a.hasEmissionsData; });
+    var utilAssets = allAssets.filter(function(a) { return a.hasUtilData; });
+
+    renderExclusionNote('chart-fuel-excluded', totalCount - fuelAssets.length);
+    renderExclusionNote('chart-idle-excluded', totalCount - idleAssets.length);
+    renderExclusionNote('chart-emissions-excluded', totalCount - emissionsAssets.length);
+    renderExclusionNote('chart-util-excluded', totalCount - utilAssets.length);
+
     var gridColor = 'rgba(255,255,255,0.04)';
     var tickColor = '#4A5568';
 
     charts.fuel = new Chart(document.getElementById('chart-fuel'), {
       type: 'bar',
       data: {
-        labels: labels,
-        datasets: [{ data: assets.map(function(a) { return Math.round(a.fuelCost); }), backgroundColor: '#0EA57A', borderRadius: 4 }]
+        labels: fuelAssets.map(function(a) { return a.name; }),
+        datasets: [{ data: fuelAssets.map(function(a) { return Math.round(a.fuelCost); }), backgroundColor: '#0EA57A', borderRadius: 4 }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-          x: { grid: { display: false }, ticks: { color: tickColor, font: { size: 10 }, maxRotation: 45 } },
+          x: { grid: { display: false }, ticks: chartTickOptions() },
           y: { grid: { color: gridColor }, ticks: { color: tickColor, callback: function(v) { return '$' + v; } } }
         }
       }
@@ -408,19 +507,19 @@
     charts.idle = new Chart(document.getElementById('chart-idle'), {
       type: 'bar',
       data: {
-        labels: labels,
+        labels: idleAssets.map(function(a) { return a.name; }),
         datasets: [
-          { label: 'Idle Fuel', data: assets.map(function(a) { return Math.round(a.idleFuelCost); }), backgroundColor: '#0EA57A' },
-          { label: 'Depreciation', data: assets.map(function(a) { return Math.round(a.deprCost); }), backgroundColor: '#EF9F27' },
-          { label: 'Servicing', data: assets.map(function(a) { return Math.round(a.serviceCost); }), backgroundColor: '#E2554A' },
-          { label: 'Maintenance', data: assets.map(function(a) { return Math.round(a.maintCost); }), backgroundColor: '#7C6BF0' }
+          { label: 'Idle Fuel', data: idleAssets.map(function(a) { return Math.round(a.idleFuelCost); }), backgroundColor: '#0EA57A' },
+          { label: 'Depreciation', data: idleAssets.map(function(a) { return Math.round(a.deprCost); }), backgroundColor: '#EF9F27' },
+          { label: 'Servicing', data: idleAssets.map(function(a) { return Math.round(a.serviceCost); }), backgroundColor: '#E2554A' },
+          { label: 'Maintenance', data: idleAssets.map(function(a) { return Math.round(a.maintCost); }), backgroundColor: '#7C6BF0' }
         ]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { labels: { color: '#5A6474', font: { size: 10 } } } },
         scales: {
-          x: { stacked: true, grid: { display: false }, ticks: { color: tickColor, font: { size: 10 }, maxRotation: 45 } },
+          x: { stacked: true, grid: { display: false }, ticks: chartTickOptions() },
           y: { stacked: true, grid: { color: gridColor }, ticks: { color: tickColor, callback: function(v) { return '$' + v; } } }
         }
       }
@@ -429,15 +528,15 @@
     charts.emissions = new Chart(document.getElementById('chart-emissions'), {
       type: 'bar',
       data: {
-        labels: labels,
-        datasets: [{ data: assets.map(function(a) { return Math.round(a.emissionsKg); }), backgroundColor: '#0EA57A', borderRadius: 4 }]
+        labels: emissionsAssets.map(function(a) { return a.name; }),
+        datasets: [{ data: emissionsAssets.map(function(a) { return Math.round(a.emissionsKg); }), backgroundColor: '#0EA57A', borderRadius: 4 }]
       },
       options: {
         indexAxis: 'y', responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
           x: { grid: { color: gridColor }, ticks: { color: tickColor, callback: function(v) { return v + ' kg'; } } },
-          y: { grid: { display: false }, ticks: { color: tickColor, font: { size: 10 } } }
+          y: { grid: { display: false }, ticks: chartTickOptions() }
         }
       }
     });
@@ -445,10 +544,10 @@
     charts.util = new Chart(document.getElementById('chart-util'), {
       type: 'bar',
       data: {
-        labels: labels,
+        labels: utilAssets.map(function(a) { return a.name; }),
         datasets: [{
-          data: assets.map(function(a) { return Math.round(a.utilRate * 10) / 10; }),
-          backgroundColor: assets.map(function(a) {
+          data: utilAssets.map(function(a) { return Math.round(a.utilRate * 10) / 10; }),
+          backgroundColor: utilAssets.map(function(a) {
             if (a.target == null || isNaN(a.target)) return '#0EA57A';
             return a.utilRate >= a.target ? '#0EA57A' : '#EF9F27';
           }),
@@ -460,7 +559,7 @@
         plugins: { legend: { display: false } },
         scales: {
           x: { grid: { color: gridColor }, ticks: { color: tickColor, callback: function(v) { return v + '%'; } }, max: 100 },
-          y: { grid: { display: false }, ticks: { color: tickColor, font: { size: 10 } } }
+          y: { grid: { display: false }, ticks: chartTickOptions() }
         }
       }
     });
