@@ -37,7 +37,7 @@
       if (num(asset.expected_life_hours) === null) missing.push('Expected Total Life (hours)');
       var hours = context.totalEngineHours !== undefined && context.totalEngineHours !== null
         ? num(context.totalEngineHours) : null;
-      if (hours === null) missing.push('total engine hours (telematics)');
+      if (hours === null) missing.push('Total Engine Hours');
     }
     return missing;
   }

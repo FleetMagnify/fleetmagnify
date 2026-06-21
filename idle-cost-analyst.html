@@ -155,6 +155,9 @@
   .kpi-value.amber { color: #EF9F27; }
   .kpi-value.red { color: #E2554A; }
   .kpi-value.white { color: #D8DFE8; }
+  .kpi-value.partial-total { color: #EF9F27; font-size: 20px; line-height: 1.25; cursor: help; }
+  .kpi-partial-suffix { font-size: 11px; font-weight: 600; letter-spacing: 0; }
+  .cell-partial-suffix { font-size: 10.5px; font-weight: 600; margin-left: 4px; }
   .kpi-sub { font-size: 10.5px; color: #3A4A5C; }
 
   /* ── CHART CARD ── */
@@ -374,6 +377,7 @@
 <script src="js/supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="js/fleet-cost-model.js"></script>
 <script>
 (function() {
@@ -383,6 +387,9 @@
   var assetsList = [];
   var selectedAsset = null;
   var idleChart = null;
+  var lastDateFrom = '';
+  var lastDateTo = '';
+  var COMPONENT_COUNT = 4;
 
   // Default idle burn rates by asset type (litres/hour) — same as Fuel Analyst, used as fallback
   var DEFAULT_IDLE_RATES = {
@@ -451,7 +458,7 @@
       .concat(FCM.getMissingMaintenanceFields(selectedAsset))
       .concat(FCM.getMissingServicingFields(selectedAsset));
     if (FCM.isOnRoad(selectedAsset)) {
-      missing = missing.filter(function(m) { return m.indexOf('engine hours') === -1; });
+      missing = missing.filter(function(m) { return m !== 'Total Engine Hours'; });
     } else {
       missing = missing.filter(function(m) {
         return m.indexOf('Odometer') === -1 && m.indexOf('Annual KM') === -1;
@@ -487,11 +494,83 @@
     return '<td class="cell-amber">$' + Number(value || 0).toFixed(2) + '</td>';
   }
 
+  function unavailableComponents(deprMissing, servMissing, maintMissing) {
+    var list = [];
+    if (deprMissing && deprMissing.length) list.push({ name: 'Depreciation', fields: deprMissing });
+    if (servMissing && servMissing.length) list.push({ name: 'Servicing', fields: servMissing });
+    if (maintMissing && maintMissing.length) list.push({ name: 'Maintenance', fields: maintMissing });
+    return list;
+  }
+
+  function partialTotalTooltip(unavailable) {
+    return unavailable.map(function(c) {
+      return c.name + ': missing ' + c.fields.join(', ');
+    }).join('; ');
+  }
+
+  function calcPartialSum(fuel, depr, service, maint) {
+    return fuel +
+      (depr !== null ? depr : 0) +
+      (service !== null ? service : 0) +
+      (maint !== null ? maint : 0);
+  }
+
+  function fmtMoneyWhole(n) {
+    return '$' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+
+  function setKpiTotalCost(partialSum, deprMissing, servMissing, maintMissing) {
+    var el = document.getElementById('kpi-total-cost');
+    var unavailable = unavailableComponents(deprMissing, servMissing, maintMissing);
+    if (unavailable.length === 0) {
+      el.className = 'kpi-value red';
+      el.textContent = fmtMoneyWhole(partialSum);
+      el.removeAttribute('title');
+      return;
+    }
+    el.className = 'kpi-value partial-total';
+    el.innerHTML = fmtMoneyWhole(partialSum) +
+      ' <span class="kpi-partial-suffix">(partial — ' + unavailable.length + ' of ' + COMPONENT_COUNT + ' components unavailable)</span>';
+    el.setAttribute('title', partialTotalTooltip(unavailable));
+  }
+
+  function cellTotalCost(r) {
+    var unavailable = unavailableComponents(r.deprMissing, r.serviceMissing, r.maintMissing);
+    var total = calcPartialSum(r.fuelCost, r.deprCost, r.serviceCost, r.maintCost);
+    if (unavailable.length === 0) {
+      return '<td class="cell-total">$' + total.toFixed(2) + '</td>';
+    }
+    return '<td class="cell-amber" title="' + esc(partialTotalTooltip(unavailable)) + '">$' + total.toFixed(2) +
+      '<span class="cell-partial-suffix">(partial — ' + unavailable.length + ' of ' + COMPONENT_COUNT + ')</span></td>';
+  }
+
+  function chartTimeScale(dateFrom, dateTo) {
+    return {
+      type: 'time',
+      min: dateFrom,
+      max: dateTo,
+      stacked: true,
+      grid: { display: false },
+      ticks: { color: '#4A5568', font: { size: 11 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 },
+      time: {
+        unit: 'day',
+        displayFormats: { day: 'd MMM' },
+        tooltipFormat: 'd MMM yyyy'
+      }
+    };
+  }
+
+  function chartBarLayout() {
+    return { barPercentage: 0.55, categoryPercentage: 0.65, maxBarThickness: 42 };
+  }
+
   async function runAnalysis() {
     if (!selectedAsset) return;
     var dateFrom = document.getElementById('date-from').value;
     var dateTo = document.getElementById('date-to').value;
     if (!dateFrom || !dateTo) { return; }
+    lastDateFrom = dateFrom;
+    lastDateTo = dateTo;
 
     var btn = document.getElementById('apply-filters-btn');
     btn.disabled = true; btn.textContent = 'Loading...';
@@ -576,14 +655,14 @@
       });
     });
 
-    var grandTotal = sumFuelCost + sumDeprCost + sumServiceCost + sumMaintCost;
+    var grandTotal = calcPartialSum(sumFuelCost, aggDeprMissing ? null : sumDeprCost, aggServMissing ? null : sumServiceCost, aggMaintMissing ? null : sumMaintCost);
 
     document.getElementById('kpi-idle-hours').textContent = sumIdleHours.toFixed(1) + ' hr';
-    document.getElementById('kpi-fuel-cost').textContent = '$' + sumFuelCost.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0});
+    document.getElementById('kpi-fuel-cost').textContent = fmtMoneyWhole(sumFuelCost);
     setKpiMoneyOrMissing('kpi-depreciation-cost', sumDeprCost, aggDeprMissing);
     setKpiMoneyOrMissing('kpi-service-cost', sumServiceCost, aggServMissing);
     setKpiMoneyOrMissing('kpi-maintenance-cost', sumMaintCost, aggMaintMissing);
-    document.getElementById('kpi-total-cost').textContent = '$' + grandTotal.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0});
+    setKpiTotalCost(grandTotal, aggDeprMissing, aggServMissing, aggMaintMissing);
     document.getElementById('kpi-total-cost-sub').textContent = 'over ' + sumIdleHours.toFixed(0) + ' idle hours';
 
     renderChart(dailyRows);
@@ -592,30 +671,50 @@
 
   function renderChart(rows) {
     document.getElementById('chart-empty').style.display = 'none';
-    var ctx = document.getElementById('idle-chart').getContext('2d');
-    var labels = rows.map(function(r) { return formatDateShort(r.date); });
-    var fuelData = rows.map(function(r) { return Math.round(r.fuelCost * 100) / 100; });
-    var deprData = rows.map(function(r) { return r.deprCost !== null ? Math.round(r.deprCost * 100) / 100 : 0; });
-    var serviceData = rows.map(function(r) { return r.serviceCost !== null ? Math.round(r.serviceCost * 100) / 100 : 0; });
-    var maintData = rows.map(function(r) { return r.maintCost !== null ? Math.round(r.maintCost * 100) / 100 : 0; });
+    if (rows.length === 0) {
+      document.getElementById('chart-empty').style.display = 'block';
+      if (idleChart) { idleChart.destroy(); idleChart = null; }
+      return;
+    }
 
+    var ctx = document.getElementById('idle-chart').getContext('2d');
     if (idleChart) idleChart.destroy();
     idleChart = new Chart(ctx, {
       type: 'bar',
       data: {
-        labels: labels,
         datasets: [
-          { label: 'Fuel Cost', data: fuelData, backgroundColor: '#0EA57A', borderRadius: 4 },
-          { label: 'Depreciation Cost', data: deprData, backgroundColor: '#EF9F27', borderRadius: 4 },
-          { label: 'Servicing Cost', data: serviceData, backgroundColor: '#E2554A', borderRadius: 4 },
-          { label: 'Maintenance Cost', data: maintData, backgroundColor: '#7C6BF0', borderRadius: 4 }
+          {
+            label: 'Fuel Cost',
+            data: rows.map(function(r) { return { x: r.date, y: Math.round(r.fuelCost * 100) / 100 }; }),
+            backgroundColor: '#0EA57A', borderRadius: 4
+          },
+          {
+            label: 'Depreciation Cost',
+            data: rows.map(function(r) { return { x: r.date, y: r.deprCost !== null ? Math.round(r.deprCost * 100) / 100 : 0 }; }),
+            backgroundColor: '#EF9F27', borderRadius: 4
+          },
+          {
+            label: 'Servicing Cost',
+            data: rows.map(function(r) { return { x: r.date, y: r.serviceCost !== null ? Math.round(r.serviceCost * 100) / 100 : 0 }; }),
+            backgroundColor: '#E2554A', borderRadius: 4
+          },
+          {
+            label: 'Maintenance Cost',
+            data: rows.map(function(r) { return { x: r.date, y: r.maintCost !== null ? Math.round(r.maintCost * 100) / 100 : 0 }; }),
+            backgroundColor: '#7C6BF0', borderRadius: 4
+          }
         ]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
+        datasets: { bar: chartBarLayout() },
         scales: {
-          x: { stacked: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4A5568', font: { size: 11 } } },
-          y: { stacked: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4A5568', font: { size: 11 }, callback: function(v) { return '$' + v; } } }
+          x: chartTimeScale(lastDateFrom, lastDateTo),
+          y: {
+            stacked: true,
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#4A5568', font: { size: 11 }, callback: function(v) { return '$' + v; } }
+          }
         },
         plugins: { legend: { display: false } }
       }
@@ -636,7 +735,7 @@
         cellMoneyOrMissing(r.deprCost, r.deprMissing) +
         cellMoneyOrMissing(r.serviceCost, r.serviceMissing) +
         cellMoneyOrMissing(r.maintCost, r.maintMissing) +
-        '<td class="cell-total">$' + r.totalCost.toFixed(2) + '</td>' +
+        cellTotalCost(r) +
       '</tr>';
     }).join('');
   }
@@ -650,7 +749,9 @@
     document.getElementById('kpi-service-cost').textContent = '—';
     document.getElementById('kpi-maintenance-cost').className = 'kpi-value amber';
     document.getElementById('kpi-maintenance-cost').textContent = '—';
+    document.getElementById('kpi-total-cost').className = 'kpi-value red';
     document.getElementById('kpi-total-cost').textContent = '—';
+    document.getElementById('kpi-total-cost').removeAttribute('title');
     document.getElementById('kpi-total-cost-sub').textContent = 'combined impact';
     document.getElementById('chart-empty').style.display = 'block';
     if (idleChart) { idleChart.destroy(); idleChart = null; }
