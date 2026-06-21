@@ -607,6 +607,7 @@
 <script>
 (function() {
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var FCM = window.FleetCostModel;
   var currentUser = null;
   var allAssets = [];
   var latestTelByAsset = {};
@@ -647,19 +648,30 @@
     var tbody = document.getElementById('assets-tbody');
     tbody.innerHTML = '<tr class="loading-row"><td colspan="' + colCount + '">Loading assets...</td></tr>';
     var { data, error } = await supabase.from('assets').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
-    if (error) { showToast('Failed to load assets', 'error'); return; }
+    if (error) {
+      showToast('Failed to load assets', 'error');
+      allAssets = [];
+      latestTelByAsset = {};
+      renderAssets(allAssets);
+      updateStats(allAssets);
+      return;
+    }
     allAssets = data || [];
 
+    latestTelByAsset = {};
     var telResult = await supabase
       .from('telematics_records')
       .select('asset_id, total_engine_hours, odometer_km, record_date')
       .eq('user_id', currentUser.id)
       .order('record_date', { ascending: false });
-    latestTelByAsset = {};
-    (telResult.data || []).forEach(function(r) {
-      var id = Number(r.asset_id);
-      if (!latestTelByAsset[id]) latestTelByAsset[id] = r;
-    });
+    if (telResult.error) {
+      showToast('Could not load telematics for life badges — assets shown without warnings.', 'error');
+    } else {
+      (telResult.data || []).forEach(function(r) {
+        var id = Number(r.asset_id);
+        if (!latestTelByAsset[id]) latestTelByAsset[id] = r;
+      });
+    }
 
     renderAssets(allAssets);
     updateStats(allAssets);
