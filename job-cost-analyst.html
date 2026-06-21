@@ -569,7 +569,7 @@
     });
 
     var byAsset = {};
-    var totals = { fuel: 0, idle: 0, idleMissing: null, depr: 0, deprMissing: null, service: 0, servMissing: null, maint: 0, maintMissing: null, emissions: 0 };
+    var totals = { fuel: 0, fuelMissing: false, idle: 0, idleMissing: null, depr: 0, deprMissing: null, service: 0, servMissing: null, maint: 0, maintMissing: null, emissions: 0 };
 
     jobAssignments.forEach(function(row) {
       var asset = allAssets.find(function(a) { return a.id === row.asset_id; });
@@ -586,7 +586,8 @@
       var emissionsKg = fuel.litres * getEmissionFactor(asset.fuel_type);
 
       byAsset[row.asset_id] = byAsset[row.asset_id] || {
-        asset: asset, days: 0, fuel: 0,
+        asset: asset, days: 0,
+        fuel: 0, fuelMissing: false,
         idle: 0, idleMissing: null,
         depr: 0, deprMissing: null,
         service: 0, servMissing: null,
@@ -595,6 +596,10 @@
       };
       byAsset[row.asset_id].days += 1;
       byAsset[row.asset_id].fuel += fuel.cost;
+      if (!assetHasFuel[asset.id]) {
+        byAsset[row.asset_id].fuelMissing = true;
+        totals.fuelMissing = true;
+      }
 
       if (idleCosts.fuel !== null) {
         byAsset[row.asset_id].idle += idleCosts.fuel;
@@ -648,7 +653,7 @@
       return {
         name: b.asset.asset_name,
         days: b.days,
-        fuel: b.fuel,
+        fuel: b.fuel, fuelMissing: b.fuelMissing,
         idle: b.idle, idleMissing: b.idleMissing,
         depr: b.depr, deprMissing: b.deprMissing,
         service: b.service, servMissing: b.servMissing,
@@ -662,20 +667,34 @@
     // always include them all — missing flags are used only for labelling.
     totals.grand = totals.fuel + totals.idle + totals.depr + totals.service + totals.maint;
 
-    document.getElementById('kpi-fuel').textContent = fmtMoney(totals.fuel);
+    var kpiFuelEl = document.getElementById('kpi-fuel');
+    if (totals.fuelMissing) {
+      kpiFuelEl.setAttribute('title', 'No fuel records found for some assets in the job\'s date range');
+      if (totals.fuel > 0) {
+        kpiFuelEl.className = 'kpi-value partial-total';
+        kpiFuelEl.innerHTML = fmtMoney(totals.fuel) + ' <span class="kpi-partial-suffix">(partial)</span>';
+      } else {
+        kpiFuelEl.className = 'kpi-value unavailable';
+        kpiFuelEl.textContent = '—';
+      }
+    } else {
+      kpiFuelEl.className = 'kpi-value';
+      kpiFuelEl.removeAttribute('title');
+      kpiFuelEl.textContent = fmtMoney(totals.fuel);
+    }
     setKpiMoneyOrMissing('kpi-idle', totals.idle, totals.idleMissing);
     setKpiMoneyOrMissing('kpi-depr', totals.depr, totals.deprMissing);
     setKpiMoneyOrMissing('kpi-service', totals.service, totals.servMissing);
     setKpiMoneyOrMissing('kpi-maintenance', totals.maint, totals.maintMissing);
     document.getElementById('kpi-emissions').textContent = (totals.emissions / 1000).toFixed(2) + ' t';
-    setKpiGrandTotal('kpi-grand', totals.grand, totals.idleMissing, totals.deprMissing, totals.servMissing, totals.maintMissing);
+    setKpiGrandTotal('kpi-grand', totals.grand, totals.fuelMissing, totals.idleMissing, totals.deprMissing, totals.servMissing, totals.maintMissing);
 
     if (costBreakdown.length === 0) {
       document.getElementById('breakdown-tbody').innerHTML = '<tr><td colspan="8" class="empty-state">No cost data available.</td></tr>';
       return;
     }
     document.getElementById('breakdown-tbody').innerHTML = costBreakdown.map(function(r) {
-      var unavailable = unavailableComponents(r.idleMissing, r.deprMissing, r.servMissing, r.maintMissing);
+      var unavailable = unavailableComponents(r.fuelMissing, r.idleMissing, r.deprMissing, r.servMissing, r.maintMissing);
       var totalCell = unavailable.length === 0
         ? '<td class="cell-teal">' + fmtMoney(r.total) + '</td>'
         : '<td class="cell-amber" title="' + esc(partialTotalTooltip(unavailable)) + '">' + fmtMoney(r.total) +
@@ -683,7 +702,7 @@
       return '<tr>' +
         '<td class="cell-strong">' + esc(r.name) + '</td>' +
         '<td>' + r.days + '</td>' +
-        '<td>' + fmtMoney(r.fuel) + '</td>' +
+        cellFuelMissing(r.fuel, r.fuelMissing) +
         cellValueOrMissing(r.idle, r.idleMissing) +
         cellValueOrMissing(r.depr, r.deprMissing) +
         cellValueOrMissing(r.service, r.servMissing) +
@@ -892,8 +911,9 @@
 
   function fmtMoney(n) { return '$' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
 
-  function unavailableComponents(idleMissing, deprMissing, servMissing, maintMissing) {
+  function unavailableComponents(fuelMissing, idleMissing, deprMissing, servMissing, maintMissing) {
     var list = [];
+    if (fuelMissing) list.push({ label: 'fuel cost', fuelAbsent: true });
     if (idleMissing && idleMissing.length) list.push({ label: 'idle cost', fields: idleMissing });
     if (deprMissing && deprMissing.length) list.push({ label: 'depreciation cost', fields: deprMissing });
     if (servMissing && servMissing.length) list.push({ label: 'servicing cost', fields: servMissing });
@@ -906,7 +926,11 @@
   }
 
   function partialTotalTooltip(unavailable) {
-    return unavailable.map(function(c) { return FCM.formatMissingMessage(c.fields); }).join(' ');
+    return unavailable.map(function(c) {
+      return c.fuelAbsent
+        ? 'No fuel records found for this asset in the job\'s date range.'
+        : FCM.formatMissingMessage(c.fields);
+    }).join(' ');
   }
 
   function calcPartialAssetTotal(fuel, idle, idleMissing, depr, deprMissing, service, servMissing, maint, maintMissing) {
@@ -916,6 +940,13 @@
     if (!servMissing || !servMissing.length) total += service;
     if (!maintMissing || !maintMissing.length) total += maint;
     return total;
+  }
+
+  function cellFuelMissing(value, fuelMissing) {
+    if (fuelMissing) {
+      return '<td class="cell-missing" title="No fuel records found for this asset in the job\'s date range">—</td>';
+    }
+    return '<td>' + fmtMoney(value) + '</td>';
   }
 
   function cellValueOrMissing(value, missingFields) {
@@ -945,9 +976,9 @@
     el.textContent = fmtMoney(value);
   }
 
-  function setKpiGrandTotal(elId, value, idleMissing, deprMissing, servMissing, maintMissing) {
+  function setKpiGrandTotal(elId, value, fuelMissing, idleMissing, deprMissing, servMissing, maintMissing) {
     var el = document.getElementById(elId);
-    var unavailable = unavailableComponents(idleMissing, deprMissing, servMissing, maintMissing);
+    var unavailable = unavailableComponents(fuelMissing, idleMissing, deprMissing, servMissing, maintMissing);
     if (unavailable.length === 0) {
       el.className = 'kpi-value';
       el.removeAttribute('title');
