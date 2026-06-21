@@ -153,6 +153,7 @@
   .kpi-value.white { color: #D8DFE8; }
   .kpi-sub.message { font-size: 12px; color: #5A6474; line-height: 1.45; font-weight: 500; text-transform: none; letter-spacing: 0; }
   .kpi-value.message-text { font-size: 13px; font-weight: 600; color: #5A6474; line-height: 1.45; letter-spacing: 0; }
+  .kpi-value.cell-na { color: #4A5568; cursor: help; }
 
   /* ── CHART CARD ── */
   .chart-card {
@@ -187,6 +188,15 @@
   tbody td { padding: 12px 16px; font-size: 13px; color: #9BA4B0; }
   .cell-strong { color: #D8DFE8; font-weight: 600; }
   .cell-teal { color: #0EA57A; font-weight: 600; }
+  .cell-na { color: #4A5568; cursor: help; }
+  .cell-with-hint { display: inline-flex; align-items: center; gap: 6px; }
+  .row-info-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 15px; height: 15px; flex-shrink: 0;
+    font-size: 10px; font-weight: 700; font-style: italic; color: #5A6474;
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 50%;
+    cursor: help; line-height: 1;
+  }
 
   .empty-state, .loading-state {
     padding: 60px 24px; text-align: center; color: #3A4A5C; font-size: 13.5px;
@@ -215,14 +225,14 @@
   </a>
   <nav class="sidebar-nav">
     <a class="nav-item" href="home.html"><span class="nav-icon">🏠</span> Overview</a>
-    <div class="nav-label">Analytics Modules</div>
+    <div class="nav-label">Machinery Modules</div>
     <a class="nav-item active" href="fuel-analyst.html"><span class="nav-icon">⛽</span> Fuel Analyst</a>
     <a class="nav-item" href="idle-cost-analyst.html"><span class="nav-icon">⏱</span> Idle Cost Analyst</a>
     <a class="nav-item" href="emissions-intelligence.html"><span class="nav-icon">🌍</span> Emissions Intelligence</a>
     <a class="nav-item" href="utilisation-analyst.html"><span class="nav-icon">📊</span> Utilisation Analyst</a>
     <a class="nav-item" href="job-cost-analyst.html"><span class="nav-icon">🏗</span> Job Cost Analyst</a>
     <a class="nav-item" href="reports.html"><span class="nav-icon">📋</span> Reports</a>
-    <div class="nav-label">Truck Fleet</div>
+    <div class="nav-label">Truck Modules</div>
     <a class="nav-item" href="truck-fuel-analyst.html"><span class="nav-icon">🚛</span> Fuel Cost Analyst</a>
     <a class="nav-item" href="cost-per-km-analyst.html"><span class="nav-icon">📏</span> Cost Per KM Analyst</a>
     <a class="nav-item" href="truck-emissions-analyst.html"><span class="nav-icon">🌿</span> Emissions Analyst</a>
@@ -389,6 +399,7 @@
 <script src="js/supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script>
 (function() {
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
@@ -396,9 +407,13 @@
   var assetsList = [];
   var selectedAsset = null;
   var fuelChart = null;
+  var lastDateFrom = '';
+  var lastDateTo = '';
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var NO_ODOMETER_MSG = 'No odometer data available yet — this will populate automatically once your eRoad integration is connected';
+  var NO_DATA_TITLE = 'No data available for this period';
+  var FILL_TO_FILL_TITLE = 'Fuel cost is calculated per fill-to-fill period, not per day — see the explanation banner above';
 
   function isOnRoadAsset(asset) {
     return asset && ON_ROAD_TYPES.indexOf(asset.asset_type) !== -1;
@@ -418,23 +433,39 @@
     document.getElementById('table-title').textContent = onRoad ? 'Daily Breakdown — On-Road' : 'Daily Breakdown';
   }
 
+  function setKpiValue(elId, text, title) {
+    var el = document.getElementById(elId);
+    el.textContent = text;
+    if (title) {
+      el.setAttribute('title', title);
+      el.style.cursor = 'help';
+      el.classList.add('cell-na');
+    } else {
+      el.removeAttribute('title');
+      el.style.cursor = '';
+      el.classList.remove('cell-na');
+    }
+  }
+
   function resetKpis(onRoad) {
     if (onRoad) {
-      document.getElementById('kpi-total-km').textContent = '—';
+      setKpiValue('kpi-total-km', '—');
       document.getElementById('kpi-total-km').className = 'kpi-value teal';
       document.getElementById('kpi-total-km-sub').textContent = 'for selected period';
       document.getElementById('kpi-total-km-sub').className = 'kpi-sub';
       document.getElementById('kpi-onroad-total-cost').textContent = '—';
       document.getElementById('kpi-onroad-total-litres-sub').textContent = 'for selected period';
-      document.getElementById('kpi-cost-per-km').textContent = '—';
+      setKpiValue('kpi-cost-per-km', '—');
       document.getElementById('kpi-cost-per-km').className = 'kpi-value teal';
       document.getElementById('kpi-cost-per-km-sub').textContent = 'fuel cost per kilometre';
       document.getElementById('kpi-cost-per-km-sub').className = 'kpi-sub';
       document.getElementById('kpi-onroad-idle-cost').textContent = '—';
       document.getElementById('kpi-onroad-idle-pct-sub').textContent = 'share of total cost';
     } else {
-      document.getElementById('kpi-travel-rate').textContent = '—';
-      document.getElementById('kpi-idle-rate').textContent = '—';
+      setKpiValue('kpi-travel-rate', '—');
+      document.getElementById('kpi-travel-rate').className = 'kpi-value teal';
+      setKpiValue('kpi-idle-rate', '—');
+      document.getElementById('kpi-idle-rate').className = 'kpi-value amber';
       document.getElementById('kpi-total-cost').textContent = '—';
       document.getElementById('kpi-idle-cost').textContent = '—';
       document.getElementById('kpi-total-litres-sub').textContent = 'for selected period';
@@ -483,11 +514,13 @@
     var byDate = {};
     fuelRows.forEach(function(r) {
       byDate[r.record_date] = byDate[r.record_date] || {};
+      byDate[r.record_date].hasFuel = true;
       byDate[r.record_date].litres = (byDate[r.record_date].litres || 0) + (parseFloat(r.litres) || 0);
       byDate[r.record_date].cost = (byDate[r.record_date].cost || 0) + (parseFloat(r.total_cost) || 0);
     });
     telRows.forEach(function(r) {
       byDate[r.record_date] = byDate[r.record_date] || {};
+      byDate[r.record_date].hasTel = true;
       byDate[r.record_date].operating_hours = (byDate[r.record_date].operating_hours || 0) + (parseFloat(r.operating_hours) || 0);
       byDate[r.record_date].idle_hours = (byDate[r.record_date].idle_hours || 0) + (parseFloat(r.idle_hours) || 0);
     });
@@ -499,19 +532,60 @@
     var dailyRows = [];
     dates.forEach(function(date) {
       var d = byDate[date];
+      var hasFuel = !!d.hasFuel;
+      var hasTel = !!d.hasTel;
       var litres = d.litres || 0;
       var cost = d.cost || 0;
-      var opHours = d.operating_hours || 0;
-      var idleHours = d.idle_hours || 0;
-      var idleFuel = idleHours * idleRate;
+      var opHours = hasTel ? (d.operating_hours || 0) : 0;
+      var idleHours = hasTel ? (d.idle_hours || 0) : 0;
+      var idleFuel = hasTel ? idleHours * idleRate : 0;
       if (idleFuel > litres) idleFuel = litres;
       var operatingFuel = litres - idleFuel;
       dailyRows.push({
         date: date, litres: litres, cost: cost, opHours: opHours, idleHours: idleHours,
-        operatingFuel: operatingFuel, idleFuel: idleFuel
+        operatingFuel: operatingFuel, idleFuel: idleFuel,
+        hasFuel: hasFuel, hasTel: hasTel
       });
     });
     return dailyRows;
+  }
+
+  function isFillToFillSplitRow(r) {
+    return r.hasTel && r.opHours > 0 && (!r.hasFuel || r.litres === 0);
+  }
+
+  function naSpan() {
+    return '<span class="cell-na" title="' + esc(NO_DATA_TITLE) + '">—</span>';
+  }
+
+  function fillToFillIcon() {
+    return '<span class="row-info-icon" title="' + esc(FILL_TO_FILL_TITLE) + '">i</span>';
+  }
+
+  function chartRowsWithData(rows) {
+    return rows.filter(function(r) {
+      return r.hasFuel || r.hasTel;
+    });
+  }
+
+  function chartTimeScale(dateFrom, dateTo) {
+    return {
+      type: 'time',
+      min: dateFrom,
+      max: dateTo,
+      stacked: true,
+      grid: { display: false },
+      ticks: { color: '#4A5568', font: { size: 11 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 },
+      time: {
+        unit: 'day',
+        displayFormats: { day: 'd MMM' },
+        tooltipFormat: 'd MMM yyyy'
+      }
+    };
+  }
+
+  function chartBarLayout() {
+    return { barPercentage: 0.55, categoryPercentage: 0.65, maxBarThickness: 42 };
   }
 
   function fmtMoney(n) {
@@ -598,6 +672,8 @@
     var dateFrom = document.getElementById('date-from').value;
     var dateTo = document.getElementById('date-to').value;
     if (!dateFrom || !dateTo) { return; }
+    lastDateFrom = dateFrom;
+    lastDateTo = dateTo;
 
     var btn = document.getElementById('apply-filters-btn');
     btn.disabled = true; btn.textContent = 'Loading...';
@@ -641,6 +717,7 @@
 
   function runConstructionAnalysis(fuelRows, telRows, idleRate) {
     setViewMode(false);
+    var hasAnyTel = telRows.length > 0;
     var byDate = mergeFuelAndTelematics(fuelRows, telRows);
     var dailyRows = buildConstructionDailyRows(byDate, idleRate);
 
@@ -652,19 +729,31 @@
       totalCost += r.cost;
       totalIdleFuel += r.idleFuel;
       totalOperatingFuel += r.operatingFuel;
-      totalOperatingHours += r.opHours;
-      totalIdleHours += r.idleHours;
+      if (r.hasTel) {
+        totalOperatingHours += r.opHours;
+        totalIdleHours += r.idleHours;
+      }
     });
 
-    var travelRate = totalOperatingHours > 0 ? (totalOperatingFuel / totalOperatingHours) : 0;
-    var idleRateActual = totalIdleHours > 0 ? (totalIdleFuel / totalIdleHours) : 0;
+    if (hasAnyTel && totalOperatingHours > 0) {
+      setKpiValue('kpi-travel-rate', (totalOperatingFuel / totalOperatingHours).toFixed(2) + ' L/hr');
+    } else {
+      setKpiValue('kpi-travel-rate', '—', NO_DATA_TITLE);
+    }
+
+    if (!hasAnyTel) {
+      setKpiValue('kpi-idle-rate', '—', NO_DATA_TITLE);
+    } else if (totalIdleHours > 0) {
+      setKpiValue('kpi-idle-rate', (totalIdleFuel / totalIdleHours).toFixed(2) + ' L/hr');
+    } else {
+      setKpiValue('kpi-idle-rate', '0.00 L/hr');
+    }
+
+    document.getElementById('kpi-total-cost').textContent = fmtMoney(totalCost);
+    document.getElementById('kpi-total-cost').removeAttribute('title');
+    document.getElementById('kpi-total-litres-sub').textContent = totalLitres.toLocaleString(undefined, {maximumFractionDigits:0}) + ' litres total';
     var idleCost = totalLitres > 0 ? (totalCost * (totalIdleFuel / totalLitres)) : 0;
     var idlePct = totalCost > 0 ? (idleCost / totalCost * 100) : 0;
-
-    document.getElementById('kpi-travel-rate').textContent = travelRate.toFixed(2) + ' L/hr';
-    document.getElementById('kpi-idle-rate').textContent = idleRateActual.toFixed(2) + ' L/hr';
-    document.getElementById('kpi-total-cost').textContent = fmtMoney(totalCost);
-    document.getElementById('kpi-total-litres-sub').textContent = totalLitres.toLocaleString(undefined, {maximumFractionDigits:0}) + ' litres total';
     document.getElementById('kpi-idle-cost').textContent = fmtMoney(idleCost);
     document.getElementById('kpi-idle-pct-sub').textContent = idlePct.toFixed(1) + '% of total fuel cost';
 
@@ -704,11 +793,15 @@
       document.getElementById('kpi-total-km').className = 'kpi-value teal';
       document.getElementById('kpi-total-km-sub').textContent = 'for selected period';
       document.getElementById('kpi-total-km-sub').className = 'kpi-sub';
-      document.getElementById('kpi-cost-per-km').textContent = odo.totalKm > 0
-        ? '$' + (totalCost / odo.totalKm).toFixed(2) : '—';
-      document.getElementById('kpi-cost-per-km').className = 'kpi-value teal';
-      document.getElementById('kpi-cost-per-km-sub').textContent = odo.totalKm > 0
-        ? 'fuel cost per kilometre' : 'no kilometres recorded in period';
+      if (odo.totalKm > 0) {
+        setKpiValue('kpi-cost-per-km', '$' + (totalCost / odo.totalKm).toFixed(2));
+        document.getElementById('kpi-cost-per-km').className = 'kpi-value teal';
+        document.getElementById('kpi-cost-per-km-sub').textContent = 'fuel cost per kilometre';
+      } else {
+        setKpiValue('kpi-cost-per-km', '—', NO_DATA_TITLE);
+        document.getElementById('kpi-cost-per-km').className = 'kpi-value teal';
+        document.getElementById('kpi-cost-per-km-sub').textContent = 'no kilometres recorded in period';
+      }
       document.getElementById('kpi-cost-per-km-sub').className = 'kpi-sub';
       renderOnRoadChart(dailyRows);
     }
@@ -718,26 +811,44 @@
 
   function renderConstructionChart(rows) {
     document.getElementById('chart-empty').style.display = 'none';
-    var ctx = document.getElementById('fuel-chart').getContext('2d');
-    var labels = rows.map(function(r) { return formatDateShort(r.date); });
-    var operatingData = rows.map(function(r) { return Math.round(r.operatingFuel * 10) / 10; });
-    var idleData = rows.map(function(r) { return Math.round(r.idleFuel * 10) / 10; });
+    var chartRows = chartRowsWithData(rows);
+    if (chartRows.length === 0) {
+      document.getElementById('chart-empty').style.display = 'block';
+      document.getElementById('chart-empty').innerHTML = '<span class="icon">📊</span>No daily fuel data for this period.';
+      if (fuelChart) { fuelChart.destroy(); fuelChart = null; }
+      return;
+    }
 
+    var ctx = document.getElementById('fuel-chart').getContext('2d');
     if (fuelChart) fuelChart.destroy();
     fuelChart = new Chart(ctx, {
       type: 'bar',
       data: {
-        labels: labels,
         datasets: [
-          { label: 'Operating Fuel (L)', data: operatingData, backgroundColor: '#0EA57A', borderRadius: 4 },
-          { label: 'Idle Fuel (L)', data: idleData, backgroundColor: '#EF9F27', borderRadius: 4 }
+          {
+            label: 'Operating Fuel (L)',
+            data: chartRows.map(function(r) { return { x: r.date, y: Math.round(r.operatingFuel * 10) / 10 }; }),
+            backgroundColor: '#0EA57A',
+            borderRadius: 4
+          },
+          {
+            label: 'Idle Fuel (L)',
+            data: chartRows.map(function(r) { return { x: r.date, y: Math.round(r.idleFuel * 10) / 10 }; }),
+            backgroundColor: '#EF9F27',
+            borderRadius: 4
+          }
         ]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
+        datasets: { bar: chartBarLayout() },
         scales: {
-          x: { stacked: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4A5568', font: { size: 11 } } },
-          y: { stacked: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4A5568', font: { size: 11 } } }
+          x: chartTimeScale(lastDateFrom, lastDateTo),
+          y: {
+            stacked: true,
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#4A5568', font: { size: 11 } }
+          }
         },
         plugins: { legend: { display: false } }
       }
@@ -746,31 +857,35 @@
 
   function renderOnRoadChart(rows) {
     document.getElementById('chart-empty').style.display = 'none';
-    var ctx = document.getElementById('fuel-chart').getContext('2d');
     var chartRows = rows.filter(function(r) { return r.costPerKm != null; });
-    var labels = chartRows.map(function(r) { return formatDateShort(r.date); });
-    var costPerKmData = chartRows.map(function(r) { return Math.round(r.costPerKm * 100) / 100; });
-
-    if (fuelChart) fuelChart.destroy();
     if (chartRows.length === 0) {
       document.getElementById('chart-empty').style.display = 'block';
       document.getElementById('chart-empty').innerHTML = '<span class="icon">📊</span>No daily cost per km data for days with recorded travel in this period.';
-      fuelChart = null;
+      if (fuelChart) { fuelChart.destroy(); fuelChart = null; }
       return;
     }
+
+    var ctx = document.getElementById('fuel-chart').getContext('2d');
+    if (fuelChart) fuelChart.destroy();
     fuelChart = new Chart(ctx, {
       type: 'bar',
       data: {
-        labels: labels,
-        datasets: [
-          { label: 'Cost per KM ($)', data: costPerKmData, backgroundColor: '#0EA57A', borderRadius: 4 }
-        ]
+        datasets: [{
+          label: 'Cost per KM ($)',
+          data: chartRows.map(function(r) { return { x: r.date, y: Math.round(r.costPerKm * 100) / 100 }; }),
+          backgroundColor: '#0EA57A',
+          borderRadius: 4
+        }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
+        datasets: { bar: chartBarLayout() },
         scales: {
-          x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4A5568', font: { size: 11 } } },
-          y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4A5568', font: { size: 11 }, callback: function(v) { return '$' + v; } } }
+          x: chartTimeScale(lastDateFrom, lastDateTo),
+          y: {
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#4A5568', font: { size: 11 }, callback: function(v) { return '$' + v; } }
+          }
         },
         plugins: { legend: { display: false } }
       }
@@ -790,15 +905,45 @@
       return;
     }
     tbody.innerHTML = rows.map(function(r) {
-      var opRate = r.opHours > 0 ? (r.operatingFuel / r.opHours) : 0;
-      var idleRateRow = r.idleHours > 0 ? (r.idleFuel / r.idleHours) : 0;
+      var litresCell;
+      if (!r.hasFuel) {
+        litresCell = '<span class="cell-with-hint">' + naSpan() + (isFillToFillSplitRow(r) ? fillToFillIcon() : '') + '</span>';
+      } else {
+        litresCell = '<span class="cell-with-hint">' + r.litres.toFixed(1) + ' L' +
+          (isFillToFillSplitRow(r) ? fillToFillIcon() : '') + '</span>';
+      }
+
+      var opHoursCell = r.hasTel ? r.opHours.toFixed(1) + ' hr' : naSpan();
+      var idleHoursCell;
+      if (!r.hasTel) {
+        idleHoursCell = naSpan();
+      } else {
+        idleHoursCell = r.idleHours.toFixed(1) + ' hr';
+      }
+
+      var opRateCell;
+      if (!r.hasTel || r.opHours === 0) {
+        opRateCell = naSpan();
+      } else {
+        opRateCell = '<span class="cell-teal">' + (r.operatingFuel / r.opHours).toFixed(2) + ' L/hr</span>';
+      }
+
+      var idleRateCell;
+      if (!r.hasTel) {
+        idleRateCell = naSpan();
+      } else if (r.idleHours === 0) {
+        idleRateCell = '0.00 L/hr';
+      } else {
+        idleRateCell = (r.idleFuel / r.idleHours).toFixed(2) + ' L/hr';
+      }
+
       return '<tr>' +
         '<td class="cell-strong">' + formatDateShort(r.date) + '</td>' +
-        '<td>' + r.litres.toFixed(1) + ' L</td>' +
-        '<td>' + r.opHours.toFixed(1) + ' hr</td>' +
-        '<td>' + r.idleHours.toFixed(1) + ' hr</td>' +
-        '<td class="cell-teal">' + opRate.toFixed(2) + ' L/hr</td>' +
-        '<td style="color:#EF9F27; font-weight:600;">' + idleRateRow.toFixed(2) + ' L/hr</td>' +
+        '<td>' + litresCell + '</td>' +
+        '<td>' + opHoursCell + '</td>' +
+        '<td>' + idleHoursCell + '</td>' +
+        '<td>' + opRateCell + '</td>' +
+        '<td style="color:#EF9F27; font-weight:600;">' + idleRateCell + '</td>' +
       '</tr>';
     }).join('');
   }
@@ -810,15 +955,29 @@
       return;
     }
     tbody.innerHTML = rows.map(function(r) {
-      var kmCell = noOdometer ? '—' : (r.kmTravelled > 0 ? r.kmTravelled.toFixed(1) + ' km' : '0 km');
-      var costPerKmCell = (!noOdometer && r.costPerKm != null) ? '$' + r.costPerKm.toFixed(2) : '—';
+      var kmCell;
+      if (noOdometer) {
+        kmCell = naSpan();
+      } else if (!r.hasTel) {
+        kmCell = naSpan();
+      } else if (r.kmTravelled > 0) {
+        kmCell = r.kmTravelled.toFixed(1) + ' km';
+      } else {
+        kmCell = '0 km';
+      }
+
+      var costCell = r.hasFuel ? fmtMoney(r.cost) : naSpan();
+      var costPerKmCell = (!noOdometer && r.costPerKm != null) ? '<span class="cell-teal">$' + r.costPerKm.toFixed(2) + '</span>' : naSpan();
+      var idleHoursCell = r.hasTel ? r.idleHours.toFixed(1) + ' hr' : naSpan();
+      var idleCostCell = r.hasFuel && r.litres > 0 ? fmtMoney(r.idleFuelCost) : naSpan();
+
       return '<tr>' +
         '<td class="cell-strong">' + formatDateShort(r.date) + '</td>' +
         '<td>' + kmCell + '</td>' +
-        '<td>' + fmtMoney(r.cost) + '</td>' +
-        '<td class="cell-teal">' + costPerKmCell + '</td>' +
-        '<td>' + r.idleHours.toFixed(1) + ' hr</td>' +
-        '<td style="color:#EF9F27; font-weight:600;">' + fmtMoney(r.idleFuelCost) + '</td>' +
+        '<td>' + costCell + '</td>' +
+        '<td>' + costPerKmCell + '</td>' +
+        '<td>' + idleHoursCell + '</td>' +
+        '<td style="color:#EF9F27; font-weight:600;">' + idleCostCell + '</td>' +
       '</tr>';
     }).join('');
   }
