@@ -464,10 +464,17 @@
         return m.indexOf('Odometer') === -1 && m.indexOf('Annual KM') === -1;
       });
     }
+    // 'Total Engine Hours' can only be confirmed after a telematics query runs —
+    // remove it from the pre-flight assertion and replace with a soft informational note.
+    missing = missing.filter(function(m) { return m !== 'Total Engine Hours'; });
     missing = Array.from(new Set(missing));
 
     if (missing.length > 0) {
       display.innerHTML = 'Missing: <span class="warn">' + missing.join(', ') + '</span>';
+    } else if (!FCM.isOnRoad(selectedAsset)) {
+      // Off-road: depreciation needs Total Engine Hours from telematics — only
+      // available after the user applies a date range. Inform rather than assert missing.
+      display.innerHTML = 'Depreciation requires <span class="warn">telematics data (Total Engine Hours)</span>';
     } else {
       display.textContent = '✓ All cost fields set';
     }
@@ -598,7 +605,7 @@
 
     var telResult = await supabase
       .from('telematics_records')
-      .select('record_date, idle_hours, total_engine_hours')
+      .select('record_date, idle_hours, total_engine_hours, asset_id')
       .eq('asset_id', selectedAsset.id)
       .eq('user_id', currentUser.id)
       .gte('record_date', dateFrom)
