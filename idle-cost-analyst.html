@@ -432,6 +432,62 @@
       }).join('');
   }
 
+  function getStaticAssetMissing(asset) {
+    var missing = []
+      .concat(FCM.getMissingDepreciationFields(asset, { totalEngineHours: null }))
+      .concat(FCM.getMissingMaintenanceFields(asset))
+      .concat(FCM.getMissingServicingFields(asset));
+    if (FCM.isOnRoad(asset)) {
+      missing = missing.filter(function(m) { return m !== 'Total Engine Hours'; });
+    } else {
+      missing = missing.filter(function(m) {
+        return m.indexOf('Odometer') === -1 && m.indexOf('Annual KM') === -1;
+      });
+    }
+    missing = missing.filter(function(m) { return m !== 'Total Engine Hours'; });
+    return Array.from(new Set(missing));
+  }
+
+  function updateAssetMetaDisplay(asset, runtimeMissing) {
+    var display = document.getElementById('asset-meta-display');
+    if (!asset) {
+      display.textContent = '— select an asset —';
+      return;
+    }
+
+    if (runtimeMissing) {
+      var runtimeFields = [];
+      if (runtimeMissing.fuelMissing && runtimeMissing.fuelMissing.length) {
+        runtimeFields = runtimeFields.concat(runtimeMissing.fuelMissing);
+      }
+      if (runtimeMissing.deprMissing && runtimeMissing.deprMissing.length) {
+        runtimeFields = runtimeFields.concat(runtimeMissing.deprMissing);
+      }
+      if (runtimeMissing.servMissing && runtimeMissing.servMissing.length) {
+        runtimeFields = runtimeFields.concat(runtimeMissing.servMissing);
+      }
+      if (runtimeMissing.maintMissing && runtimeMissing.maintMissing.length) {
+        runtimeFields = runtimeFields.concat(runtimeMissing.maintMissing);
+      }
+      var allMissing = Array.from(new Set(getStaticAssetMissing(asset).concat(runtimeFields)));
+      if (allMissing.length === 0) {
+        display.textContent = '✓ All required data available';
+      } else {
+        display.innerHTML = 'Missing: <span class="warn">' + allMissing.join(', ') + '</span>';
+      }
+      return;
+    }
+
+    var missing = getStaticAssetMissing(asset);
+    if (missing.length > 0) {
+      display.innerHTML = 'Missing: <span class="warn">' + missing.join(', ') + '</span>';
+    } else if (!FCM.isOnRoad(asset)) {
+      display.innerHTML = 'Depreciation requires <span class="warn">telematics data (Total Engine Hours)</span>';
+    } else {
+      display.textContent = '✓ All cost fields set';
+    }
+  }
+
   document.getElementById('asset-select').addEventListener('change', function() {
     var id = this.value;
     var display = document.getElementById('asset-meta-display');
@@ -453,31 +509,7 @@
       return;
     }
 
-    var missing = []
-      .concat(FCM.getMissingDepreciationFields(selectedAsset, { totalEngineHours: null }))
-      .concat(FCM.getMissingMaintenanceFields(selectedAsset))
-      .concat(FCM.getMissingServicingFields(selectedAsset));
-    if (FCM.isOnRoad(selectedAsset)) {
-      missing = missing.filter(function(m) { return m !== 'Total Engine Hours'; });
-    } else {
-      missing = missing.filter(function(m) {
-        return m.indexOf('Odometer') === -1 && m.indexOf('Annual KM') === -1;
-      });
-    }
-    // 'Total Engine Hours' can only be confirmed after a telematics query runs —
-    // remove it from the pre-flight assertion and replace with a soft informational note.
-    missing = missing.filter(function(m) { return m !== 'Total Engine Hours'; });
-    missing = Array.from(new Set(missing));
-
-    if (missing.length > 0) {
-      display.innerHTML = 'Missing: <span class="warn">' + missing.join(', ') + '</span>';
-    } else if (!FCM.isOnRoad(selectedAsset)) {
-      // Off-road: depreciation needs Total Engine Hours from telematics — only
-      // available after the user applies a date range. Inform rather than assert missing.
-      display.innerHTML = 'Depreciation requires <span class="warn">telematics data (Total Engine Hours)</span>';
-    } else {
-      display.textContent = '✓ All cost fields set';
-    }
+    updateAssetMetaDisplay(selectedAsset);
     applyBtn.disabled = false;
   });
 
@@ -684,6 +716,12 @@
     setKpiMoneyOrMissing('kpi-maintenance-cost', sumMaintCost, aggMaintMissing);
     setKpiTotalCost(grandTotal, aggFuelMissing, aggDeprMissing, aggServMissing, aggMaintMissing);
     document.getElementById('kpi-total-cost-sub').textContent = 'over ' + sumIdleHours.toFixed(0) + ' idle hours';
+    updateAssetMetaDisplay(selectedAsset, {
+      fuelMissing: aggFuelMissing,
+      deprMissing: aggDeprMissing,
+      servMissing: aggServMissing,
+      maintMissing: aggMaintMissing
+    });
 
     renderChart(dailyRows);
     renderTable(dailyRows);
@@ -781,6 +819,7 @@
     document.getElementById('chart-empty').style.display = 'block';
     if (idleChart) { idleChart.destroy(); idleChart = null; }
     document.getElementById('data-tbody').innerHTML = '<tr><td colspan="7"><div class="empty-state"><span class="icon">⏱</span>No telematics data found for this asset in the selected date range.</div></td></tr>';
+    if (selectedAsset) updateAssetMetaDisplay(selectedAsset);
   }
 
   function formatDateShort(dateStr) {
