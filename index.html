@@ -163,10 +163,44 @@
     color: #F0F2F5; line-height: 1.04; margin-bottom: 14px;
   }
   .section-sub {
-    font-size: 16px; color: #5A6474; max-width: 520px;
-    line-height: 1.65; margin-bottom: 60px;
+    font-size: 16px; color: #5A6474; max-width: 620px;
+    line-height: 1.65; margin-bottom: 48px;
+  }
+  .module-group {
+    border-radius: 20px; padding: 40px 36px 44px; margin-bottom: 28px;
+  }
+  .module-group:last-child { margin-bottom: 0; }
+  .module-group.machinery {
+    background: rgba(14,165,122,0.035);
+    border: 1px solid rgba(14,165,122,0.12);
+  }
+  .module-group.on-road {
+    background: rgba(255,255,255,0.015);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .module-group-label {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    padding: 4px 11px; border-radius: 100px; margin-bottom: 14px;
+  }
+  .module-group.machinery .module-group-label {
+    color: #0EA57A; background: rgba(14,165,122,0.12);
+    border: 1px solid rgba(14,165,122,0.24);
+  }
+  .module-group.on-road .module-group-label {
+    color: #0BC48E; background: rgba(14,165,122,0.08);
+    border: 1px solid rgba(14,165,122,0.18);
+  }
+  .module-group-title {
+    font-size: 26px; font-weight: 800; letter-spacing: -0.9px;
+    color: #F0F2F5; margin-bottom: 10px;
+  }
+  .module-group-desc {
+    font-size: 14.5px; color: #5A6474; line-height: 1.65;
+    max-width: 680px; margin-bottom: 32px;
   }
   .features-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 18px; }
+  .module-group.on-road .features-grid { grid-template-columns: repeat(2,1fr); }
   .feat-card {
     background: rgba(255,255,255,0.018);
     border: 1px solid rgba(255,255,255,0.06);
@@ -457,7 +491,10 @@
     .hero-visual { display: none; }
     .pilot-strip { padding: 24px 1.5rem; }
     .features { padding: 64px 1.5rem; }
+    .module-group { padding: 28px 20px 32px; }
+    .module-group-title { font-size: 22px; }
     .features-grid { grid-template-columns: 1fr; }
+    .module-group.on-road .features-grid { grid-template-columns: 1fr; }
     .section-title { font-size: 36px; }
     .demo { padding: 48px 1.5rem 64px; }
     .demo-inner { grid-template-columns: 1fr; gap: 48px; }
@@ -556,10 +593,19 @@
     <div class="section-eyebrow"><div class="dash"></div> Analytics Modules</div>
     <h2 class="section-title">Every cost. Every asset.<br>Every decision.</h2>
     <p class="section-sub">
-      Six integrated intelligence modules — built for operators who demand
-      granular, job-level insight from every machine in their fleet.
+      Ten integrated intelligence modules across machinery and trucks — built for
+      operators who demand granular, job-level insight from every asset in their fleet.
     </p>
-    <div class="features-grid">
+
+    <!-- Machinery Intelligence -->
+    <div class="module-group machinery">
+      <span class="module-group-label">Machinery</span>
+      <h3 class="module-group-title">Machinery Intelligence</h3>
+      <p class="module-group-desc">
+        Hour-based cost tracking built around telematics and idle burn — purpose-built
+        for excavators, loaders, dozers, and other heavy equipment.
+      </p>
+      <div class="features-grid">
 
       <div class="feat-card">
         <div class="feat-icon"><i data-lucide="fuel"></i></div>
@@ -616,7 +662,7 @@
       <div class="feat-card">
         <div class="feat-icon"><i data-lucide="file-text"></i></div>
         <h3>Reports Centre</h3>
-        <p>Scheduled or on-demand reports across all six modules. Deliver
+        <p>Scheduled or on-demand reports across all ten modules. Deliver
         executive summaries, operator-level detail, and client-ready cost
         breakdowns — in PDF or CSV — in a single click.</p>
         <div class="feat-tags">
@@ -639,7 +685,73 @@
         </div>
       </div>
 
+      </div>
     </div>
+
+    <!-- On-Road Intelligence -->
+    <div class="module-group on-road">
+      <span class="module-group-label">On-Road</span>
+      <h3 class="module-group-title">On-Road Intelligence</h3>
+      <p class="module-group-desc">
+        Kilometre-based cost tracking built around fill-to-fill fuel data and odometer
+        readings — purpose-built for trucks, utes, and trailers.
+      </p>
+      <div class="features-grid">
+
+      <div class="feat-card">
+        <div class="feat-icon"><i data-lucide="fuel"></i></div>
+        <h3>Fuel Cost Analyst</h3>
+        <p>Calculate true fuel cost per kilometre using fill-to-fill analysis of fuel
+        invoices and odometer readings, with automatic anomaly detection against
+        fleet benchmarks.</p>
+        <div class="feat-tags">
+          <span class="feat-tag">Fill-to-Fill Analysis</span>
+          <span class="feat-tag">Anomaly Detection</span>
+          <span class="feat-tag">Fleet Comparison</span>
+        </div>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon"><i data-lucide="trending-up"></i></div>
+        <h3>Cost Per KM Analyst</h3>
+        <p>Blend fuel, depreciation, and maintenance into a single true cost per
+        kilometre — with trend tracking and the ability to override specific periods
+        when actual costs differ from estimates.</p>
+        <div class="feat-tags">
+          <span class="feat-tag">Blended Cost Per KM</span>
+          <span class="feat-tag">Trend Tracking</span>
+          <span class="feat-tag">Period Overrides</span>
+        </div>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon"><i data-lucide="leaf"></i></div>
+        <h3>Emissions Analyst</h3>
+        <p>Track CO₂ emissions per kilometre across your on-road fleet, calculated from
+        real fuel consumption data, with full export for compliance and ESG reporting.</p>
+        <div class="feat-tags">
+          <span class="feat-tag">CO₂ Per KM</span>
+          <span class="feat-tag">Fleet Comparison</span>
+          <span class="feat-tag">CSV Export</span>
+        </div>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon"><i data-lucide="route"></i></div>
+        <h3>Trip Report</h3>
+        <p>Generate a complete cost and emissions summary for any single trip — select
+        an asset and a time window, and see exactly what that journey cost, broken down
+        by fuel, depreciation, servicing, and maintenance.</p>
+        <div class="feat-tags">
+          <span class="feat-tag">Single-Trip Summary</span>
+          <span class="feat-tag">Full Cost Breakdown</span>
+          <span class="feat-tag">PDF Export</span>
+        </div>
+      </div>
+
+      </div>
+    </div>
+
   </div>
 </section>
 
@@ -680,7 +792,7 @@
               <path d="M1 3.5L3.5 6.5L9 1" stroke="#0EA57A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
-          <p><strong>Flexible date ranges</strong> — daily, weekly, monthly, or custom windows across all six modules.</p>
+          <p><strong>Flexible date ranges</strong> — daily, weekly, monthly, or custom windows across all ten modules.</p>
         </div>
       </div>
       <button class="btn-hero-cta">See a live walkthrough</button>
