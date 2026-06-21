@@ -644,7 +644,9 @@
       };
     });
     costTotals = totals;
-    totals.grand = calcPartialAssetTotal(totals.fuel, totals.idle, totals.depr, totals.deprMissing, totals.service, totals.servMissing, totals.maint, totals.maintMissing);
+    // totals.depr/service/maint are already partial sums of only the available values,
+    // so always include them — the missing flags are only used for labelling.
+    totals.grand = totals.fuel + totals.idle + totals.depr + totals.service + totals.maint;
 
     document.getElementById('kpi-fuel').textContent = fmtMoney(totals.fuel);
     document.getElementById('kpi-idle').textContent = fmtMoney(totals.idle);
@@ -910,9 +912,16 @@
   function setKpiMoneyOrMissing(elId, value, missingFields) {
     var el = document.getElementById(elId);
     if (missingFields && missingFields.length) {
-      el.className = 'kpi-value unavailable';
-      el.textContent = '—';
       el.setAttribute('title', FCM.formatMissingMessage(missingFields));
+      if (value > 0) {
+        // Some assets contributed a valid value — show partial sum with indicator
+        el.className = 'kpi-value partial-total';
+        el.innerHTML = fmtMoney(value) + ' <span class="kpi-partial-suffix">(partial)</span>';
+      } else {
+        // No valid value from any asset for this component
+        el.className = 'kpi-value unavailable';
+        el.textContent = '—';
+      }
       return;
     }
     el.className = 'kpi-value';
