@@ -99,6 +99,15 @@
   .method-note p strong { color: #C8D0DB; font-weight: 600; }
   .method-note a { color: #0EA57A; text-decoration: none; }
 
+  .sparse-data-note {
+    display: none; align-items: flex-start; gap: 12px;
+    background: rgba(239,159,39,0.08); border: 1px solid rgba(239,159,39,0.22);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 20px;
+  }
+  .sparse-data-note-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .sparse-data-note p { font-size: 12.5px; color: #C8A86E; line-height: 1.65; }
+  .sparse-data-note p strong { color: #E8C88A; font-weight: 600; }
+
   .filter-bar {
     background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07);
     border-radius: 14px; padding: 18px 22px; margin-bottom: 28px;
@@ -260,7 +269,7 @@
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this is calculated:</strong> Period available hours = weekly capacity × weeks in the date range (weeks = calendar days ÷ 7). That period total is divided evenly across <strong>working days only</strong> (Mon–Fri); weekends have no allocated capacity. Daily utilisation = that day’s actual operating hours ÷ that day’s available hours. Period utilisation = sum of actual ÷ period available. Set weekly capacity and target on the <a href="assets.html">Assets page</a>.</p>
+      <p><strong>How this is calculated:</strong> Available hours = weekly capacity × weeks (calendar days ÷ 7), spread evenly across <strong>working days only</strong> (Mon–Fri). Headline utilisation uses the <strong>recorded-data window</strong> (first to last telematics date in your selection), not empty months in a wide filter. Daily utilisation = that day’s actual ÷ that day’s available hours. Set weekly capacity and target on the <a href="assets.html">Assets page</a>.</p>
     </div>
 
     <div class="filter-bar">
@@ -310,6 +319,11 @@
         <div class="kpi-value white" id="kpi-variance">—</div>
         <div class="kpi-sub">vs target</div>
       </div>
+    </div>
+
+    <div class="sparse-data-note" id="sparse-data-note">
+      <div class="sparse-data-note-icon">⚠️</div>
+      <p id="sparse-data-note-text"></p>
     </div>
 
     <div class="chart-card">
@@ -465,6 +479,24 @@
     return isWeekday(date) ? periodAvailable / workingDays : 0;
   }
 
+  function isRangeSignificantlyWiderThanData(selFrom, selTo, dataFrom, dataTo) {
+    if (selFrom >= dataFrom && selTo <= dataTo) return false;
+    var selDays = calendarDaysInRange(selFrom, selTo);
+    var dataDays = calendarDaysInRange(dataFrom, dataTo);
+    if (dataDays <= 0) return false;
+    return selDays > dataDays * 1.25 || (selDays - dataDays) >= 14;
+  }
+
+  function updateSparseDataNote(visible, html) {
+    var el = document.getElementById('sparse-data-note');
+    if (!visible) {
+      el.style.display = 'none';
+      return;
+    }
+    document.getElementById('sparse-data-note-text').innerHTML = html;
+    el.style.display = 'flex';
+  }
+
   function dayStatus(rate, targetPercent, hasTelematics, dailyAvailable, actual) {
     if (!hasTelematics) return 'no-data';
     if (dailyAvailable <= 0 && actual > 0) return 'exceeds-capacity';
@@ -547,11 +579,6 @@
     var hoursPerWeek = getHoursPerWeek(selectedAsset);
     var usingDefaultHours = selectedAsset.available_hours_per_week == null;
     var targetPercent = getTargetPercent(selectedAsset);
-    var calendarDays = calendarDaysInRange(dateFrom, dateTo);
-    var workingDays = workingDaysInRange(dateFrom, dateTo);
-    var weeks = calendarDays / 7;
-    var periodAvailable = hoursPerWeek * weeks;
-
     var telResult = await supabase
       .from('telematics_records')
       .select('record_date, operating_hours')
@@ -575,13 +602,26 @@
       byDate[r.record_date] = (byDate[r.record_date] || 0) + (parseFloat(r.operating_hours) || 0);
     });
 
+    var dataDates = Object.keys(byDate).sort();
+    var dataDateFrom = dataDates[0];
+    var dataDateTo = dataDates[dataDates.length - 1];
+    var dataCalendarDays = calendarDaysInRange(dataDateFrom, dataDateTo);
+    var dataWorkingDays = workingDaysInRange(dataDateFrom, dataDateTo);
+    var dataWeeks = dataCalendarDays / 7;
+    var dataPeriodAvailable = hoursPerWeek * dataWeeks;
+
+    var fullCalendarDays = calendarDaysInRange(dateFrom, dateTo);
+    var fullWeeks = fullCalendarDays / 7;
+    var fullPeriodAvailable = hoursPerWeek * fullWeeks;
+    var showSparseNote = isRangeSignificantlyWiderThanData(dateFrom, dateTo, dataDateFrom, dataDateTo);
+
     var dailyRows = [];
     var totalActual = 0;
 
-    eachDateInRange(dateFrom, dateTo).forEach(function(date) {
+    eachDateInRange(dataDateFrom, dataDateTo).forEach(function(date) {
       var hasTelematics = byDate[date] != null;
       var actual = hasTelematics ? byDate[date] : 0;
-      var dayAvailable = dailyAvailableForDate(periodAvailable, date, workingDays);
+      var dayAvailable = dailyAvailableForDate(dataPeriodAvailable, date, dataWorkingDays);
       var rate = null;
       if (hasTelematics && dayAvailable > 0) {
         rate = (actual / dayAvailable) * 100;
@@ -598,13 +638,25 @@
       });
     });
 
-    var utilisationRate = periodAvailable > 0 ? (totalActual / periodAvailable) * 100 : 0;
+    var utilisationRate = dataPeriodAvailable > 0 ? (totalActual / dataPeriodAvailable) * 100 : 0;
     var variance = targetPercent != null ? (utilisationRate - targetPercent) : null;
 
-    document.getElementById('kpi-available').textContent = periodAvailable.toFixed(1) + ' hr';
+    document.getElementById('kpi-available').textContent = dataPeriodAvailable.toFixed(1) + ' hr';
     document.getElementById('kpi-available-sub').textContent =
-      hoursPerWeek + ' hrs/week × ' + weeks.toFixed(2) + ' weeks (' + calendarDays + ' days, ' + workingDays + ' working)' +
+      hoursPerWeek + ' hrs/week × ' + dataWeeks.toFixed(2) + ' weeks (' + dataCalendarDays + ' days, ' + dataWorkingDays + ' working) — recorded-data window' +
       (usingDefaultHours ? ' (default)' : '');
+
+    if (showSparseNote) {
+      updateSparseDataNote(true,
+        '<strong>Wide date filter, sparse telematics.</strong> Your selected range (' +
+        formatDateShort(dateFrom) + ' – ' + formatDateShort(dateTo) + ', ' + fullPeriodAvailable.toFixed(1) + ' hr available) is much wider than the ' +
+        dataDates.length + ' day' + (dataDates.length === 1 ? '' : 's') + ' with telematics records (' +
+        formatDateShort(dataDateFrom) + ' – ' + formatDateShort(dataDateTo) + '). ' +
+        '<strong>Utilisation rate and variance use ' + dataPeriodAvailable.toFixed(1) + ' hr available</strong> for that recorded-data window only — not the full filter — so a low rate does not imply poor utilisation across months with no data.'
+      );
+    } else {
+      updateSparseDataNote(false);
+    }
 
     document.getElementById('kpi-actual').textContent = totalActual.toFixed(1) + ' hr';
 
@@ -737,6 +789,7 @@
   }
 
   function showEmpty() {
+    updateSparseDataNote(false);
     document.getElementById('kpi-available').textContent = '—';
     document.getElementById('kpi-available-sub').textContent = 'for selected period';
     document.getElementById('kpi-actual').textContent = '—';
