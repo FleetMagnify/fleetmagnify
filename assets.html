@@ -613,7 +613,7 @@
   var latestTelByAsset = {};
   var pendingDeleteId = null;
   var editingAssetId = null;
-  var editingHasEroadKey = false;
+  var storedHasEroadKey = false;
   var importMachineryRows = [];
   var importTrucksRows = [];
   var pendingImportPlan = null;
@@ -639,7 +639,18 @@
       ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
     document.getElementById('user-name').textContent = name;
     document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+    await loadCompanyIntegrationState();
     loadAssets();
+  }
+
+  async function loadCompanyIntegrationState() {
+    var result = await supabase
+      .from('company_integrations')
+      .select('eroad_api_key')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+    if (result.error && result.error.code !== 'PGRST116') return;
+    storedHasEroadKey = !!(result.data && result.data.eroad_api_key);
   }
 
   async function loadAssets() {
@@ -894,46 +905,65 @@
   function resetTelematicsFields() {
     document.getElementById('telematics-provider').value = '';
     document.getElementById('eroad-api-key').value = '';
-    document.getElementById('eroad-api-key').placeholder = 'Paste your eRoad API key';
+    document.getElementById('eroad-api-key').placeholder = storedHasEroadKey
+      ? '••••••••  (leave blank to keep current key)'
+      : 'Paste your eRoad API key';
     document.getElementById('eroad-machine-id').value = '';
-    editingHasEroadKey = false;
     updateTelematicsProviderFields();
   }
 
   function populateTelematicsFields(asset) {
     var provider = (asset.telematics_provider || '').trim();
     setSelectValue('telematics-provider', provider);
-    editingHasEroadKey = !!(asset.eroad_api_key);
     document.getElementById('eroad-api-key').value = '';
-    document.getElementById('eroad-api-key').placeholder = editingHasEroadKey
+    document.getElementById('eroad-api-key').placeholder = storedHasEroadKey
       ? '••••••••  (leave blank to keep current key)'
       : 'Paste your eRoad API key';
     document.getElementById('eroad-machine-id').value = asset.eroad_machine_id || '';
     updateTelematicsProviderFields();
   }
 
-  function appendTelematicsToPayload(payload, isEditing) {
+  function getEroadApiKeyFromForm() {
+    return document.getElementById('eroad-api-key').value.trim();
+  }
+
+  function appendTelematicsToPayload(payload) {
     var provider = (document.getElementById('telematics-provider').value || '').trim();
     if (!provider) {
       payload.telematics_provider = null;
-      payload.eroad_api_key = null;
       payload.eroad_machine_id = null;
       return;
     }
     payload.telematics_provider = provider;
     if (provider === 'eRoad') {
-      var apiKey = document.getElementById('eroad-api-key').value.trim();
       var machineId = document.getElementById('eroad-machine-id').value.trim();
       payload.eroad_machine_id = machineId || null;
-      if (apiKey) {
-        payload.eroad_api_key = apiKey;
-      } else if (!isEditing) {
-        payload.eroad_api_key = null;
-      }
     } else {
-      payload.eroad_api_key = null;
       payload.eroad_machine_id = null;
     }
+  }
+
+  async function persistCompanyEroadKeyIfNeeded(telematicsProvider) {
+    if (telematicsProvider !== 'eRoad') return { error: null };
+    var apiKey = getEroadApiKeyFromForm();
+    if (!apiKey) return { error: null };
+
+    var existing = await supabase
+      .from('company_integrations')
+      .select('user_id')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+
+    if (existing.data) {
+      return supabase.from('company_integrations')
+        .update({ telematics_provider: 'eRoad', eroad_api_key: apiKey })
+        .eq('user_id', currentUser.id);
+    }
+    return supabase.from('company_integrations').insert({
+      user_id: currentUser.id,
+      telematics_provider: 'eRoad',
+      eroad_api_key: apiKey
+    });
   }
 
   function updateFormForAssetType() {
@@ -1022,7 +1052,7 @@
     if (supportsIsOnRoad) {
       payload.is_on_road = onRoad;
     }
-    appendTelematicsToPayload(payload, editingAssetId != null);
+    appendTelematicsToPayload(payload);
     return payload;
   }
 
@@ -1137,7 +1167,7 @@
     }
 
     if (payload.telematics_provider === 'eRoad') {
-      var hasKey = !!payload.eroad_api_key || (isEditing && editingHasEroadKey);
+      var hasKey = !!getEroadApiKeyFromForm() || storedHasEroadKey;
       if (!hasKey || !payload.eroad_machine_id) {
         errEl.textContent = 'eRoad connection requires an API key and Machine ID.';
         errEl.classList.add('visible');
@@ -1149,6 +1179,16 @@
     saveBtn.textContent = 'Saving...';
     errEl.classList.remove('visible');
     errEl.textContent = '';
+
+    var integrationResult = await persistCompanyEroadKeyIfNeeded(payload.telematics_provider);
+    if (integrationResult.error) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = isEditing ? 'Save Changes' : 'Add Asset';
+      errEl.textContent = integrationResult.error.message || 'Failed to save eRoad API key.';
+      errEl.classList.add('visible');
+      return;
+    }
+    if (getEroadApiKeyFromForm()) storedHasEroadKey = true;
 
     var result = await persistAsset(assetId, payload);
 
