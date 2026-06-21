@@ -23,6 +23,50 @@
     return 'Cannot calculate — missing: ' + fields.join(', ');
   }
 
+  var LIFE_EXCEEDED_MESSAGE =
+    'Cannot calculate — asset has reached or exceeded its expected life. Update Expected Life Hours (or Expected Life KM) on the Assets page to continue tracking depreciation.';
+
+  function formatLifeExceededMessage() {
+    return LIFE_EXCEEDED_MESSAGE;
+  }
+
+  function formatDepreciationUnavailableMessage(missing, lifeExceeded) {
+    if (lifeExceeded) return formatLifeExceededMessage();
+    return formatMissingMessage(missing);
+  }
+
+  function isDepreciationUnavailable(missing, lifeExceeded) {
+    return !!lifeExceeded || !!(missing && missing.length);
+  }
+
+  function getLifeUsageRatio(asset, context) {
+    context = context || {};
+    if (isOnRoad(asset)) {
+      var lifeKm = num(asset.expected_life_km);
+      var odo = context.currentOdometer !== undefined && context.currentOdometer !== null
+        ? num(context.currentOdometer) : num(asset.current_odometer);
+      if (lifeKm === null || lifeKm <= 0 || odo === null) return null;
+      return odo / lifeKm;
+    }
+    var lifeHours = num(asset.expected_life_hours);
+    var hours = context.totalEngineHours !== undefined && context.totalEngineHours !== null
+      ? num(context.totalEngineHours) : null;
+    if (lifeHours === null || lifeHours <= 0 || hours === null) return null;
+    return hours / lifeHours;
+  }
+
+  function isApproachingEndOfLife(asset, context, threshold) {
+    threshold = threshold === undefined ? 0.9 : threshold;
+    var ratio = getLifeUsageRatio(asset, context);
+    return ratio !== null && ratio >= threshold;
+  }
+
+  function formatApproachingLifeMessage(asset) {
+    return isOnRoad(asset)
+      ? 'Approaching end of expected life — consider reviewing Expected Life KM.'
+      : 'Approaching end of expected life — consider reviewing Expected Life Hours.';
+  }
+
   function getMissingDepreciationFields(asset, context) {
     context = context || {};
     var missing = [];
@@ -70,7 +114,7 @@
     var currentHours = num(totalEngineHours);
     var remaining = lifeHours - currentHours;
     if (remaining <= 0) {
-      return { ok: false, missing: ['remaining life hours (expected life hours must exceed current engine hours)'] };
+      return { ok: false, lifeExceeded: true };
     }
     var perHour = (currentValue - eolValue) / remaining;
     return { ok: true, value: perHour < 0 ? 0 : perHour };
@@ -86,7 +130,7 @@
     var lifeKm = num(asset.expected_life_km);
     var remaining = lifeKm - odo;
     if (remaining <= 0) {
-      return { ok: false, missing: ['remaining life km (expected life km must exceed current odometer)'] };
+      return { ok: false, lifeExceeded: true };
     }
     var perKm = (currentValue - eolValue) / remaining;
     return { ok: true, value: perKm < 0 ? 0 : perKm };
@@ -145,6 +189,7 @@
       maintenance: null,
       fuelMissing: null,
       depreciationMissing: null,
+      depreciationLifeExceeded: false,
       servicingMissing: null,
       maintenanceMissing: null
     };
@@ -157,7 +202,8 @@
 
     if (isOnRoad(asset)) {
       var deprKm = calcDepreciationPerKm(asset);
-      result.depreciationMissing = deprKm.ok ? null : deprKm.missing;
+      result.depreciationLifeExceeded = !!deprKm.lifeExceeded;
+      result.depreciationMissing = deprKm.ok ? null : (deprKm.lifeExceeded ? null : deprKm.missing);
       result.depreciation = deprKm.ok ? 0 : null;
 
       var servKm = getServicingPerKm(asset);
@@ -169,7 +215,8 @@
       result.maintenance = maintKm.ok ? 0 : null;
     } else {
       var deprHr = calcDepreciationPerHour(asset, totalEngineHours);
-      result.depreciationMissing = deprHr.ok ? null : deprHr.missing;
+      result.depreciationLifeExceeded = !!deprHr.lifeExceeded;
+      result.depreciationMissing = deprHr.ok ? null : (deprHr.lifeExceeded ? null : deprHr.missing);
       result.depreciation = deprHr.ok ? idleHours * deprHr.value : null;
 
       var servHr = getServicingPerHour(asset);
@@ -186,7 +233,8 @@
       (result.servicing !== null ? result.servicing : 0) +
       (result.maintenance !== null ? result.maintenance : 0);
 
-    result.hasMissing = !!(result.fuelMissing || result.depreciationMissing || result.servicingMissing || result.maintenanceMissing);
+    result.hasMissing = !!(result.fuelMissing || result.depreciationMissing || result.depreciationLifeExceeded ||
+      result.servicingMissing || result.maintenanceMissing);
     return result;
   }
 
@@ -199,12 +247,14 @@
       maintenance: null,
       total: null,
       depreciationMissing: null,
+      depreciationLifeExceeded: false,
       servicingMissing: null,
       maintenanceMissing: null
     };
 
     var depr = calcDepreciationPerKm(asset, currentOdometer);
-    out.depreciationMissing = depr.ok ? null : depr.missing;
+    out.depreciationLifeExceeded = !!depr.lifeExceeded;
+    out.depreciationMissing = depr.ok ? null : (depr.lifeExceeded ? null : depr.missing);
     out.depreciation = depr.ok ? depr.value : null;
 
     var serv = getServicingPerKm(asset);
@@ -232,7 +282,10 @@
     return null;
   }
 
-  function costOrMissing(value, missingFields, fmtFn) {
+  function costOrMissing(value, missingFields, fmtFn, lifeExceeded) {
+    if (lifeExceeded) {
+      return { text: formatLifeExceededMessage(), isMissing: true, lifeExceeded: true };
+    }
     if (missingFields && missingFields.length) {
       return { text: formatMissingMessage(missingFields), isMissing: true };
     }
@@ -247,6 +300,12 @@
     isOnRoad: isOnRoad,
     num: num,
     formatMissingMessage: formatMissingMessage,
+    formatLifeExceededMessage: formatLifeExceededMessage,
+    formatDepreciationUnavailableMessage: formatDepreciationUnavailableMessage,
+    isDepreciationUnavailable: isDepreciationUnavailable,
+    getLifeUsageRatio: getLifeUsageRatio,
+    isApproachingEndOfLife: isApproachingEndOfLife,
+    formatApproachingLifeMessage: formatApproachingLifeMessage,
     getMissingDepreciationFields: getMissingDepreciationFields,
     getMissingMaintenanceFields: getMissingMaintenanceFields,
     getMissingServicingFields: getMissingServicingFields,

@@ -68,6 +68,7 @@
   .hero-kpi .kpi-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #0EA57A; margin-bottom: 12px; }
   .hero-kpi .hero-value { font-size: 42px; font-weight: 800; letter-spacing: -1.5px; color: #F0F2F5; line-height: 1; margin-bottom: 16px; }
   .hero-kpi .hero-value.missing { font-size: 14px; color: #EF9F27; letter-spacing: 0; line-height: 1.5; }
+  .hero-kpi .hero-value.partial { color: #EF9F27; cursor: help; }
   .hero-breakdown { display: flex; justify-content: center; gap: 28px; flex-wrap: wrap; }
   .hero-breakdown-item { font-size: 12px; color: #6B7785; }
   .hero-breakdown-item strong { display: block; font-size: 15px; color: #C8D0DB; font-weight: 700; margin-top: 2px; }
@@ -497,19 +498,23 @@
         fuelOverride: fuelOv,
         deprOverride: deprOv,
         maintOverride: maintOv,
-        deprMissing: deprOv ? null : (deprBase.ok ? null : deprBase.missing),
+        deprMissing: deprOv ? null : (deprBase.ok ? null : (deprBase.lifeExceeded ? null : deprBase.missing)),
+        deprLifeExceeded: deprOv ? false : !!deprBase.lifeExceeded,
         maintMissing: maintOv ? null : (maintBase.ok ? null : maintBase.missing)
       };
     });
   }
 
-  function renderCellValue(value, override, missing, isTotal) {
+  function renderCellValue(value, override, missing, isTotal, lifeExceeded) {
     if (override) {
       var title = esc(override.reason || 'Manual override');
       return '<span class="cell-overridden" title="' + title + '">✎ ' + fmtMoney(value) + '</span>';
     }
+    if (lifeExceeded) {
+      return '<span class="cell-missing" title="' + esc(FCM.formatLifeExceededMessage()) + '">—</span>';
+    }
     if (missing && missing.length) {
-      return '<span class="cell-missing" title="' + esc(missing.join(', ')) + '">—</span>';
+      return '<span class="cell-missing" title="' + esc(FCM.formatMissingMessage(missing)) + '">—</span>';
     }
     if (value === null || value === undefined || isNaN(value)) {
       return '<span class="cell-missing">—</span>';
@@ -517,7 +522,7 @@
     return '<span class="' + (isTotal ? 'cell-teal' : '') + '">' + fmtMoney(value) + '</span>';
   }
 
-  function setKpiEl(elId, value, override, missing) {
+  function setKpiEl(elId, value, override, missing, lifeExceeded) {
     var el = document.getElementById(elId);
     if (override) {
       el.className = 'kpi-value amber';
@@ -525,10 +530,16 @@
       el.title = override.reason || 'Manual override';
       return;
     }
+    if (lifeExceeded) {
+      el.className = 'kpi-value missing';
+      el.textContent = '—';
+      el.title = FCM.formatLifeExceededMessage();
+      return;
+    }
     if (missing && missing.length) {
       el.className = 'kpi-value missing';
       el.textContent = 'Missing: ' + missing.join(', ');
-      el.title = '';
+      el.title = FCM.formatMissingMessage(missing);
       return;
     }
     if (value === null || value === undefined || isNaN(value)) {
@@ -684,22 +695,33 @@
     var latest = periods[periods.length - 1];
 
     var heroEl = document.getElementById('hero-total');
+    var heroPartial = latest.deprLifeExceeded || (latest.deprMissing && latest.deprMissing.length) ||
+      (latest.maintMissing && latest.maintMissing.length);
     if (latest.totalPerKm !== null && !isNaN(latest.totalPerKm)) {
-      heroEl.className = 'hero-value';
+      heroEl.className = heroPartial ? 'hero-value partial' : 'hero-value';
       heroEl.textContent = fmtMoney(latest.totalPerKm);
+      if (heroPartial) {
+        heroEl.title = latest.deprLifeExceeded ? FCM.formatLifeExceededMessage() :
+          'Cannot calculate total — one or more components are missing.';
+      } else {
+        heroEl.removeAttribute('title');
+      }
     } else {
       heroEl.className = 'hero-value missing';
-      heroEl.textContent = 'Cannot calculate total — one or more components are missing or overridden incompletely.';
+      heroEl.textContent = latest.deprLifeExceeded
+        ? FCM.formatLifeExceededMessage()
+        : 'Cannot calculate total — one or more components are missing or overridden incompletely.';
+      heroEl.title = latest.deprLifeExceeded ? FCM.formatLifeExceededMessage() : '';
     }
 
     document.getElementById('hero-breakdown').innerHTML =
       '<div class="hero-breakdown-item">Fuel<strong>' + (latest.fuelPerKm != null ? fmtMoney(latest.fuelPerKm) : '—') + '</strong></div>' +
-      '<div class="hero-breakdown-item">Depreciation<strong>' + (latest.deprPerKm != null ? fmtMoney(latest.deprPerKm) : '—') + '</strong></div>' +
+      '<div class="hero-breakdown-item">Depreciation<strong>' + (latest.deprLifeExceeded ? '—' : (latest.deprPerKm != null ? fmtMoney(latest.deprPerKm) : '—')) + '</strong></div>' +
       '<div class="hero-breakdown-item">Maintenance<strong>' + (latest.maintPerKm != null ? fmtMoney(latest.maintPerKm) : '—') + '</strong></div>';
 
-    setKpiEl('kpi-fuel', latest.fuelPerKm, latest.fuelOverride, null);
-    setKpiEl('kpi-depr', latest.deprPerKm, latest.deprOverride, latest.deprMissing);
-    setKpiEl('kpi-maint', latest.maintPerKm, latest.maintOverride, latest.maintMissing);
+    setKpiEl('kpi-fuel', latest.fuelPerKm, latest.fuelOverride, null, false);
+    setKpiEl('kpi-depr', latest.deprPerKm, latest.deprOverride, latest.deprMissing, latest.deprLifeExceeded);
+    setKpiEl('kpi-maint', latest.maintPerKm, latest.maintOverride, latest.maintMissing, false);
 
     renderStackChart(periods);
     renderTable(periods);
@@ -769,7 +791,7 @@
         '<td class="cell-strong">' + fmtDateShort(p.periodStart) + '</td>' +
         '<td class="cell-strong">' + fmtDateShort(p.periodEnd) + '</td>' +
         '<td>' + renderCellValue(p.fuelPerKm, p.fuelOverride, null, false) + '</td>' +
-        '<td>' + renderCellValue(p.deprPerKm, p.deprOverride, p.deprMissing, false) + '</td>' +
+        '<td>' + renderCellValue(p.deprPerKm, p.deprOverride, p.deprMissing, false, p.deprLifeExceeded) + '</td>' +
         '<td>' + renderCellValue(p.maintPerKm, p.maintOverride, p.maintMissing, false) + '</td>' +
         '<td>' + renderCellValue(p.totalPerKm, null, null, true) + '</td>' +
         '<td><button type="button" class="btn-override" data-period-idx="' + idx + '">Override</button></td>' +

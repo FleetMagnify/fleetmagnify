@@ -39,6 +39,10 @@
   .hero-kpi { background: rgba(14,165,122,0.06); border: 1px solid rgba(14,165,122,0.18); border-radius: 18px; padding: 32px 36px; margin-bottom: 24px; }
   .hero-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #0EA57A; margin-bottom: 12px; }
   .hero-value { font-size: 48px; font-weight: 800; letter-spacing: -2px; color: #F0F2F5; line-height: 1; margin-bottom: 12px; }
+  .hero-value.partial-total { color: #EF9F27; cursor: help; }
+  .hero-partial-suffix { font-size: 14px; font-weight: 600; letter-spacing: 0; }
+  .kpi-value.partial-total { color: #EF9F27; cursor: help; }
+  .kpi-partial-suffix { font-size: 11px; font-weight: 600; letter-spacing: 0; }
   .hero-compare { font-size: 13.5px; color: #5A6474; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .hero-compare .up { color: #EF9F27; font-weight: 700; }
   .hero-compare .down { color: #0EA57A; font-weight: 700; }
@@ -316,6 +320,49 @@
       ' excluded — no data recorded this month';
   }
 
+  function calcPartialIdleTotal(idleCosts) {
+    var total = 0;
+    if (idleCosts.fuel !== null) total += idleCosts.fuel;
+    if (idleCosts.depreciation !== null) total += idleCosts.depreciation;
+    if (idleCosts.servicing !== null) total += idleCosts.servicing;
+    if (idleCosts.maintenance !== null) total += idleCosts.maintenance;
+    return total;
+  }
+
+  function mergeFleetUnavailable(flags, idleCosts) {
+    if (idleCosts.fuelMissing) flags.fuelMissing = true;
+    if (idleCosts.depreciationLifeExceeded) flags.deprLifeExceeded = true;
+    else if (idleCosts.depreciationMissing) flags.deprMissing = true;
+    if (idleCosts.servicingMissing) flags.servMissing = true;
+    if (idleCosts.maintenanceMissing) flags.maintMissing = true;
+  }
+
+  function fleetPartialTooltip(flags) {
+    var parts = [];
+    if (flags.fuelMissing) parts.push('fuel cost unavailable for some assets');
+    if (flags.deprLifeExceeded) parts.push(FCM.formatLifeExceededMessage());
+    else if (flags.deprMissing) parts.push('depreciation cost unavailable for some assets');
+    if (flags.servMissing) parts.push('servicing cost unavailable for some assets');
+    if (flags.maintMissing) parts.push('maintenance cost unavailable for some assets');
+    return parts.join(' ');
+  }
+
+  function fleetHasPartial(flags) {
+    return flags.fuelMissing || flags.deprMissing || flags.deprLifeExceeded || flags.servMissing || flags.maintMissing;
+  }
+
+  function setPartialMoney(el, value, isPartial, tooltip, valueClass) {
+    if (isPartial) {
+      el.className = valueClass + ' partial-total';
+      el.innerHTML = fmtMoney(value) + ' <span class="kpi-partial-suffix">(partial)</span>';
+      el.setAttribute('title', tooltip);
+      return;
+    }
+    el.className = valueClass;
+    el.textContent = fmtMoney(value);
+    el.removeAttribute('title');
+  }
+
   function computeAssetMetrics(assets, fuelRows, telRows, latestTelRows, dateFrom, dateTo) {
     var weeks = daysInRange(dateFrom, dateTo) / 7;
     var engineHoursMap = {};
@@ -327,6 +374,8 @@
         engineHoursMap[id] = { hours: h, date: r.record_date };
       }
     });
+
+    var fleetUnavailable = { fuelMissing: false, deprMissing: false, deprLifeExceeded: false, servMissing: false, maintMissing: false };
 
     var results = assets.map(function(asset) {
       var assetFuel = fuelRows.filter(function(r) { return Number(r.asset_id) === Number(asset.id); });
@@ -347,6 +396,8 @@
       var engineEntry = engineHoursMap[Number(asset.id)];
       var totalEngineHours = engineEntry ? engineEntry.hours : null;
       var idleCosts = FCM.calcIdleHourCosts(asset, idleHours, avgCpl, idleRate, totalEngineHours);
+      var idlePartialTotal = calcPartialIdleTotal(idleCosts);
+      mergeFleetUnavailable(fleetUnavailable, idleCosts);
 
       var emissionsKg = litres * getEmissionFactor(asset.fuel_type);
       var available = getHoursPerWeek(asset) * weeks;
@@ -358,11 +409,12 @@
         name: chartLabel(asset),
         fuelCost: fuelCost,
         idleFuelCost: idleCosts.fuel,
-        deprCost: idleCosts.depreciation !== null ? idleCosts.depreciation : 0,
-        serviceCost: idleCosts.servicing !== null ? idleCosts.servicing : 0,
-        maintCost: idleCosts.maintenance !== null ? idleCosts.maintenance : 0,
-        idleTotal: idleCosts.total,
-        totalCost: fuelCost + idleCosts.total,
+        deprCost: idleCosts.depreciation,
+        serviceCost: idleCosts.servicing,
+        maintCost: idleCosts.maintenance,
+        idleTotal: idlePartialTotal,
+        totalCost: fuelCost + idlePartialTotal,
+        hasPartialCost: idleCosts.hasMissing,
         emissionsKg: emissionsKg, utilRate: utilRate, target: target,
         opHours: opHours, available: available, litres: litres,
         hasFuelData: assetFuel.length > 0,
@@ -388,7 +440,7 @@
     });
     totals.avgUtil = totals.available > 0 ? (totals.opHours / totals.available) * 100 : 0;
     totals.avgTarget = targetCount > 0 ? targetSum / targetCount : null;
-    return { assets: results, totals: totals };
+    return { assets: results, totals: totals, fleetUnavailable: fleetUnavailable };
   }
 
   async function fetchData(dateFrom, dateTo) {
@@ -429,7 +481,9 @@
     var prevData = await fetchData(prev.from, prev.to);
     var prevMetrics = computeAssetMetrics(prevData.assets, prevData.fuel, prevData.tel, prevData.latestTel, prev.from, prev.to);
 
-    document.getElementById('hero-total').textContent = fmtMoney(curMetrics.totals.grand);
+    var partialFleet = fleetHasPartial(curMetrics.fleetUnavailable);
+    var partialTooltip = fleetPartialTooltip(curMetrics.fleetUnavailable);
+    setPartialMoney(document.getElementById('hero-total'), curMetrics.totals.grand, partialFleet, partialTooltip, 'hero-value');
     var compareEl = document.getElementById('hero-compare');
     var hasPrevData = prevData.fuel.length > 0 || prevData.tel.length > 0;
     if (!hasPrevData) {
@@ -445,7 +499,7 @@
     }
 
     document.getElementById('kpi-fuel').textContent = fmtMoney(curMetrics.totals.fuel);
-    document.getElementById('kpi-idle').textContent = fmtMoney(curMetrics.totals.idle);
+    setPartialMoney(document.getElementById('kpi-idle'), curMetrics.totals.idle, partialFleet, partialTooltip, 'kpi-value amber');
     document.getElementById('kpi-emissions').textContent = (curMetrics.totals.emissions / 1000).toFixed(2) + ' t';
     document.getElementById('kpi-util').textContent = curMetrics.totals.avgUtil.toFixed(1) + '%';
     document.getElementById('kpi-util-sub').textContent = curMetrics.totals.avgTarget != null

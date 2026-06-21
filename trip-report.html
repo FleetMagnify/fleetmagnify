@@ -79,6 +79,9 @@
   .cost-pill { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 12px 10px; text-align: center; }
   .cost-pill-label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #3A4A5C; margin-bottom: 6px; }
   .cost-pill-value { font-size: 16px; font-weight: 700; color: #D8DFE8; }
+  .cost-pill-value.unavailable { color: #EF9F27; cursor: help; }
+  .total-cost-value.partial { color: #EF9F27; cursor: help; }
+  .total-cost-partial-suffix { font-size: 13px; font-weight: 600; }
 
   .cost-stack { display: flex; height: 10px; border-radius: 100px; overflow: hidden; background: rgba(255,255,255,0.04); }
   .cost-stack-seg { height: 100%; min-width: 2px; }
@@ -571,10 +574,6 @@
     }
 
     var deprResult = FCM.calcDepreciationPerKm(selectedVehicle);
-    if (!deprResult.ok) {
-      showError('Cannot calculate depreciation: missing ' + deprResult.missing.join(', ') + '.');
-      return;
-    }
     var maintResult = FCM.calcMaintenancePerKm(selectedVehicle);
     if (!maintResult.ok) {
       showError('Cannot calculate maintenance: missing ' + maintResult.missing.join(', ') + '.');
@@ -583,16 +582,16 @@
 
     var litresPerKm = fillData.litresPerKm;
     var pricePerLitre = fillData.pricePerLitre;
-    var deprPerKm = deprResult.value;
+    var deprPerKm = deprResult.ok ? deprResult.value : null;
     var servPerKm = num(selectedVehicle.service_cost_per_km);
     var maintPerKm = maintResult.value;
 
     var tripFuelLitres = tripKm * litresPerKm;
     var tripFuelCost = tripFuelLitres * pricePerLitre;
-    var tripDeprCost = tripKm * deprPerKm;
+    var tripDeprCost = deprPerKm !== null ? tripKm * deprPerKm : null;
     var tripServCost = tripKm * servPerKm;
     var tripMaintCost = tripKm * maintPerKm;
-    var totalCost = tripFuelCost + tripDeprCost + tripServCost + tripMaintCost;
+    var totalCost = tripFuelCost + tripServCost + tripMaintCost + (tripDeprCost !== null ? tripDeprCost : 0);
     var tripEmissionsKg = tripFuelLitres * getEmissionFactor(selectedVehicle.fuel_type);
 
     tripReport = {
@@ -603,9 +602,12 @@
       tripKm: tripKm,
       fuelCost: tripFuelCost,
       deprCost: tripDeprCost,
+      deprLifeExceeded: !!deprResult.lifeExceeded,
+      deprMissing: deprResult.ok ? null : (deprResult.lifeExceeded ? null : deprResult.missing),
       servCost: tripServCost,
       maintCost: tripMaintCost,
       totalCost: totalCost,
+      deprUnavailable: deprPerKm === null,
       emissionsKg: tripEmissionsKg,
       fillPeriod: fillData.period,
       litresPerKm: litresPerKm,
@@ -615,14 +617,37 @@
     renderReport(tripReport);
   }
 
+  function deprUnavailableTooltip(r) {
+    if (r.deprLifeExceeded) return FCM.formatLifeExceededMessage();
+    return FCM.formatMissingMessage(r.deprMissing);
+  }
+
   function renderReport(r) {
     document.getElementById('report-content').hidden = false;
     document.getElementById('report-asset-name').textContent = r.assetName;
     document.getElementById('report-trip-dates').textContent = r.tripRangeLabel;
     document.getElementById('report-trip-km').textContent = fmtNum(r.tripKm, 1) + ' km';
-    document.getElementById('report-total-cost').textContent = fmtMoney(r.totalCost);
+    var totalEl = document.getElementById('report-total-cost');
+    if (r.deprUnavailable) {
+      totalEl.className = 'total-cost-value partial';
+      totalEl.innerHTML = fmtMoney(r.totalCost) + ' <span class="total-cost-partial-suffix">(partial)</span>';
+      totalEl.title = deprUnavailableTooltip(r);
+    } else {
+      totalEl.className = 'total-cost-value';
+      totalEl.textContent = fmtMoney(r.totalCost);
+      totalEl.removeAttribute('title');
+    }
     document.getElementById('report-fuel-cost').textContent = fmtMoney(r.fuelCost);
-    document.getElementById('report-depr-cost').textContent = fmtMoney(r.deprCost);
+    var deprEl = document.getElementById('report-depr-cost');
+    if (r.deprUnavailable) {
+      deprEl.className = 'cost-pill-value unavailable';
+      deprEl.textContent = '—';
+      deprEl.title = deprUnavailableTooltip(r);
+    } else {
+      deprEl.className = 'cost-pill-value';
+      deprEl.textContent = fmtMoney(r.deprCost);
+      deprEl.removeAttribute('title');
+    }
     document.getElementById('report-serv-cost').textContent = fmtMoney(r.servCost);
     document.getElementById('report-maint-cost').textContent = fmtMoney(r.maintCost);
     document.getElementById('report-emissions').textContent = fmtNum(r.emissionsKg, 2) + ' kg CO₂';
@@ -630,7 +655,7 @@
     var total = r.totalCost || 1;
     var segs = [
       { cls: 'fuel', pct: (r.fuelCost / total) * 100 },
-      { cls: 'depr', pct: (r.deprCost / total) * 100 },
+      { cls: 'depr', pct: r.deprUnavailable ? 0 : (r.deprCost / total) * 100 },
       { cls: 'serv', pct: (r.servCost / total) * 100 },
       { cls: 'maint', pct: (r.maintCost / total) * 100 }
     ];
