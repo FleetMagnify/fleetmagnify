@@ -132,20 +132,28 @@
   }
 
   /** Idle-hour cost breakdown (construction: all four apply per idle hour; on-road: fuel only during idle). */
-  function calcIdleHourCosts(asset, idleHours, avgCostPerLitre, idleRate, totalEngineHours) {
+  function calcIdleHourCosts(asset, idleHours, avgCostPerLitre, idleRate, totalEngineHours, fuelPricingAvailable) {
     idleHours = idleHours || 0;
     idleRate = idleRate || 0;
     avgCostPerLitre = avgCostPerLitre || 0;
+    fuelPricingAvailable = fuelPricingAvailable !== false;
 
     var result = {
-      fuel: idleHours * idleRate * avgCostPerLitre,
+      fuel: null,
       depreciation: null,
       servicing: null,
       maintenance: null,
+      fuelMissing: null,
       depreciationMissing: null,
       servicingMissing: null,
       maintenanceMissing: null
     };
+
+    if (!fuelPricingAvailable) {
+      result.fuelMissing = ['Fuel records for selected period'];
+    } else {
+      result.fuel = idleHours * idleRate * avgCostPerLitre;
+    }
 
     if (isOnRoad(asset)) {
       var deprKm = calcDepreciationPerKm(asset);
@@ -173,12 +181,12 @@
       result.maintenance = maintHr.ok ? idleHours * maintHr.value : null;
     }
 
-    result.total = result.fuel +
+    result.total = (result.fuel !== null ? result.fuel : 0) +
       (result.depreciation !== null ? result.depreciation : 0) +
       (result.servicing !== null ? result.servicing : 0) +
       (result.maintenance !== null ? result.maintenance : 0);
 
-    result.hasMissing = !!(result.depreciationMissing || result.servicingMissing || result.maintenanceMissing);
+    result.hasMissing = !!(result.fuelMissing || result.depreciationMissing || result.servicingMissing || result.maintenanceMissing);
     return result;
   }
 
