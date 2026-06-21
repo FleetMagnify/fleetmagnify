@@ -180,7 +180,11 @@
     background: rgba(14,165,122,0.09);
     border: 1px solid rgba(14,165,122,0.16);
     display: flex; align-items: center; justify-content: center;
-    font-size: 21px; margin-bottom: 22px;
+    margin-bottom: 22px; flex-shrink: 0;
+  }
+  .feat-icon svg {
+    width: 22px; height: 22px;
+    stroke: #0EA57A; stroke-width: 1.75;
   }
   .feat-card h3 {
     font-size: 17px; font-weight: 700; color: #D8DFE8;
@@ -558,7 +562,7 @@
     <div class="features-grid">
 
       <div class="feat-card">
-        <div class="feat-icon">⛽</div>
+        <div class="feat-icon"><i data-lucide="fuel"></i></div>
         <h3>Fuel Analyst</h3>
         <p>Combine fuel supplier invoices with telematics to precisely separate
         travelling consumption from idle burn. Calculate true per-litre operating
@@ -571,7 +575,7 @@
       </div>
 
       <div class="feat-card">
-        <div class="feat-icon">⏱</div>
+        <div class="feat-icon"><i data-lucide="clock"></i></div>
         <h3>Idle Cost Analyst</h3>
         <p>Fuel is only part of idle cost. Quantify the true financial impact per
         asset including accelerated depreciation, unnecessary service intervals,
@@ -584,7 +588,7 @@
       </div>
 
       <div class="feat-card">
-        <div class="feat-icon">🌍</div>
+        <div class="feat-icon"><i data-lucide="leaf"></i></div>
         <h3>Emissions Intelligence</h3>
         <p>Generate auditable CO₂ and greenhouse gas reports derived from actual
         fuel consumption data. Export NGER-compliant reports for regulatory
@@ -597,7 +601,7 @@
       </div>
 
       <div class="feat-card">
-        <div class="feat-icon">📊</div>
+        <div class="feat-icon"><i data-lucide="bar-chart-3"></i></div>
         <h3>Utilisation Analyst</h3>
         <p>Set your own utilisation benchmark per asset class and instantly see
         which machines are underperforming. Identify standby costs dragging
@@ -610,7 +614,7 @@
       </div>
 
       <div class="feat-card">
-        <div class="feat-icon">📋</div>
+        <div class="feat-icon"><i data-lucide="file-text"></i></div>
         <h3>Reports Centre</h3>
         <p>Scheduled or on-demand reports across all six modules. Deliver
         executive summaries, operator-level detail, and client-ready cost
@@ -623,7 +627,7 @@
       </div>
 
       <div class="feat-card">
-        <div class="feat-icon">🔗</div>
+        <div class="feat-icon"><i data-lucide="radio"></i></div>
         <h3>Telematics Integration</h3>
         <p>Native connectors to leading telematics platforms and fuel card
         providers, currently in active development as part of our pilot programme.
@@ -848,7 +852,19 @@
   </div>
 </div>
 
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 <script>
+  if (window.lucide) {
+    lucide.createIcons({
+      attrs: {
+        stroke: '#0EA57A',
+        width: 22,
+        height: 22,
+        'stroke-width': 1.75
+      }
+    });
+  }
+
   // Generate bar chart for dashboard mockup
   const container = document.getElementById('dashBars');
   const vals = [2.1,3.4,1.8,4.2,3.9,2.6,4.8,3.1,2.9,4.5,3.7,2.3,1.9,4.1,3.6,2.8,4.7,3.3,2.5,4.0,3.8,2.2,4.4,3.5,2.7,4.3,3.0,2.4,4.6,3.2,2.0];
