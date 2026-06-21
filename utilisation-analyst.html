@@ -187,6 +187,8 @@
   }
   .badge.on-target { background: rgba(14,165,122,0.12); color: #0EA57A; border: 1px solid rgba(14,165,122,0.22); }
   .badge.below-target { background: rgba(239,159,39,0.12); color: #EF9F27; border: 1px solid rgba(239,159,39,0.22); }
+  .badge.exceeds-capacity { background: rgba(226,117,74,0.12); color: #E2754A; border: 1px solid rgba(226,117,74,0.24); }
+  .badge.no-data { background: rgba(255,255,255,0.04); color: #4A5568; border: 1px solid rgba(255,255,255,0.06); }
   .badge.no-target { background: rgba(255,255,255,0.04); color: #5A6474; border: 1px solid rgba(255,255,255,0.08); }
 
   .empty-state {
@@ -258,7 +260,7 @@
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this is calculated:</strong> Available hours are derived from each asset's weekly capacity multiplied by the number of weeks in your selected date range. Actual operating hours come from telematics. Daily utilisation is actual hours divided by that day's available hours. Set available hours and target utilisation on the <a href="assets.html">Assets page</a>.</p>
+      <p><strong>How this is calculated:</strong> Period available hours = weekly capacity × weeks in the date range (weeks = calendar days ÷ 7). That period total is divided evenly across <strong>working days only</strong> (Mon–Fri); weekends have no allocated capacity. Daily utilisation = that day’s actual operating hours ÷ that day’s available hours. Period utilisation = sum of actual ÷ period available. Set weekly capacity and target on the <a href="assets.html">Assets page</a>.</p>
     </div>
 
     <div class="filter-bar">
@@ -314,8 +316,9 @@
       <div class="chart-card-header">
         <div class="chart-card-title">Daily Utilisation vs Target</div>
         <div class="chart-legend">
-          <div class="legend-item"><div class="legend-dot" style="background:#0EA57A;"></div> On / above target</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#0EA57A;"></div> On target (≤100%)</div>
           <div class="legend-item"><div class="legend-dot" style="background:#EF9F27;"></div> Below target</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#E2754A;"></div> Exceeds 100%</div>
           <div class="legend-item" id="legend-target" style="display:none;"><div class="legend-line"></div> Target</div>
         </div>
       </div>
@@ -424,15 +427,66 @@
     return isNaN(target) ? null : target;
   }
 
-  function weeksInRange(dateFrom, dateTo) {
+  function calendarDaysInRange(dateFrom, dateTo) {
     var start = new Date(dateFrom + 'T00:00:00');
     var end = new Date(dateTo + 'T00:00:00');
-    var days = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
-    return Math.max(days, 1) / 7;
+    return Math.max(Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1, 1);
   }
 
-  function dailyAvailableHours(hoursPerWeek) {
-    return hoursPerWeek / 7;
+  function weeksInRange(dateFrom, dateTo) {
+    return calendarDaysInRange(dateFrom, dateTo) / 7;
+  }
+
+  function eachDateInRange(dateFrom, dateTo) {
+    var dates = [];
+    var d = new Date(dateFrom + 'T00:00:00');
+    var end = new Date(dateTo + 'T00:00:00');
+    while (d <= end) {
+      dates.push(d.toISOString().slice(0, 10));
+      d.setDate(d.getDate() + 1);
+    }
+    return dates;
+  }
+
+  function isWeekday(dateStr) {
+    var day = new Date(dateStr + 'T00:00:00').getDay();
+    return day >= 1 && day <= 5;
+  }
+
+  function workingDaysInRange(dateFrom, dateTo) {
+    var count = 0;
+    eachDateInRange(dateFrom, dateTo).forEach(function(date) {
+      if (isWeekday(date)) count++;
+    });
+    return Math.max(count, 1);
+  }
+
+  function dailyAvailableForDate(periodAvailable, date, workingDays) {
+    return isWeekday(date) ? periodAvailable / workingDays : 0;
+  }
+
+  function dayStatus(rate, targetPercent, hasTelematics, dailyAvailable, actual) {
+    if (!hasTelematics) return 'no-data';
+    if (dailyAvailable <= 0 && actual > 0) return 'exceeds-capacity';
+    if (targetPercent == null) return 'no-target';
+    if (rate != null && rate > 100) return 'exceeds-capacity';
+    if (rate != null && rate >= targetPercent) return 'on-target';
+    return 'below-target';
+  }
+
+  function statusBadge(status) {
+    if (status === 'on-target') return { className: 'on-target', text: 'On Target' };
+    if (status === 'below-target') return { className: 'below-target', text: 'Below Target' };
+    if (status === 'exceeds-capacity') return { className: 'exceeds-capacity', text: 'Exceeds 100%' };
+    if (status === 'no-data') return { className: 'no-data', text: 'No Data' };
+    return { className: 'no-target', text: 'No Target Set' };
+  }
+
+  function chartBarColor(rate, targetPercent) {
+    if (targetPercent == null) return '#0EA57A';
+    if (rate > 100) return '#E2754A';
+    if (rate >= targetPercent) return '#0EA57A';
+    return '#EF9F27';
   }
 
   function updateAssetSettingsDisplay() {
@@ -493,9 +547,10 @@
     var hoursPerWeek = getHoursPerWeek(selectedAsset);
     var usingDefaultHours = selectedAsset.available_hours_per_week == null;
     var targetPercent = getTargetPercent(selectedAsset);
-    var weeks = weeksInRange(dateFrom, dateTo);
+    var calendarDays = calendarDaysInRange(dateFrom, dateTo);
+    var workingDays = workingDaysInRange(dateFrom, dateTo);
+    var weeks = calendarDays / 7;
     var periodAvailable = hoursPerWeek * weeks;
-    var dailyAvailable = dailyAvailableHours(hoursPerWeek);
 
     var telResult = await supabase
       .from('telematics_records')
@@ -520,26 +575,26 @@
       byDate[r.record_date] = (byDate[r.record_date] || 0) + (parseFloat(r.operating_hours) || 0);
     });
 
-    var dates = Object.keys(byDate).sort();
     var dailyRows = [];
     var totalActual = 0;
 
-    dates.forEach(function(date) {
-      var actual = byDate[date];
-      var rate = dailyAvailable > 0 ? (actual / dailyAvailable) * 100 : 0;
-      totalActual += actual;
-
-      var status = 'no-target';
-      if (targetPercent != null) {
-        status = rate >= targetPercent ? 'on-target' : 'below-target';
+    eachDateInRange(dateFrom, dateTo).forEach(function(date) {
+      var hasTelematics = byDate[date] != null;
+      var actual = hasTelematics ? byDate[date] : 0;
+      var dayAvailable = dailyAvailableForDate(periodAvailable, date, workingDays);
+      var rate = null;
+      if (hasTelematics && dayAvailable > 0) {
+        rate = (actual / dayAvailable) * 100;
       }
+      totalActual += actual;
 
       dailyRows.push({
         date: date,
-        available: dailyAvailable,
+        available: dayAvailable,
         actual: actual,
         rate: rate,
-        status: status
+        status: dayStatus(rate, targetPercent, hasTelematics, dayAvailable, actual),
+        hasTelematics: hasTelematics
       });
     });
 
@@ -548,7 +603,7 @@
 
     document.getElementById('kpi-available').textContent = periodAvailable.toFixed(1) + ' hr';
     document.getElementById('kpi-available-sub').textContent =
-      hoursPerWeek + ' hrs/week × ' + weeks.toFixed(2) + ' weeks' +
+      hoursPerWeek + ' hrs/week × ' + weeks.toFixed(2) + ' weeks (' + calendarDays + ' days, ' + workingDays + ' working)' +
       (usingDefaultHours ? ' (default)' : '');
 
     document.getElementById('kpi-actual').textContent = totalActual.toFixed(1) + ' hr';
@@ -580,7 +635,7 @@
       varianceEl.className = 'kpi-value muted';
     }
 
-    renderChart(dailyRows, targetPercent);
+    renderChart(dailyRows.filter(function(r) { return r.hasTelematics && r.rate != null; }), targetPercent);
     renderTable(dailyRows, targetPercent);
   }
 
@@ -591,10 +646,7 @@
     var ctx = document.getElementById('utilisation-chart').getContext('2d');
     var labels = rows.map(function(r) { return formatDateShort(r.date); });
     var data = rows.map(function(r) { return Math.round(r.rate * 10) / 10; });
-    var colors = rows.map(function(r) {
-      if (targetPercent == null) return '#0EA57A';
-      return r.rate >= targetPercent ? '#0EA57A' : '#EF9F27';
-    });
+    var colors = rows.map(function(r) { return chartBarColor(r.rate, targetPercent); });
 
     var annotations = {};
     if (targetPercent != null) {
@@ -664,24 +716,22 @@
     }
 
     tbody.innerHTML = rows.map(function(r) {
-      var badgeClass = 'no-target';
-      var badgeText = 'No Target Set';
-      if (targetPercent != null) {
-        if (r.status === 'on-target') {
-          badgeClass = 'on-target';
-          badgeText = 'On Target';
-        } else {
-          badgeClass = 'below-target';
-          badgeText = 'Below Target';
-        }
+      var badge = statusBadge(r.status);
+      var actualDisplay = r.hasTelematics ? r.actual.toFixed(1) + ' hr' : '—';
+      var rateDisplay = '—';
+      if (r.hasTelematics && r.rate != null) {
+        rateDisplay = r.rate.toFixed(1) + '%';
+      } else if (r.hasTelematics && r.available <= 0 && r.actual > 0) {
+        rateDisplay = '—';
       }
+      var availableDisplay = r.available > 0 ? r.available.toFixed(2) + ' hr' : '—';
 
       return '<tr>' +
         '<td class="cell-strong">' + formatDateShort(r.date) + '</td>' +
-        '<td>' + r.available.toFixed(2) + ' hr</td>' +
-        '<td>' + r.actual.toFixed(1) + ' hr</td>' +
-        '<td>' + r.rate.toFixed(1) + '%</td>' +
-        '<td><span class="badge ' + badgeClass + '">' + badgeText + '</span></td>' +
+        '<td>' + availableDisplay + '</td>' +
+        '<td>' + actualDisplay + '</td>' +
+        '<td>' + rateDisplay + '</td>' +
+        '<td><span class="badge ' + badge.className + '">' + badge.text + '</span></td>' +
       '</tr>';
     }).join('');
   }
