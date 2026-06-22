@@ -131,7 +131,7 @@
     if (remaining <= 0) {
       return lifeExceededResult(false);
     }
-    if (remaining < minRemainingLife(lifeHours, MIN_REMAINING_LIFE_HOURS)) {
+    if (remaining <= minRemainingLife(lifeHours, MIN_REMAINING_LIFE_HOURS)) {
       return lifeExceededResult(true);
     }
     var perHour = (currentValue - eolValue) / remaining;
@@ -150,7 +150,7 @@
     if (remaining <= 0) {
       return lifeExceededResult(false);
     }
-    if (remaining < minRemainingLife(lifeKm, MIN_REMAINING_LIFE_KM)) {
+    if (remaining <= minRemainingLife(lifeKm, MIN_REMAINING_LIFE_KM)) {
       return lifeExceededResult(true);
     }
     var perKm = (currentValue - eolValue) / remaining;
