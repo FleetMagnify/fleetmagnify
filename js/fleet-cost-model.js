@@ -26,12 +26,27 @@
   var LIFE_EXCEEDED_MESSAGE =
     'Cannot calculate — asset has reached or exceeded its expected life. Update Expected Life Hours (or Expected Life KM) on the Assets page to continue tracking depreciation.';
 
-  function formatLifeExceededMessage() {
-    return LIFE_EXCEEDED_MESSAGE;
+  var LIFE_NEAR_LIMIT_MESSAGE =
+    'Cannot calculate — asset is within 2% of its expected life limit and the depreciation rate is no longer meaningful. Update Expected Life Hours (or Expected Life KM) on the Assets page to continue tracking depreciation.';
+
+  var MIN_REMAINING_LIFE_HOURS = 5;
+  var MIN_REMAINING_LIFE_KM = 100;
+  var REMAINING_LIFE_PCT = 0.02;
+
+  function formatLifeExceededMessage(nearLimit) {
+    return nearLimit ? LIFE_NEAR_LIMIT_MESSAGE : LIFE_EXCEEDED_MESSAGE;
   }
 
-  function formatDepreciationUnavailableMessage(missing, lifeExceeded) {
-    if (lifeExceeded) return formatLifeExceededMessage();
+  function minRemainingLife(expectedLife, floor) {
+    return Math.max(expectedLife * REMAINING_LIFE_PCT, floor);
+  }
+
+  function lifeExceededResult(nearLimit) {
+    return { ok: false, lifeExceeded: true, lifeNearLimit: !!nearLimit };
+  }
+
+  function formatDepreciationUnavailableMessage(missing, lifeExceeded, lifeNearLimit) {
+    if (lifeExceeded) return formatLifeExceededMessage(lifeNearLimit);
     return formatMissingMessage(missing);
   }
 
@@ -114,7 +129,10 @@
     var currentHours = num(totalEngineHours);
     var remaining = lifeHours - currentHours;
     if (remaining <= 0) {
-      return { ok: false, lifeExceeded: true };
+      return lifeExceededResult(false);
+    }
+    if (remaining < minRemainingLife(lifeHours, MIN_REMAINING_LIFE_HOURS)) {
+      return lifeExceededResult(true);
     }
     var perHour = (currentValue - eolValue) / remaining;
     return { ok: true, value: perHour < 0 ? 0 : perHour };
@@ -130,7 +148,10 @@
     var lifeKm = num(asset.expected_life_km);
     var remaining = lifeKm - odo;
     if (remaining <= 0) {
-      return { ok: false, lifeExceeded: true };
+      return lifeExceededResult(false);
+    }
+    if (remaining < minRemainingLife(lifeKm, MIN_REMAINING_LIFE_KM)) {
+      return lifeExceededResult(true);
     }
     var perKm = (currentValue - eolValue) / remaining;
     return { ok: true, value: perKm < 0 ? 0 : perKm };
@@ -190,6 +211,7 @@
       fuelMissing: null,
       depreciationMissing: null,
       depreciationLifeExceeded: false,
+      depreciationLifeNearLimit: false,
       servicingMissing: null,
       maintenanceMissing: null
     };
@@ -203,6 +225,7 @@
     if (isOnRoad(asset)) {
       var deprKm = calcDepreciationPerKm(asset);
       result.depreciationLifeExceeded = !!deprKm.lifeExceeded;
+      result.depreciationLifeNearLimit = !!deprKm.lifeNearLimit;
       result.depreciationMissing = deprKm.ok ? null : (deprKm.lifeExceeded ? null : deprKm.missing);
       result.depreciation = deprKm.ok ? 0 : null;
 
@@ -216,6 +239,7 @@
     } else {
       var deprHr = calcDepreciationPerHour(asset, totalEngineHours);
       result.depreciationLifeExceeded = !!deprHr.lifeExceeded;
+      result.depreciationLifeNearLimit = !!deprHr.lifeNearLimit;
       result.depreciationMissing = deprHr.ok ? null : (deprHr.lifeExceeded ? null : deprHr.missing);
       result.depreciation = deprHr.ok ? idleHours * deprHr.value : null;
 
@@ -248,12 +272,14 @@
       total: null,
       depreciationMissing: null,
       depreciationLifeExceeded: false,
+      depreciationLifeNearLimit: false,
       servicingMissing: null,
       maintenanceMissing: null
     };
 
     var depr = calcDepreciationPerKm(asset, currentOdometer);
     out.depreciationLifeExceeded = !!depr.lifeExceeded;
+    out.depreciationLifeNearLimit = !!depr.lifeNearLimit;
     out.depreciationMissing = depr.ok ? null : (depr.lifeExceeded ? null : depr.missing);
     out.depreciation = depr.ok ? depr.value : null;
 
@@ -282,9 +308,9 @@
     return null;
   }
 
-  function costOrMissing(value, missingFields, fmtFn, lifeExceeded) {
+  function costOrMissing(value, missingFields, fmtFn, lifeExceeded, lifeNearLimit) {
     if (lifeExceeded) {
-      return { text: formatLifeExceededMessage(), isMissing: true, lifeExceeded: true };
+      return { text: formatLifeExceededMessage(lifeNearLimit), isMissing: true, lifeExceeded: true, lifeNearLimit: !!lifeNearLimit };
     }
     if (missingFields && missingFields.length) {
       return { text: formatMissingMessage(missingFields), isMissing: true };

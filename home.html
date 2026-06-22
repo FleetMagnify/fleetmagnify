@@ -332,6 +332,7 @@
   function mergeFleetUnavailable(flags, idleCosts) {
     if (idleCosts.fuelMissing) flags.fuelMissing = true;
     if (idleCosts.depreciationLifeExceeded) flags.deprLifeExceeded = true;
+    if (idleCosts.depreciationLifeNearLimit) flags.deprLifeNearLimit = true;
     else if (idleCosts.depreciationMissing) flags.deprMissing = true;
     if (idleCosts.servicingMissing) flags.servMissing = true;
     if (idleCosts.maintenanceMissing) flags.maintMissing = true;
@@ -340,7 +341,7 @@
   function fleetPartialTooltip(flags) {
     var parts = [];
     if (flags.fuelMissing) parts.push('fuel cost unavailable for some assets');
-    if (flags.deprLifeExceeded) parts.push(FCM.formatLifeExceededMessage());
+    if (flags.deprLifeExceeded) parts.push(FCM.formatLifeExceededMessage(flags.deprLifeNearLimit));
     else if (flags.deprMissing) parts.push('depreciation cost unavailable for some assets');
     if (flags.servMissing) parts.push('servicing cost unavailable for some assets');
     if (flags.maintMissing) parts.push('maintenance cost unavailable for some assets');
@@ -375,7 +376,7 @@
       }
     });
 
-    var fleetUnavailable = { fuelMissing: false, deprMissing: false, deprLifeExceeded: false, servMissing: false, maintMissing: false };
+    var fleetUnavailable = { fuelMissing: false, deprMissing: false, deprLifeExceeded: false, deprLifeNearLimit: false, servMissing: false, maintMissing: false };
 
     var results = assets.map(function(asset) {
       var assetFuel = fuelRows.filter(function(r) { return Number(r.asset_id) === Number(asset.id); });

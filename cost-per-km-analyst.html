@@ -500,18 +500,19 @@
         maintOverride: maintOv,
         deprMissing: deprOv ? null : (deprBase.ok ? null : (deprBase.lifeExceeded ? null : deprBase.missing)),
         deprLifeExceeded: deprOv ? false : !!deprBase.lifeExceeded,
+        deprLifeNearLimit: deprOv ? false : !!deprBase.lifeNearLimit,
         maintMissing: maintOv ? null : (maintBase.ok ? null : maintBase.missing)
       };
     });
   }
 
-  function renderCellValue(value, override, missing, isTotal, lifeExceeded) {
+  function renderCellValue(value, override, missing, isTotal, lifeExceeded, lifeNearLimit) {
     if (override) {
       var title = esc(override.reason || 'Manual override');
       return '<span class="cell-overridden" title="' + title + '">✎ ' + fmtMoney(value) + '</span>';
     }
     if (lifeExceeded) {
-      return '<span class="cell-missing" title="' + esc(FCM.formatLifeExceededMessage()) + '">—</span>';
+      return '<span class="cell-missing" title="' + esc(FCM.formatLifeExceededMessage(lifeNearLimit)) + '">—</span>';
     }
     if (missing && missing.length) {
       return '<span class="cell-missing" title="' + esc(FCM.formatMissingMessage(missing)) + '">—</span>';
@@ -522,7 +523,7 @@
     return '<span class="' + (isTotal ? 'cell-teal' : '') + '">' + fmtMoney(value) + '</span>';
   }
 
-  function setKpiEl(elId, value, override, missing, lifeExceeded) {
+  function setKpiEl(elId, value, override, missing, lifeExceeded, lifeNearLimit) {
     var el = document.getElementById(elId);
     if (override) {
       el.className = 'kpi-value amber';
@@ -533,7 +534,7 @@
     if (lifeExceeded) {
       el.className = 'kpi-value missing';
       el.textContent = '—';
-      el.title = FCM.formatLifeExceededMessage();
+      el.title = FCM.formatLifeExceededMessage(lifeNearLimit);
       return;
     }
     if (missing && missing.length) {
@@ -701,7 +702,7 @@
       heroEl.className = heroPartial ? 'hero-value partial' : 'hero-value';
       heroEl.textContent = fmtMoney(latest.totalPerKm);
       if (heroPartial) {
-        heroEl.title = latest.deprLifeExceeded ? FCM.formatLifeExceededMessage() :
+        heroEl.title = latest.deprLifeExceeded ? FCM.formatLifeExceededMessage(latest.deprLifeNearLimit) :
           'Cannot calculate total — one or more components are missing.';
       } else {
         heroEl.removeAttribute('title');
@@ -709,9 +710,9 @@
     } else {
       heroEl.className = 'hero-value missing';
       heroEl.textContent = latest.deprLifeExceeded
-        ? FCM.formatLifeExceededMessage()
+        ? FCM.formatLifeExceededMessage(latest.deprLifeNearLimit)
         : 'Cannot calculate total — one or more components are missing or overridden incompletely.';
-      heroEl.title = latest.deprLifeExceeded ? FCM.formatLifeExceededMessage() : '';
+      heroEl.title = latest.deprLifeExceeded ? FCM.formatLifeExceededMessage(latest.deprLifeNearLimit) : '';
     }
 
     document.getElementById('hero-breakdown').innerHTML =
@@ -720,7 +721,7 @@
       '<div class="hero-breakdown-item">Maintenance<strong>' + (latest.maintPerKm != null ? fmtMoney(latest.maintPerKm) : '—') + '</strong></div>';
 
     setKpiEl('kpi-fuel', latest.fuelPerKm, latest.fuelOverride, null, false);
-    setKpiEl('kpi-depr', latest.deprPerKm, latest.deprOverride, latest.deprMissing, latest.deprLifeExceeded);
+    setKpiEl('kpi-depr', latest.deprPerKm, latest.deprOverride, latest.deprMissing, latest.deprLifeExceeded, latest.deprLifeNearLimit);
     setKpiEl('kpi-maint', latest.maintPerKm, latest.maintOverride, latest.maintMissing, false);
 
     renderStackChart(periods);
@@ -791,7 +792,7 @@
         '<td class="cell-strong">' + fmtDateShort(p.periodStart) + '</td>' +
         '<td class="cell-strong">' + fmtDateShort(p.periodEnd) + '</td>' +
         '<td>' + renderCellValue(p.fuelPerKm, p.fuelOverride, null, false) + '</td>' +
-        '<td>' + renderCellValue(p.deprPerKm, p.deprOverride, p.deprMissing, false, p.deprLifeExceeded) + '</td>' +
+        '<td>' + renderCellValue(p.deprPerKm, p.deprOverride, p.deprMissing, false, p.deprLifeExceeded, p.deprLifeNearLimit) + '</td>' +
         '<td>' + renderCellValue(p.maintPerKm, p.maintOverride, p.maintMissing, false) + '</td>' +
         '<td>' + renderCellValue(p.totalPerKm, null, null, true) + '</td>' +
         '<td><button type="button" class="btn-override" data-period-idx="' + idx + '">Override</button></td>' +

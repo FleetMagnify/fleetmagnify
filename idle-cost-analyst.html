@@ -457,7 +457,7 @@
 
     if (runtimeMissing) {
       if (runtimeMissing.deprLifeExceeded) {
-        display.innerHTML = '<span class="warn">' + esc(FCM.formatLifeExceededMessage()) + '</span>';
+        display.innerHTML = '<span class="warn">' + esc(FCM.formatLifeExceededMessage(runtimeMissing.deprLifeNearLimit)) + '</span>';
         return;
       }
       var runtimeFields = [];
@@ -523,17 +523,17 @@
     return !!lifeExceeded || (missingFields && missingFields.length);
   }
 
-  function unavailableTooltip(missingFields, lifeExceeded) {
-    if (lifeExceeded) return FCM.formatLifeExceededMessage();
+  function unavailableTooltip(missingFields, lifeExceeded, lifeNearLimit) {
+    if (lifeExceeded) return FCM.formatLifeExceededMessage(lifeNearLimit);
     return FCM.formatMissingMessage(missingFields);
   }
 
-  function setKpiMoneyOrMissing(elId, value, missingFields, lifeExceeded) {
+  function setKpiMoneyOrMissing(elId, value, missingFields, lifeExceeded, lifeNearLimit) {
     var el = document.getElementById(elId);
     if (isUnavailable(missingFields, lifeExceeded)) {
       el.className = 'kpi-value unavailable';
       el.textContent = '—';
-      el.setAttribute('title', unavailableTooltip(missingFields, lifeExceeded));
+      el.setAttribute('title', unavailableTooltip(missingFields, lifeExceeded, lifeNearLimit));
       return;
     }
     el.className = 'kpi-value amber';
@@ -541,17 +541,17 @@
     el.textContent = fmtMoneyWhole(value);
   }
 
-  function cellValueOrMissing(value, missingFields, valueClass, lifeExceeded) {
+  function cellValueOrMissing(value, missingFields, valueClass, lifeExceeded, lifeNearLimit) {
     if (isUnavailable(missingFields, lifeExceeded)) {
-      return '<td class="cell-missing" title="' + esc(unavailableTooltip(missingFields, lifeExceeded)) + '">—</td>';
+      return '<td class="cell-missing" title="' + esc(unavailableTooltip(missingFields, lifeExceeded, lifeNearLimit)) + '">—</td>';
     }
     return '<td class="' + valueClass + '">$' + Number(value || 0).toFixed(2) + '</td>';
   }
 
-  function unavailableComponents(fuelMissing, deprMissing, deprLifeExceeded, servMissing, maintMissing) {
+  function unavailableComponents(fuelMissing, deprMissing, deprLifeExceeded, deprLifeNearLimit, servMissing, maintMissing) {
     var list = [];
     if (fuelMissing && fuelMissing.length) list.push({ label: 'fuel cost', fields: fuelMissing });
-    if (deprLifeExceeded) list.push({ label: 'depreciation cost', lifeExceeded: true });
+    if (deprLifeExceeded) list.push({ label: 'depreciation cost', lifeExceeded: true, lifeNearLimit: !!deprLifeNearLimit });
     else if (deprMissing && deprMissing.length) list.push({ label: 'depreciation cost', fields: deprMissing });
     if (servMissing && servMissing.length) list.push({ label: 'servicing cost', fields: servMissing });
     if (maintMissing && maintMissing.length) list.push({ label: 'maintenance cost', fields: maintMissing });
@@ -560,7 +560,7 @@
 
   function partialTotalTooltip(unavailable) {
     return unavailable.map(function(c) {
-      return c.lifeExceeded ? FCM.formatLifeExceededMessage() : FCM.formatMissingMessage(c.fields);
+      return c.lifeExceeded ? FCM.formatLifeExceededMessage(c.lifeNearLimit) : FCM.formatMissingMessage(c.fields);
     }).join(' ');
   }
 
@@ -582,9 +582,9 @@
     return '$' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   }
 
-  function setKpiTotalCost(partialSum, fuelMissing, deprMissing, deprLifeExceeded, servMissing, maintMissing) {
+  function setKpiTotalCost(partialSum, fuelMissing, deprMissing, deprLifeExceeded, deprLifeNearLimit, servMissing, maintMissing) {
     var el = document.getElementById('kpi-total-cost');
-    var unavailable = unavailableComponents(fuelMissing, deprMissing, deprLifeExceeded, servMissing, maintMissing);
+    var unavailable = unavailableComponents(fuelMissing, deprMissing, deprLifeExceeded, deprLifeNearLimit, servMissing, maintMissing);
     if (unavailable.length === 0) {
       el.className = 'kpi-value red';
       el.textContent = fmtMoneyWhole(partialSum);
@@ -598,7 +598,7 @@
   }
 
   function cellTotalCost(r) {
-    var unavailable = unavailableComponents(r.fuelMissing, r.deprMissing, r.deprLifeExceeded, r.serviceMissing, r.maintMissing);
+    var unavailable = unavailableComponents(r.fuelMissing, r.deprMissing, r.deprLifeExceeded, r.deprLifeNearLimit, r.serviceMissing, r.maintMissing);
     var total = calcPartialSum(r.fuelCost, r.fuelMissing, r.deprCost, r.deprMissing, r.deprLifeExceeded, r.serviceCost, r.serviceMissing, r.maintCost, r.maintMissing);
     if (unavailable.length === 0) {
       return '<td class="cell-total">$' + total.toFixed(2) + '</td>';
@@ -695,7 +695,7 @@
     var dates = Object.keys(byDate).sort();
     var dailyRows = [];
     var sumIdleHours = 0, sumFuelCost = 0, sumDeprCost = 0, sumServiceCost = 0, sumMaintCost = 0;
-    var aggFuelMissing = null, aggDeprMissing = null, aggDeprLifeExceeded = false, aggServMissing = null, aggMaintMissing = null;
+    var aggFuelMissing = null, aggDeprMissing = null, aggDeprLifeExceeded = false, aggDeprLifeNearLimit = false, aggServMissing = null, aggMaintMissing = null;
 
     dates.forEach(function(date) {
       var idleHours = byDate[date];
@@ -709,13 +709,14 @@
       aggFuelMissing = costs.fuelMissing;
       aggDeprMissing = costs.depreciationMissing;
       if (costs.depreciationLifeExceeded) aggDeprLifeExceeded = true;
+      if (costs.depreciationLifeNearLimit) aggDeprLifeNearLimit = true;
       aggServMissing = costs.servicingMissing;
       aggMaintMissing = costs.maintenanceMissing;
 
       dailyRows.push({
         date: date, idleHours: idleHours,
         fuelCost: costs.fuel, fuelMissing: costs.fuelMissing,
-        deprCost: costs.depreciation, deprMissing: costs.depreciationMissing, deprLifeExceeded: costs.depreciationLifeExceeded,
+        deprCost: costs.depreciation, deprMissing: costs.depreciationMissing, deprLifeExceeded: costs.depreciationLifeExceeded, deprLifeNearLimit: costs.depreciationLifeNearLimit,
         serviceCost: costs.servicing, serviceMissing: costs.servicingMissing,
         maintCost: costs.maintenance, maintMissing: costs.maintenanceMissing,
         totalCost: costs.total
@@ -726,15 +727,16 @@
 
     document.getElementById('kpi-idle-hours').textContent = sumIdleHours.toFixed(1) + ' hr';
     setKpiMoneyOrMissing('kpi-fuel-cost', sumFuelCost, aggFuelMissing);
-    setKpiMoneyOrMissing('kpi-depreciation-cost', sumDeprCost, aggDeprMissing, aggDeprLifeExceeded);
+    setKpiMoneyOrMissing('kpi-depreciation-cost', sumDeprCost, aggDeprMissing, aggDeprLifeExceeded, aggDeprLifeNearLimit);
     setKpiMoneyOrMissing('kpi-service-cost', sumServiceCost, aggServMissing);
     setKpiMoneyOrMissing('kpi-maintenance-cost', sumMaintCost, aggMaintMissing);
-    setKpiTotalCost(grandTotal, aggFuelMissing, aggDeprMissing, aggDeprLifeExceeded, aggServMissing, aggMaintMissing);
+    setKpiTotalCost(grandTotal, aggFuelMissing, aggDeprMissing, aggDeprLifeExceeded, aggDeprLifeNearLimit, aggServMissing, aggMaintMissing);
     document.getElementById('kpi-total-cost-sub').textContent = 'over ' + sumIdleHours.toFixed(0) + ' idle hours';
     updateAssetMetaDisplay(selectedAsset, {
       fuelMissing: aggFuelMissing,
       deprMissing: aggDeprMissing,
       deprLifeExceeded: aggDeprLifeExceeded,
+      deprLifeNearLimit: aggDeprLifeNearLimit,
       servMissing: aggServMissing,
       maintMissing: aggMaintMissing
     });
@@ -808,7 +810,7 @@
         '<td class="cell-strong">' + formatDateShort(r.date) + '</td>' +
         '<td>' + r.idleHours.toFixed(1) + ' hr</td>' +
         cellValueOrMissing(r.fuelCost, r.fuelMissing, 'cell-teal') +
-        cellValueOrMissing(r.deprCost, r.deprMissing, 'cell-amber', r.deprLifeExceeded) +
+        cellValueOrMissing(r.deprCost, r.deprMissing, 'cell-amber', r.deprLifeExceeded, r.deprLifeNearLimit) +
         cellValueOrMissing(r.serviceCost, r.serviceMissing, 'cell-amber') +
         cellValueOrMissing(r.maintCost, r.maintMissing, 'cell-amber') +
         cellTotalCost(r) +

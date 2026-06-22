@@ -603,6 +603,7 @@
       fuelCost: tripFuelCost,
       deprCost: tripDeprCost,
       deprLifeExceeded: !!deprResult.lifeExceeded,
+      deprLifeNearLimit: !!deprResult.lifeNearLimit,
       deprMissing: deprResult.ok ? null : (deprResult.lifeExceeded ? null : deprResult.missing),
       servCost: tripServCost,
       maintCost: tripMaintCost,
@@ -618,7 +619,7 @@
   }
 
   function deprUnavailableTooltip(r) {
-    if (r.deprLifeExceeded) return FCM.formatLifeExceededMessage();
+    if (r.deprLifeExceeded) return FCM.formatLifeExceededMessage(r.deprLifeNearLimit);
     return FCM.formatMissingMessage(r.deprMissing);
   }
 

@@ -569,7 +569,7 @@
     });
 
     var byAsset = {};
-    var totals = { fuel: 0, fuelMissing: false, idle: 0, idleMissing: null, depr: 0, deprMissing: null, deprLifeExceeded: false, service: 0, servMissing: null, maint: 0, maintMissing: null, emissions: 0 };
+    var totals = { fuel: 0, fuelMissing: false, idle: 0, idleMissing: null, depr: 0, deprMissing: null, deprLifeExceeded: false, deprLifeNearLimit: false, service: 0, servMissing: null, maint: 0, maintMissing: null, emissions: 0 };
 
     jobAssignments.forEach(function(row) {
       var asset = allAssets.find(function(a) { return a.id === row.asset_id; });
@@ -589,7 +589,7 @@
         asset: asset, days: 0,
         fuel: 0, fuelMissing: false,
         idle: 0, idleMissing: null,
-        depr: 0, deprMissing: null, deprLifeExceeded: false,
+        depr: 0, deprMissing: null, deprLifeExceeded: false, deprLifeNearLimit: false,
         service: 0, servMissing: null,
         maint: 0, maintMissing: null,
         emissions: 0
@@ -611,6 +611,7 @@
         byAsset[row.asset_id].depr += idleCosts.depreciation;
       } else if (idleCosts.depreciationLifeExceeded) {
         byAsset[row.asset_id].deprLifeExceeded = true;
+        if (idleCosts.depreciationLifeNearLimit) byAsset[row.asset_id].deprLifeNearLimit = true;
       } else {
         byAsset[row.asset_id].deprMissing = idleCosts.depreciationMissing;
       }
@@ -636,6 +637,7 @@
         totals.depr += idleCosts.depreciation;
       } else if (idleCosts.depreciationLifeExceeded) {
         totals.deprLifeExceeded = true;
+        if (idleCosts.depreciationLifeNearLimit) totals.deprLifeNearLimit = true;
       } else {
         totals.deprMissing = idleCosts.depreciationMissing;
       }
@@ -659,7 +661,7 @@
         days: b.days,
         fuel: b.fuel, fuelMissing: b.fuelMissing,
         idle: b.idle, idleMissing: b.idleMissing,
-        depr: b.depr, deprMissing: b.deprMissing, deprLifeExceeded: b.deprLifeExceeded,
+        depr: b.depr, deprMissing: b.deprMissing, deprLifeExceeded: b.deprLifeExceeded, deprLifeNearLimit: b.deprLifeNearLimit,
         service: b.service, servMissing: b.servMissing,
         maint: b.maint, maintMissing: b.maintMissing,
         total: calcPartialAssetTotal(b.fuel, b.idle, b.idleMissing, b.depr, b.deprMissing, b.deprLifeExceeded, b.service, b.servMissing, b.maint, b.maintMissing),
@@ -687,18 +689,18 @@
       kpiFuelEl.textContent = fmtMoney(totals.fuel);
     }
     setKpiMoneyOrMissing('kpi-idle', totals.idle, totals.idleMissing);
-    setKpiMoneyOrMissing('kpi-depr', totals.depr, totals.deprMissing, totals.deprLifeExceeded);
+    setKpiMoneyOrMissing('kpi-depr', totals.depr, totals.deprMissing, totals.deprLifeExceeded, totals.deprLifeNearLimit);
     setKpiMoneyOrMissing('kpi-service', totals.service, totals.servMissing);
     setKpiMoneyOrMissing('kpi-maintenance', totals.maint, totals.maintMissing);
     document.getElementById('kpi-emissions').textContent = (totals.emissions / 1000).toFixed(2) + ' t';
-    setKpiGrandTotal('kpi-grand', totals.grand, totals.fuelMissing, totals.idleMissing, totals.deprMissing, totals.deprLifeExceeded, totals.servMissing, totals.maintMissing);
+    setKpiGrandTotal('kpi-grand', totals.grand, totals.fuelMissing, totals.idleMissing, totals.deprMissing, totals.deprLifeExceeded, totals.deprLifeNearLimit, totals.servMissing, totals.maintMissing);
 
     if (costBreakdown.length === 0) {
       document.getElementById('breakdown-tbody').innerHTML = '<tr><td colspan="8" class="empty-state">No cost data available.</td></tr>';
       return;
     }
     document.getElementById('breakdown-tbody').innerHTML = costBreakdown.map(function(r) {
-      var unavailable = unavailableComponents(r.fuelMissing, r.idleMissing, r.deprMissing, r.deprLifeExceeded, r.servMissing, r.maintMissing);
+      var unavailable = unavailableComponents(r.fuelMissing, r.idleMissing, r.deprMissing, r.deprLifeExceeded, r.deprLifeNearLimit, r.servMissing, r.maintMissing);
       var totalCell = unavailable.length === 0
         ? '<td class="cell-teal">' + fmtMoney(r.total) + '</td>'
         : '<td class="cell-amber" title="' + esc(partialTotalTooltip(unavailable)) + '">' + fmtMoney(r.total) +
@@ -708,7 +710,7 @@
         '<td>' + r.days + '</td>' +
         cellFuelMissing(r.fuel, r.fuelMissing) +
         cellValueOrMissing(r.idle, r.idleMissing) +
-        cellDeprOrMissing(r.depr, r.deprMissing, r.deprLifeExceeded) +
+        cellDeprOrMissing(r.depr, r.deprMissing, r.deprLifeExceeded, r.deprLifeNearLimit) +
         cellValueOrMissing(r.service, r.servMissing) +
         cellValueOrMissing(r.maint, r.maintMissing) +
         totalCell +
@@ -915,11 +917,11 @@
 
   function fmtMoney(n) { return '$' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
 
-  function unavailableComponents(fuelMissing, idleMissing, deprMissing, deprLifeExceeded, servMissing, maintMissing) {
+  function unavailableComponents(fuelMissing, idleMissing, deprMissing, deprLifeExceeded, deprLifeNearLimit, servMissing, maintMissing) {
     var list = [];
     if (fuelMissing) list.push({ label: 'fuel cost', fuelAbsent: true });
     if (idleMissing && idleMissing.length) list.push({ label: 'idle cost', fields: idleMissing });
-    if (deprLifeExceeded) list.push({ label: 'depreciation cost', lifeExceeded: true });
+    if (deprLifeExceeded) list.push({ label: 'depreciation cost', lifeExceeded: true, lifeNearLimit: !!deprLifeNearLimit });
     else if (deprMissing && deprMissing.length) list.push({ label: 'depreciation cost', fields: deprMissing });
     if (servMissing && servMissing.length) list.push({ label: 'servicing cost', fields: servMissing });
     if (maintMissing && maintMissing.length) list.push({ label: 'maintenance cost', fields: maintMissing });
@@ -933,7 +935,7 @@
   function partialTotalTooltip(unavailable) {
     return unavailable.map(function(c) {
       if (c.fuelAbsent) return 'No fuel records found for this asset in the job\'s date range.';
-      if (c.lifeExceeded) return FCM.formatLifeExceededMessage();
+      if (c.lifeExceeded) return FCM.formatLifeExceededMessage(c.lifeNearLimit);
       return FCM.formatMissingMessage(c.fields);
     }).join(' ');
   }
@@ -954,9 +956,9 @@
     return '<td>' + fmtMoney(value) + '</td>';
   }
 
-  function cellDeprOrMissing(value, missingFields, lifeExceeded) {
+  function cellDeprOrMissing(value, missingFields, lifeExceeded, lifeNearLimit) {
     if (lifeExceeded) {
-      return '<td class="cell-missing" title="' + esc(FCM.formatLifeExceededMessage()) + '">—</td>';
+      return '<td class="cell-missing" title="' + esc(FCM.formatLifeExceededMessage(lifeNearLimit)) + '">—</td>';
     }
     return cellValueOrMissing(value, missingFields);
   }
@@ -968,10 +970,10 @@
     return '<td>' + fmtMoney(value) + '</td>';
   }
 
-  function setKpiMoneyOrMissing(elId, value, missingFields, lifeExceeded) {
+  function setKpiMoneyOrMissing(elId, value, missingFields, lifeExceeded, lifeNearLimit) {
     var el = document.getElementById(elId);
     if (lifeExceeded || (missingFields && missingFields.length)) {
-      el.setAttribute('title', lifeExceeded ? FCM.formatLifeExceededMessage() : FCM.formatMissingMessage(missingFields));
+      el.setAttribute('title', lifeExceeded ? FCM.formatLifeExceededMessage(lifeNearLimit) : FCM.formatMissingMessage(missingFields));
       if (value > 0) {
         // Some assets contributed a valid value — show partial sum with indicator
         el.className = 'kpi-value partial-total';
@@ -988,9 +990,9 @@
     el.textContent = fmtMoney(value);
   }
 
-  function setKpiGrandTotal(elId, value, fuelMissing, idleMissing, deprMissing, deprLifeExceeded, servMissing, maintMissing) {
+  function setKpiGrandTotal(elId, value, fuelMissing, idleMissing, deprMissing, deprLifeExceeded, deprLifeNearLimit, servMissing, maintMissing) {
     var el = document.getElementById(elId);
-    var unavailable = unavailableComponents(fuelMissing, idleMissing, deprMissing, deprLifeExceeded, servMissing, maintMissing);
+    var unavailable = unavailableComponents(fuelMissing, idleMissing, deprMissing, deprLifeExceeded, deprLifeNearLimit, servMissing, maintMissing);
     if (unavailable.length === 0) {
       el.className = 'kpi-value';
       el.removeAttribute('title');
