@@ -68,7 +68,8 @@
   .hero-kpi .kpi-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #0EA57A; margin-bottom: 12px; }
   .hero-kpi .hero-value { font-size: 42px; font-weight: 800; letter-spacing: -1.5px; color: #F0F2F5; line-height: 1; margin-bottom: 16px; }
   .hero-kpi .hero-value.missing { font-size: 14px; color: #EF9F27; letter-spacing: 0; line-height: 1.5; }
-  .hero-kpi .hero-value.partial { color: #EF9F27; cursor: help; }
+  .hero-kpi .hero-value.partial { color: #EF9F27; cursor: help; line-height: 1.25; }
+  .hero-partial-suffix { font-size: 13px; font-weight: 600; display: block; margin-top: 6px; letter-spacing: 0; }
   .hero-breakdown { display: flex; justify-content: center; gap: 28px; flex-wrap: wrap; }
   .hero-breakdown-item { font-size: 12px; color: #6B7785; }
   .hero-breakdown-item strong { display: block; font-size: 15px; color: #C8D0DB; font-weight: 700; margin-top: 2px; }
@@ -104,6 +105,8 @@
   .cell-teal { color: #0EA57A; font-weight: 600; }
   .cell-overridden { color: #EF9F27; font-weight: 600; cursor: help; text-decoration: underline dotted rgba(239,159,39,0.5); text-underline-offset: 3px; }
   .cell-missing { color: #5A6474; font-style: italic; font-size: 12px; }
+  .cell-amber { color: #EF9F27; font-weight: 600; cursor: help; }
+  .cell-partial-suffix { font-size: 10.5px; font-weight: 600; margin-left: 4px; }
   .btn-override { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); color: #9BA4B0; font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-family: inherit; transition: all 0.2s; white-space: nowrap; }
   .btn-override:hover { border-color: rgba(14,165,122,0.35); color: #0EA57A; }
 
@@ -465,6 +468,36 @@
     return FCM.getServicingPerKm(asset);
   }
 
+  function buildTotalMissing(fuelPerKm, deprMissing, deprLifeExceeded, deprLifeNearLimit, maintMissing, servMissing) {
+    var list = [];
+    if (fuelPerKm === null || isNaN(fuelPerKm)) list.push({ label: 'fuel cost', fields: ['Fuel cost per km'] });
+    if (deprLifeExceeded) list.push({ label: 'depreciation cost', lifeExceeded: true, lifeNearLimit: deprLifeNearLimit });
+    else if (deprMissing && deprMissing.length) list.push({ label: 'depreciation cost', fields: deprMissing });
+    if (maintMissing && maintMissing.length) list.push({ label: 'maintenance cost', fields: maintMissing });
+    if (servMissing && servMissing.length) list.push({ label: 'servicing cost', fields: servMissing });
+    return list;
+  }
+
+  function calcPartialTotalPerKm(fuelPerKm, deprPerKm, deprMissing, deprLifeExceeded, maintPerKm, maintMissing, servPerKm, servMissing) {
+    var total = 0;
+    var count = 0;
+    if (fuelPerKm !== null && !isNaN(fuelPerKm)) { total += fuelPerKm; count++; }
+    if (!deprMissing && !deprLifeExceeded && deprPerKm !== null && !isNaN(deprPerKm)) { total += deprPerKm; count++; }
+    if (!maintMissing && maintPerKm !== null && !isNaN(maintPerKm)) { total += maintPerKm; count++; }
+    if (!servMissing && servPerKm !== null && !isNaN(servPerKm)) { total += servPerKm; count++; }
+    return count > 0 ? total : null;
+  }
+
+  function partialTotalSuffix(totalMissing) {
+    return '(partial — ' + totalMissing.map(function(c) { return c.label; }).join(', ') + ' unavailable)';
+  }
+
+  function partialTotalTooltip(totalMissing) {
+    return totalMissing.map(function(c) {
+      return c.lifeExceeded ? FCM.formatLifeExceededMessage(c.lifeNearLimit) : FCM.formatMissingMessage(c.fields);
+    }).join(' ');
+  }
+
   function enrichPeriods(asset, periods, overrides) {
     overrides = overrides || [];
     var deprBase = calcBaseDepreciation(asset);
@@ -500,11 +533,15 @@
         servPerKm = servBase.value;
       }
 
-      var totalPerKm = (fuelPerKm !== null && !isNaN(fuelPerKm) &&
-        deprPerKm !== null && !isNaN(deprPerKm) &&
-        maintPerKm !== null && !isNaN(maintPerKm) &&
-        servPerKm !== null && !isNaN(servPerKm))
-        ? fuelPerKm + deprPerKm + maintPerKm + servPerKm : null;
+      var deprMissing = deprOv ? null : (deprBase.ok ? null : (deprBase.lifeExceeded ? null : deprBase.missing));
+      var deprLifeExceeded = deprOv ? false : !!deprBase.lifeExceeded;
+      var deprLifeNearLimit = deprOv ? false : !!deprBase.lifeNearLimit;
+      var maintMissing = maintOv ? null : (maintBase.ok ? null : maintBase.missing);
+      var servMissing = servOv ? null : (servBase.ok ? null : servBase.missing);
+      var totalMissing = buildTotalMissing(fuelPerKm, deprMissing, deprLifeExceeded, deprLifeNearLimit, maintMissing, servMissing);
+      var totalPerKm = calcPartialTotalPerKm(
+        fuelPerKm, deprPerKm, deprMissing, deprLifeExceeded, maintPerKm, maintMissing, servPerKm, servMissing
+      );
 
       return {
         periodStart: p.periodStart,
@@ -518,15 +555,16 @@
         maintPerKm: maintPerKm,
         servPerKm: servPerKm,
         totalPerKm: totalPerKm,
+        totalMissing: totalMissing,
         fuelOverride: fuelOv,
         deprOverride: deprOv,
         maintOverride: maintOv,
         servOverride: servOv,
-        deprMissing: deprOv ? null : (deprBase.ok ? null : (deprBase.lifeExceeded ? null : deprBase.missing)),
-        deprLifeExceeded: deprOv ? false : !!deprBase.lifeExceeded,
-        deprLifeNearLimit: deprOv ? false : !!deprBase.lifeNearLimit,
-        maintMissing: maintOv ? null : (maintBase.ok ? null : maintBase.missing),
-        servMissing: servOv ? null : (servBase.ok ? null : servBase.missing)
+        deprMissing: deprMissing,
+        deprLifeExceeded: deprLifeExceeded,
+        deprLifeNearLimit: deprLifeNearLimit,
+        maintMissing: maintMissing,
+        servMissing: servMissing
       };
     });
   }
@@ -546,6 +584,18 @@
       return '<span class="cell-missing">—</span>';
     }
     return '<span class="' + (isTotal ? 'cell-teal' : '') + '">' + fmtMoney(value) + '</span>';
+  }
+
+  function renderTotalCell(p) {
+    if (p.totalPerKm === null || p.totalPerKm === undefined || isNaN(p.totalPerKm)) {
+      return '<span class="cell-missing">—</span>';
+    }
+    if (p.totalMissing && p.totalMissing.length) {
+      return '<span class="cell-amber" title="' + esc(partialTotalTooltip(p.totalMissing)) + '">' +
+        fmtMoney(p.totalPerKm) +
+        '<span class="cell-partial-suffix">' + esc(partialTotalSuffix(p.totalMissing)) + '</span></span>';
+    }
+    return '<span class="cell-teal">' + fmtMoney(p.totalPerKm) + '</span>';
   }
 
   function setKpiEl(elId, value, override, missing, lifeExceeded, lifeNearLimit) {
@@ -721,24 +771,21 @@
     var latest = periods[periods.length - 1];
 
     var heroEl = document.getElementById('hero-total');
-    var heroPartial = latest.deprLifeExceeded || (latest.deprMissing && latest.deprMissing.length) ||
-      (latest.maintMissing && latest.maintMissing.length) ||
-      (latest.servMissing && latest.servMissing.length);
     if (latest.totalPerKm !== null && !isNaN(latest.totalPerKm)) {
-      heroEl.className = heroPartial ? 'hero-value partial' : 'hero-value';
-      heroEl.textContent = fmtMoney(latest.totalPerKm);
-      if (heroPartial) {
-        heroEl.title = latest.deprLifeExceeded ? FCM.formatLifeExceededMessage(latest.deprLifeNearLimit) :
-          'Cannot calculate total — one or more components are missing.';
+      if (latest.totalMissing && latest.totalMissing.length) {
+        heroEl.className = 'hero-value partial';
+        heroEl.innerHTML = fmtMoney(latest.totalPerKm) +
+          ' <span class="hero-partial-suffix">' + esc(partialTotalSuffix(latest.totalMissing)) + '</span>';
+        heroEl.title = partialTotalTooltip(latest.totalMissing);
       } else {
+        heroEl.className = 'hero-value';
+        heroEl.textContent = fmtMoney(latest.totalPerKm);
         heroEl.removeAttribute('title');
       }
     } else {
       heroEl.className = 'hero-value missing';
-      heroEl.textContent = latest.deprLifeExceeded
-        ? FCM.formatLifeExceededMessage(latest.deprLifeNearLimit)
-        : 'Cannot calculate total — one or more components are missing or overridden incompletely.';
-      heroEl.title = latest.deprLifeExceeded ? FCM.formatLifeExceededMessage(latest.deprLifeNearLimit) : '';
+      heroEl.textContent = 'Cannot calculate total — no cost components are available for this period.';
+      heroEl.removeAttribute('title');
     }
 
     document.getElementById('hero-breakdown').innerHTML =
@@ -824,7 +871,7 @@
         '<td>' + renderCellValue(p.deprPerKm, p.deprOverride, p.deprMissing, false, p.deprLifeExceeded, p.deprLifeNearLimit) + '</td>' +
         '<td>' + renderCellValue(p.maintPerKm, p.maintOverride, p.maintMissing, false) + '</td>' +
         '<td>' + renderCellValue(p.servPerKm, p.servOverride, p.servMissing, false) + '</td>' +
-        '<td>' + renderCellValue(p.totalPerKm, null, null, true) + '</td>' +
+        '<td>' + renderTotalCell(p) + '</td>' +
         '<td><button type="button" class="btn-override" data-period-idx="' + idx + '">Override</button></td>' +
       '</tr>';
     }).join('');
