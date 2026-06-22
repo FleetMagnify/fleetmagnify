@@ -560,7 +560,7 @@
           x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4A5568', font: { size: 10 }, maxRotation: 45 } },
           y: {
             grid: { color: 'rgba(255,255,255,0.04)' },
-            ticks: { color: '#4A5568', callback: function(v) { return '$' + v; } },
+            ticks: { color: '#4A5568', callback: function(v) { return '$' + Number(v).toFixed(2); } },
             title: { display: true, text: 'NZD per km', color: '#3A4A5C', font: { size: 10 } }
           }
         }
@@ -649,7 +649,7 @@
         scales: {
           x: {
             grid: { color: 'rgba(255,255,255,0.04)' },
-            ticks: { color: '#4A5568', callback: function(v) { return '$' + v; } }
+            ticks: { color: '#4A5568', callback: function(v) { return '$' + Number(v).toFixed(2); } }
           },
           y: { grid: { display: false }, ticks: { color: '#6B7785', font: { size: 11 } } }
         }
