@@ -311,6 +311,7 @@
   var DEFAULT_HOURS_PER_WEEK = 40;
   var AWAITING_FUEL_MSG = 'Awaiting telematics data';
   var AWAITING_SHORT = 'Awaiting';
+  var TRUCK_MODULES_MSG = 'See Truck Modules';
   var FLEET_PARTIAL_IDLE_MSG = '(partial — some assets have incomplete data)';
 
   var FUEL_PDF = {
@@ -1114,7 +1115,8 @@
 
       var hasFuel = assetFuel.length > 0 && totalLitres > 0;
       var hasTelActivity = totalOpHours > 0 || totalIdleHours > 0;
-      var awaitingFuel = !hasFuel && hasTelActivity;
+      var onRoad = FCM.isOnRoad(asset);
+      var awaitingFuel = !onRoad && !hasFuel && hasTelActivity;
 
       var avgCostPerLitre = totalLitres > 0 ? totalFuelCost / totalLitres : 0;
       var purchasePrice = parseFloat(asset.purchase_price) || 0;
@@ -1126,17 +1128,20 @@
       var serviceCost = totalIdleHours * servicePerHour;
       var totalIdleCost = idleFuelCost + deprCost + serviceCost;
       var totalCo2 = totalLitres * factor;
-      var util = calcAssetUtilisationForAsset(asset, assetTel);
+      var util = onRoad ? null : calcAssetUtilisationForAsset(asset, assetTel);
 
       assetSummaries.push({
         assetName: asset.asset_name,
+        isOnRoad: onRoad,
         awaitingFuel: awaitingFuel,
-        fuelCost: totalFuelCost,
-        idleCost: totalIdleCost,
-        co2: totalCo2,
+        fuelCost: onRoad ? 0 : totalFuelCost,
+        idleCost: onRoad ? 0 : totalIdleCost,
+        co2: onRoad ? 0 : totalCo2,
         utilRate: util ? util.rate : null,
         hasUtil: !!util
       });
+
+      if (onRoad) return;
 
       if (!awaitingFuel) {
         fleet.fuelCost += totalFuelCost;
@@ -1184,6 +1189,15 @@
             fmtMoney(a.idleCost),
             a.co2.toFixed(1),
             a.utilRate.toFixed(1) + '%'
+          ];
+        }
+        if (a.isOnRoad) {
+          return [
+            a.assetName,
+            TRUCK_MODULES_MSG,
+            fmtMoney(0),
+            TRUCK_MODULES_MSG,
+            '—'
           ];
         }
         if (a.awaitingFuel) {
@@ -1239,7 +1253,7 @@
     }
     if (report.reportType === 'fleet') {
       downloadStructuredReportCsv(report, config, assets, filename, 'Full Fleet Summary Report',
-        'Note: "' + AWAITING_SHORT + '" indicates telematics activity without fuel records. Utilisation uses recorded-data windows.');
+        'Note: "' + AWAITING_SHORT + '" indicates telematics without fuel records. "' + TRUCK_MODULES_MSG + '" indicates on-road assets tracked in Truck Modules.');
       return;
     }
     var lines = [report.csvHeaders.join(',')];
@@ -1424,6 +1438,7 @@
       var valueLines = doc.splitTextToSize(String(item[1]), colW - 2);
       valueLines.forEach(function(line, li) {
         if (line.indexOf(AWAITING_FUEL_MSG) !== -1 || line.indexOf(AWAITING_SHORT) !== -1 ||
+            line.indexOf(TRUCK_MODULES_MSG) !== -1 ||
             line.indexOf('(partial') !== -1 || line.indexOf('Cannot calculate') === 0) {
           fuelPdfSetColor(doc, FUEL_PDF.amber);
         } else {
@@ -1472,10 +1487,11 @@
       didParseCell: function(data) {
         if (data.section === 'body' && typeof data.cell.raw === 'string') {
           var raw = data.cell.raw;
-          if (raw === AWAITING_FUEL_MSG || raw === AWAITING_SHORT ||
+          if (raw === AWAITING_FUEL_MSG || raw === AWAITING_SHORT || raw === TRUCK_MODULES_MSG ||
               raw.indexOf('(partial') !== -1 || raw.indexOf('Cannot calculate') === 0) {
             data.cell.styles.textColor = FUEL_PDF.amber;
-            if (raw === AWAITING_FUEL_MSG || raw === AWAITING_SHORT || raw.indexOf('(partial') !== -1) {
+            if (raw === AWAITING_FUEL_MSG || raw === AWAITING_SHORT || raw === TRUCK_MODULES_MSG ||
+                raw.indexOf('(partial') !== -1) {
               data.cell.styles.fontStyle = 'italic';
             }
           }
