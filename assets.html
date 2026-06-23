@@ -111,8 +111,10 @@
   #assets-table .col-type { width: 14%; }
   #assets-table .col-make-model { width: 22%; }
   #assets-table .col-year { width: 10%; }
-  #assets-table .col-life { width: 14%; }
-  #assets-table .col-edit { width: 1%; white-space: nowrap; overflow: visible; text-overflow: clip; }
+  #assets-table .col-life { width: 13%; }
+  #assets-table .col-actions { width: 1%; white-space: nowrap; overflow: visible; text-overflow: clip; }
+  #assets-table thead th.col-actions,
+  #assets-table tbody td.col-actions { overflow: visible; text-overflow: clip; }
   thead th { padding: 11px 14px; text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #FFFFFF; border-bottom: 1px solid #2D3748; background: rgba(255,255,255,0.01); white-space: nowrap; }
   tbody tr { border-bottom: 1px solid #2D3748; transition: background 0.15s; }
   tbody tr:last-child { border-bottom: none; }
@@ -122,11 +124,13 @@
   #assets-table .col-make-model { white-space: normal; overflow: visible; text-overflow: clip; }
   .asset-name-cell { font-weight: 600; color: #D8DFE8; white-space: normal; overflow: visible; text-overflow: clip; }
   .asset-type-badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 100px; background: rgba(255,255,255,0.05); border: 1px solid #2D3748; color: #6B7785; white-space: nowrap; }
-  .actions-cell { display: flex; align-items: center; white-space: nowrap; flex-shrink: 0; }
-  .btn-edit { background: none; border: 1px solid rgba(14,165,122,0.25); color: #0EA57A; font-size: 12px; font-weight: 600; padding: 5px 14px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; flex-shrink: 0; white-space: nowrap; }
-  .btn-edit:hover { border-color: rgba(14,165,122,0.45); background: rgba(14,165,122,0.10); }
-  .btn-delete { background: none; border: 1px solid transparent; color: #6B7785; font-size: 13px; font-weight: 500; padding: 12px 0; margin-right: auto; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
-  .btn-delete:hover { color: #F0A8A7; }
+  .actions-cell { display: flex; align-items: center; gap: 4px; white-space: nowrap; flex-shrink: 0; }
+  .actions-cell .btn-edit { background: none; border: 1px solid transparent; color: #3A4A5C; font-size: 11px; font-weight: 500; padding: 4px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; flex-shrink: 0; white-space: nowrap; }
+  .actions-cell .btn-edit:hover { border-color: rgba(14,165,122,0.35); color: #0EA57A; background: rgba(14,165,122,0.08); }
+  .actions-cell .btn-delete { background: none; border: 1px solid transparent; color: #3A4A5C; font-size: 11px; font-weight: 500; padding: 4px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; flex-shrink: 0; white-space: nowrap; }
+  .actions-cell .btn-delete:hover { border-color: rgba(226,75,74,0.3); color: #F0A8A7; background: rgba(226,75,74,0.08); }
+  #delete-asset-modal-btn { background: none; border: 1px solid transparent; color: #6B7785; font-size: 13px; font-weight: 500; padding: 12px 0; margin-right: auto; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  #delete-asset-modal-btn:hover { color: #F0A8A7; }
   .empty-state { padding: 60px 24px; text-align: center; }
   .empty-icon { font-size: 40px; margin-bottom: 16px; opacity: 0.4; }
   .empty-title { font-size: 16px; font-weight: 700; color: #4A5568; margin-bottom: 8px; }
@@ -408,7 +412,7 @@
             <colgroup id="assets-colgroup"></colgroup>
             <thead id="assets-thead">
               <tr>
-                <th>Asset Name</th><th>Type</th><th>Make / Model</th><th>Year</th><th>Expected Life</th><th></th>
+                <th>Asset Name</th><th>Type</th><th>Make / Model</th><th>Year</th><th>Expected Life</th><th>Actions</th>
               </tr>
             </thead>
             <tbody id="assets-tbody">
@@ -573,7 +577,7 @@
       <div id="telematics-visionlink-msg" class="telematics-coming-soon">VisionLink connection coming soon</div>
     </div>
     <div class="modal-actions">
-      <button type="button" class="btn-delete" id="delete-asset-modal-btn" hidden>Delete Asset</button>
+      <button type="button" id="delete-asset-modal-btn" hidden>Delete Asset</button>
       <button type="button" class="btn-cancel" id="cancel-modal-btn">Cancel</button>
       <button type="submit" class="btn-save" id="save-asset-btn">Add Asset</button>
     </div>
@@ -741,8 +745,9 @@
         '<td class="col-make-model">' + esc(formatMakeModel(a.make, a.model)) + '</td>' +
         '<td class="col-year">' + esc(a.year ? String(a.year) : '—') + '</td>' +
         '<td class="col-life">' + esc(formatExpectedLife(a)) + '</td>' +
-        '<td class="col-edit"><div class="actions-cell">' +
+        '<td class="col-actions"><div class="actions-cell">' +
           '<button type="button" class="btn-edit" data-id="' + a.id + '">Edit</button>' +
+          '<button type="button" class="btn-delete" data-id="' + a.id + '">Delete</button>' +
         '</div></td>' +
       '</tr>';
       return row;
@@ -750,6 +755,9 @@
 
     tbody.querySelectorAll('.btn-edit').forEach(function(btn) {
       btn.addEventListener('click', function() { openEditModal(btn.dataset.id); });
+    });
+    tbody.querySelectorAll('.btn-delete').forEach(function(btn) {
+      btn.addEventListener('click', function() { openConfirmDelete(btn.dataset.id); });
     });
   }
 
@@ -842,7 +850,7 @@
       { label: 'Make / Model', cls: 'col-make-model' },
       { label: 'Year', cls: 'col-year' },
       { label: 'Expected Life', cls: 'col-life' },
-      { label: '', cls: 'col-edit' }
+      { label: 'Actions', cls: 'col-actions' }
     ];
   }
 
