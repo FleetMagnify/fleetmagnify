@@ -136,6 +136,64 @@
     background: linear-gradient(to bottom, transparent 45%, rgba(8,12,18,0.55) 100%);
   }
 
+  /* ── POSITIONING ── */
+  .positioning {
+    padding: 72px 3rem 80px;
+    background: #080C12;
+    border-bottom: 1px solid #2D3748;
+  }
+  .positioning-inner { max-width: 1280px; margin: 0 auto; }
+  .positioning-headline {
+    font-size: 34px; font-weight: 800; letter-spacing: -1.4px;
+    line-height: 1.15; color: #F0F2F5; text-align: center;
+    max-width: 820px; margin: 0 auto 40px;
+  }
+  .positioning-headline .accent { color: #0EA57A; }
+  .positioning-columns {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+    margin-bottom: 28px;
+  }
+  .positioning-col {
+    border-radius: 16px; padding: 28px 30px;
+  }
+  .positioning-col.traditional {
+    background: #111827;
+    border: 1px solid #2D3748;
+  }
+  .positioning-col.fleetmagnify {
+    background: rgba(14,165,122,0.04);
+    border: 1px solid rgba(14,165,122,0.22);
+  }
+  .positioning-col h3 {
+    font-size: 13px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; margin-bottom: 14px;
+  }
+  .positioning-col.traditional h3 { color: #6B7785; }
+  .positioning-col.fleetmagnify h3 { color: #0EA57A; }
+  .positioning-col p {
+    font-size: 15px; line-height: 1.55; color: #E2E8F0;
+  }
+  .positioning-col.traditional p { color: #9BA4B0; }
+  .positioning-col.fleetmagnify p { color: #E2E8F0; }
+  .positioning-points {
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .contrast-point {
+    display: grid; grid-template-columns: 1fr auto 1fr;
+    gap: 16px; align-items: center;
+    background: #111827; border: 1px solid #2D3748;
+    border-radius: 10px; padding: 14px 20px;
+    font-size: 13.5px; line-height: 1.45;
+  }
+  .contrast-point .side-telematics { color: #6B7785; text-align: right; }
+  .contrast-point .side-fm { color: #E2E8F0; }
+  .contrast-point .vs {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #3A4A5C; flex-shrink: 0;
+  }
+  .contrast-point .side-telematics strong { color: #6B7785; font-weight: 600; }
+  .contrast-point .side-fm strong { color: #0EA57A; font-weight: 600; }
+
   /* ── PILOT STRIP ── */
   .pilot-strip {
     padding: 28px 3rem;
@@ -489,6 +547,15 @@
     .hero-inner { grid-template-columns: 1fr; gap: 48px; }
     .hero h1 { font-size: 44px; }
     .hero-visual { display: none; }
+    .positioning { padding: 56px 1.5rem 64px; }
+    .positioning-headline { font-size: 26px; letter-spacing: -1px; margin-bottom: 32px; }
+    .positioning-columns { grid-template-columns: 1fr; gap: 14px; }
+    .contrast-point {
+      grid-template-columns: 1fr;
+      gap: 6px; text-align: left; padding: 14px 16px;
+    }
+    .contrast-point .side-telematics { text-align: left; }
+    .contrast-point .vs { display: none; }
     .pilot-strip { padding: 24px 1.5rem; }
     .features { padding: 64px 1.5rem; }
     .module-group { padding: 28px 20px 32px; }
@@ -577,6 +644,43 @@
       </div>
     </div>
 
+  </div>
+</section>
+
+<!-- ── POSITIONING ─────────────────────────────── -->
+<section class="positioning">
+  <div class="positioning-inner">
+    <h2 class="positioning-headline">
+      Telematics tells you where your fleet is.<br>
+      <span class="accent">FleetMagnify</span> tells you what it's costing you.
+    </h2>
+    <div class="positioning-columns">
+      <div class="positioning-col traditional">
+        <h3>Traditional Telematics</h3>
+        <p>GPS tracking, compliance reporting, and driver behaviour — built around location and hours logged.</p>
+      </div>
+      <div class="positioning-col fleetmagnify">
+        <h3>FleetMagnify</h3>
+        <p>Financial intelligence layered on your data — true operating cost, idle waste, and job-level profitability.</p>
+      </div>
+    </div>
+    <div class="positioning-points">
+      <div class="contrast-point">
+        <span class="side-telematics"><strong>Telematics:</strong> Compliance and driver monitoring</span>
+        <span class="vs">|</span>
+        <span class="side-fm"><strong>FleetMagnify:</strong> True cost per asset per month</span>
+      </div>
+      <div class="contrast-point">
+        <span class="side-telematics"><strong>Telematics:</strong> Location and hours logging</span>
+        <span class="vs">|</span>
+        <span class="side-fm"><strong>FleetMagnify:</strong> Idle waste, depreciation, job costing</span>
+      </div>
+      <div class="contrast-point">
+        <span class="side-telematics"><strong>Telematics:</strong> Sold to fleet managers</span>
+        <span class="vs">|</span>
+        <span class="side-fm"><strong>FleetMagnify:</strong> Built for owners and GMs</span>
+      </div>
+    </div>
   </div>
 </section>
 
