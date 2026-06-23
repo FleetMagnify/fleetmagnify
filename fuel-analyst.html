@@ -103,6 +103,18 @@
   .method-note p strong { color: #C8D0DB; font-weight: 600; }
   .method-note a { color: #0EA57A; text-decoration: none; cursor: pointer; }
 
+  .no-fuel-banner {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: rgba(239,159,39,0.08); border: 1px solid rgba(239,159,39,0.28);
+    border-radius: 12px; padding: 14px 18px; margin-bottom: 20px;
+  }
+  .no-fuel-banner[hidden] { display: none !important; }
+  .no-fuel-banner-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .no-fuel-banner p { font-size: 13px; color: #C8A060; line-height: 1.6; }
+  .no-fuel-banner p strong { color: #EF9F27; font-weight: 600; }
+  .no-fuel-banner a { color: #0EA57A; font-weight: 600; text-decoration: none; }
+  .no-fuel-banner a:hover { text-decoration: underline; }
+
   /* ── FILTER BAR ── */
   .filter-bar {
     background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07);
@@ -292,6 +304,11 @@
       <button class="btn-apply" id="apply-filters-btn" disabled>Apply Filters</button>
     </div>
 
+    <div class="no-fuel-banner" id="no-fuel-banner" hidden>
+      <div class="no-fuel-banner-icon">⚠</div>
+      <p><strong>No fuel data available for this asset in the selected period.</strong> Fuel consumption figures will appear automatically once your telematics provider (VisionLink, Komtrax, etc.) is connected via the <a href="integrations.html">Integrations page</a>.</p>
+    </div>
+
     <!-- KPI ROW — Construction Equipment -->
     <div class="kpi-row" id="kpi-row-construction">
       <div class="kpi-card">
@@ -414,6 +431,29 @@
   var NO_ODOMETER_MSG = 'No odometer data available yet — this will populate automatically once your eRoad integration is connected';
   var NO_DATA_TITLE = 'No data available for this period';
   var FILL_TO_FILL_TITLE = 'Fuel cost is calculated per fill-to-fill period, not per day — see the explanation banner above';
+
+  function hideNoFuelBanner() {
+    document.getElementById('no-fuel-banner').hidden = true;
+  }
+
+  function telHasActivity(telRows) {
+    var totalOp = 0;
+    var totalIdle = 0;
+    telRows.forEach(function(r) {
+      totalOp += parseFloat(r.operating_hours) || 0;
+      totalIdle += parseFloat(r.idle_hours) || 0;
+    });
+    return totalOp > 0 || totalIdle > 0;
+  }
+
+  function updateNoFuelBanner(fuelRows, telRows, isMachinery) {
+    var banner = document.getElementById('no-fuel-banner');
+    if (!isMachinery || fuelRows.length > 0 || !telHasActivity(telRows)) {
+      banner.hidden = true;
+      return;
+    }
+    banner.hidden = false;
+  }
 
   function isOnRoadAsset(asset) {
     return asset && ON_ROAD_TYPES.indexOf(asset.asset_type) !== -1;
@@ -651,6 +691,7 @@
       applyBtn.disabled = true;
       setViewMode(false);
       resetKpis(false);
+      hideNoFuelBanner();
       return;
     }
     setViewMode(isOnRoadAsset(selectedAsset));
@@ -704,11 +745,13 @@
     var telRows = (telResult.data || []);
 
     if (fuelRows.length === 0 && telRows.length === 0) {
+      hideNoFuelBanner();
       showEmpty(isOnRoadAsset(selectedAsset));
       return;
     }
 
     if (isOnRoadAsset(selectedAsset)) {
+      hideNoFuelBanner();
       runOnRoadAnalysis(fuelRows, telRows, idleRate);
     } else {
       runConstructionAnalysis(fuelRows, telRows, idleRate);
@@ -717,6 +760,7 @@
 
   function runConstructionAnalysis(fuelRows, telRows, idleRate) {
     setViewMode(false);
+    updateNoFuelBanner(fuelRows, telRows, true);
     var hasAnyTel = telRows.length > 0;
     var byDate = mergeFuelAndTelematics(fuelRows, telRows);
     var dailyRows = buildConstructionDailyRows(byDate, idleRate);
@@ -985,6 +1029,7 @@
   function showEmpty(onRoad) {
     setViewMode(!!onRoad);
     resetKpis(!!onRoad);
+    hideNoFuelBanner();
     document.getElementById('chart-empty').style.display = 'block';
     document.getElementById('chart-empty').innerHTML = '<span class="icon">📊</span>Select an asset and date range, then click Apply Filters to view consumption data.';
     if (fuelChart) { fuelChart.destroy(); fuelChart = null; }

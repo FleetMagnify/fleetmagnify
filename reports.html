@@ -157,7 +157,7 @@
       <div class="report-card" data-report="fuel">
         <div class="report-icon">⛽</div>
         <h2>Fuel Analysis Report</h2>
-        <p class="report-desc">Daily fuel consumption split into operating and idle fuel, with litres and hours.</p>
+        <p class="report-desc">Fleet-wide fuel summary by asset, with daily operating vs. idle breakdown for assets that have fuel data.</p>
         <div>
           <span class="field-label">Asset Scope</span>
           <div class="scope-toggle">
@@ -307,6 +307,7 @@
   };
   var EMISSION_FACTORS = { 'Diesel': 2.68, 'Petrol': 2.31, 'Electric': 0, 'Hybrid': 1.5 };
   var DEFAULT_HOURS_PER_WEEK = 40;
+  var AWAITING_FUEL_MSG = 'Awaiting telematics data';
 
   var REPORT_TITLES = {
     fuel: 'Fuel Analysis Report',
@@ -452,37 +453,104 @@
   }
 
   function buildFuelReport(assets, fuel, tel) {
-    var rows = [];
+    var assetSummaries = [];
+    var dailySections = [];
     var totals = { litres: 0, cost: 0, idleFuel: 0, opFuel: 0, opHours: 0, idleHours: 0 };
 
     assets.forEach(function(asset) {
       var assetFuel = filterByAsset(fuel, asset.id);
       var assetTel = filterByAsset(tel, asset.id);
       var idleRate = getIdleRate(asset);
-      var byDate = mergeByDate(assetFuel, assetTel);
-      Object.keys(byDate).sort().forEach(function(date) {
-        var d = byDate[date];
-        var litres = d.litres || 0;
-        var cost = d.cost || 0;
-        var opHours = d.operating_hours || 0;
-        var idleHours = d.idle_hours || 0;
-        var idleFuel = Math.min(idleHours * idleRate, litres);
-        var opFuel = litres - idleFuel;
-        rows.push({
-          asset: asset.asset_name, date: date, litres: litres, cost: cost,
-          opHours: opHours, idleHours: idleHours, opFuel: opFuel, idleFuel: idleFuel,
-          opRate: opHours > 0 ? opFuel / opHours : 0,
-          idleRate: idleHours > 0 ? idleFuel / idleHours : 0
-        });
-        totals.litres += litres; totals.cost += cost;
-        totals.idleFuel += idleFuel; totals.opFuel += opFuel;
-        totals.opHours += opHours; totals.idleHours += idleHours;
+
+      var totalLitres = 0;
+      var totalCost = 0;
+      var totalOpHours = 0;
+      var totalIdleHours = 0;
+      assetFuel.forEach(function(r) {
+        totalLitres += parseFloat(r.litres) || 0;
+        totalCost += parseFloat(r.total_cost) || 0;
       });
+      assetTel.forEach(function(r) {
+        totalOpHours += parseFloat(r.operating_hours) || 0;
+        totalIdleHours += parseFloat(r.idle_hours) || 0;
+      });
+
+      var hasFuel = assetFuel.length > 0;
+      var hasTelActivity = totalOpHours > 0 || totalIdleHours > 0;
+      if (!hasFuel && !hasTelActivity) return;
+
+      var opFuel = 0;
+      var idleFuel = 0;
+      var idlePct = 0;
+      if (hasFuel) {
+        var byDate = mergeByDate(assetFuel, assetTel);
+        var dailyRows = [];
+        Object.keys(byDate).sort().forEach(function(date) {
+          var d = byDate[date];
+          var litres = d.litres || 0;
+          var cost = d.cost || 0;
+          if (litres <= 0 && cost <= 0) return;
+
+          var opHours = d.operating_hours || 0;
+          var idleHours = d.idle_hours || 0;
+          var dayIdleFuel = Math.min(idleHours * idleRate, litres);
+          var dayOpFuel = litres - dayIdleFuel;
+          opFuel += dayOpFuel;
+          idleFuel += dayIdleFuel;
+          dailyRows.push({
+            date: date,
+            litres: litres,
+            cost: cost,
+            opHours: opHours,
+            idleHours: idleHours,
+            opFuel: dayOpFuel,
+            idleFuel: dayIdleFuel,
+            opRate: opHours > 0 ? dayOpFuel / opHours : 0,
+            idleRateVal: idleHours > 0 ? dayIdleFuel / idleHours : 0
+          });
+        });
+        idlePct = totalLitres > 0 ? (idleFuel / totalLitres * 100) : 0;
+        if (dailyRows.length) {
+          dailySections.push({ assetName: asset.asset_name, rows: dailyRows });
+        }
+      }
+
+      assetSummaries.push({
+        assetName: asset.asset_name,
+        hasFuel: hasFuel,
+        awaitingFuel: !hasFuel && hasTelActivity,
+        totalLitres: totalLitres,
+        totalCost: totalCost,
+        opHours: totalOpHours,
+        idleHours: totalIdleHours,
+        opFuel: opFuel,
+        idleFuel: idleFuel,
+        idlePct: idlePct
+      });
+
+      if (hasFuel) {
+        totals.litres += totalLitres;
+        totals.cost += totalCost;
+        totals.idleFuel += idleFuel;
+        totals.opFuel += opFuel;
+      }
+      totals.opHours += totalOpHours;
+      totals.idleHours += totalIdleHours;
+    });
+
+    assetSummaries.sort(function(a, b) {
+      if (a.hasFuel && !b.hasFuel) return -1;
+      if (!a.hasFuel && b.hasFuel) return 1;
+      if (a.hasFuel && b.hasFuel) return b.totalCost - a.totalCost;
+      return a.assetName.localeCompare(b.assetName);
     });
 
     var idleCost = totals.litres > 0 ? totals.cost * (totals.idleFuel / totals.litres) : 0;
     return {
-      rows: rows,
+      reportType: 'fuel',
+      assetSummaries: assetSummaries,
+      dailySections: dailySections,
+      rows: assetSummaries,
       summary: [
         ['Total Fuel Cost', fmtMoney(totals.cost)],
         ['Total Litres', totals.litres.toFixed(1) + ' L'],
@@ -492,13 +560,44 @@
         ['Total Operating Hours', totals.opHours.toFixed(1) + ' hr'],
         ['Total Idle Hours', totals.idleHours.toFixed(1) + ' hr']
       ],
-      csvHeaders: ['Asset', 'Date', 'Total Litres', 'Total Cost', 'Operating Hours', 'Idle Hours', 'Operating Fuel (L)', 'Idle Fuel (L)', 'Operating Rate (L/hr)', 'Idle Rate (L/hr)'],
-      csvRow: function(r) {
-        return [r.asset, r.date, r.litres.toFixed(2), r.cost.toFixed(2), r.opHours.toFixed(2), r.idleHours.toFixed(2), r.opFuel.toFixed(2), r.idleFuel.toFixed(2), r.opRate.toFixed(2), r.idleRate.toFixed(2)];
+      assetSummaryHeaders: ['Asset', 'Total Litres', 'Total Cost', 'Operating Hrs', 'Idle Hrs', 'Operating Fuel', 'Idle Fuel', 'Idle Fuel %'],
+      assetSummaryRow: function(a) {
+        if (a.awaitingFuel) {
+          return [
+            a.assetName,
+            AWAITING_FUEL_MSG,
+            AWAITING_FUEL_MSG,
+            a.opHours.toFixed(1),
+            a.idleHours.toFixed(1),
+            AWAITING_FUEL_MSG,
+            AWAITING_FUEL_MSG,
+            AWAITING_FUEL_MSG
+          ];
+        }
+        return [
+          a.assetName,
+          a.totalLitres.toFixed(1) + ' L',
+          fmtMoney(a.totalCost),
+          a.opHours.toFixed(1),
+          a.idleHours.toFixed(1),
+          a.opFuel.toFixed(1) + ' L',
+          a.idleFuel.toFixed(1) + ' L',
+          a.idlePct.toFixed(1) + '%'
+        ];
       },
-      pdfHeaders: ['Asset', 'Date', 'Litres', 'Cost', 'Op Hrs', 'Idle Hrs', 'Op Fuel', 'Idle Fuel'],
-      pdfRow: function(r) {
-        return [r.asset, r.date, r.litres.toFixed(1), fmtMoney(r.cost), r.opHours.toFixed(1), r.idleHours.toFixed(1), r.opFuel.toFixed(1), r.idleFuel.toFixed(1)];
+      dailyHeaders: ['Date', 'Total Litres', 'Total Cost', 'Operating Hrs', 'Idle Hrs', 'Operating Fuel', 'Idle Fuel', 'Op Rate (L/hr)', 'Idle Rate (L/hr)'],
+      dailyRow: function(r) {
+        return [
+          r.date,
+          r.litres.toFixed(1) + ' L',
+          fmtMoney(r.cost),
+          r.opHours.toFixed(1),
+          r.idleHours.toFixed(1),
+          r.opFuel.toFixed(1) + ' L',
+          r.idleFuel.toFixed(1) + ' L',
+          r.opRate.toFixed(2),
+          r.idleRateVal.toFixed(2)
+        ];
       }
     };
   }
@@ -737,11 +836,55 @@
     }
   }
 
-  function downloadCsv(report, config, filename) {
+  function downloadCsv(report, config, assets, filename) {
+    if (report.reportType === 'fuel') {
+      downloadFuelCsv(report, config, assets, filename);
+      return;
+    }
     var lines = [report.csvHeaders.join(',')];
     report.rows.forEach(function(r) { lines.push(report.csvRow(r).join(',')); });
     if (report.fleetRow) lines.push(report.csvRow(report.fleetRow).join(','));
-    var blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    triggerCsvDownload(lines.join('\n'), filename);
+  }
+
+  function downloadFuelCsv(report, config, assets, filename) {
+    var generatedAt = new Date().toLocaleString('en-NZ');
+    var lines = [
+      'Fuel Analysis Report',
+      'Date Range,' + config.dateFrom + ' to ' + config.dateTo,
+      'Scope,' + scopeLabel(config, assets),
+      'Generated,' + generatedAt,
+      '',
+      'FLEET SUMMARY'
+    ];
+    report.summary.forEach(function(item) {
+      lines.push(item[0] + ',' + csvEscape(item[1]));
+    });
+    lines.push('');
+    lines.push('ASSET SUMMARY');
+    lines.push(report.assetSummaryHeaders.join(','));
+    report.assetSummaries.forEach(function(a) {
+      lines.push(report.assetSummaryRow(a).map(csvEscape).join(','));
+    });
+    report.dailySections.forEach(function(section) {
+      lines.push('');
+      lines.push('DAILY DETAIL — ' + section.assetName);
+      lines.push(report.dailyHeaders.join(','));
+      section.rows.forEach(function(r) {
+        lines.push(report.dailyRow(r).map(csvEscape).join(','));
+      });
+    });
+    triggerCsvDownload(lines.join('\n'), filename);
+  }
+
+  function csvEscape(value) {
+    var str = String(value);
+    if (/[",\n]/.test(str)) return '"' + str.replace(/"/g, '""') + '"';
+    return str;
+  }
+
+  function triggerCsvDownload(content, filename) {
+    var blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = filename;
@@ -750,6 +893,10 @@
   }
 
   function downloadPdf(report, config, assets, title) {
+    if (report.reportType === 'fuel') {
+      downloadFuelPdf(report, config, assets, title);
+      return;
+    }
     var jsPDF = window.jspdf.jsPDF;
     var doc = new jsPDF({ orientation: report.fleetRow ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
     var pageW = doc.internal.pageSize.getWidth();
@@ -815,6 +962,104 @@
     doc.save(title.replace(/\s+/g, '_').toLowerCase() + '.pdf');
   }
 
+  function downloadFuelPdf(report, config, assets, title) {
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    var pageW = doc.internal.pageSize.getWidth();
+    var pageH = doc.internal.pageSize.getHeight();
+    var margin = 14;
+    var generatedAt = new Date().toLocaleString('en-NZ');
+
+    doc.setFillColor(14, 165, 122);
+    doc.rect(0, 0, pageW, 28, 'F');
+    doc.setTextColor(8, 12, 18);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('FleetMagnify', margin, 12);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(title, margin, 19);
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9);
+    doc.text(companyName, pageW - margin, 12, { align: 'right' });
+    doc.text(config.dateFrom + '  to  ' + config.dateTo, pageW - margin, 19, { align: 'right' });
+
+    doc.setTextColor(60, 70, 85);
+    doc.setFontSize(9);
+    doc.text('Scope: ' + scopeLabel(config, assets), margin, 36);
+    doc.text('Generated: ' + generatedAt, pageW - margin, 36, { align: 'right' });
+
+    doc.setTextColor(30, 40, 55);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Fleet Summary', margin, 46);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    var y = 52;
+    report.summary.forEach(function(item) {
+      doc.setTextColor(90, 100, 115);
+      doc.text(item[0] + ':', margin, y);
+      doc.setTextColor(30, 40, 55);
+      doc.setFont('helvetica', 'bold');
+      doc.text(String(item[1]), margin + 52, y);
+      doc.setFont('helvetica', 'normal');
+      y += 6;
+    });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(30, 40, 55);
+    doc.text('Asset Summary', margin, y + 4);
+
+    doc.autoTable({
+      startY: y + 8,
+      head: [report.assetSummaryHeaders],
+      body: report.assetSummaries.map(report.assetSummaryRow),
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 8, cellPadding: 2.5, textColor: [40, 50, 65] },
+      headStyles: { fillColor: [14, 165, 122], textColor: [8, 12, 18], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [245, 247, 250] },
+      didParseCell: function(data) {
+        if (data.section === 'body' && typeof data.cell.raw === 'string' && data.cell.raw === AWAITING_FUEL_MSG) {
+          data.cell.styles.textColor = [180, 130, 40];
+          data.cell.styles.fontStyle = 'italic';
+        }
+      }
+    });
+
+    y = doc.lastAutoTable.finalY + 10;
+    report.dailySections.forEach(function(section, idx) {
+      if (y > pageH - 40) {
+        doc.addPage();
+        y = margin;
+      }
+      if (idx > 0) {
+        doc.setDrawColor(210, 215, 220);
+        doc.setLineWidth(0.4);
+        doc.line(margin, y - 4, pageW - margin, y - 4);
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(30, 40, 55);
+      doc.text('Daily Detail — ' + section.assetName, margin, y);
+      doc.autoTable({
+        startY: y + 4,
+        head: [report.dailyHeaders],
+        body: section.rows.map(report.dailyRow),
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 7.5, cellPadding: 2, textColor: [40, 50, 65] },
+        headStyles: { fillColor: [230, 240, 236], textColor: [20, 40, 35], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 250, 252] }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+    });
+
+    doc.setFontSize(8);
+    doc.setTextColor(150, 160, 175);
+    doc.text('Generated by FleetMagnify · ' + generatedAt, margin, pageH - 8);
+    doc.save(title.replace(/\s+/g, '_').toLowerCase() + '.pdf');
+  }
+
   async function handleExport(card, format, btn) {
     var config = getCardConfig(card);
     if (!config.dateFrom || !config.dateTo) {
@@ -845,13 +1090,17 @@
       var records = await fetchRecords(assets.map(function(a) { return a.id; }), config.dateFrom, config.dateTo);
       var report = buildReport(config.report, assets, records, config.dateFrom, config.dateTo);
 
-      if (report.rows.length === 0) {
+      if (config.report === 'fuel') {
+        if (!report.assetSummaries || report.assetSummaries.length === 0) {
+          throw new Error('No fuel or telematics activity found for the selected scope and date range.');
+        }
+      } else if (report.rows.length === 0) {
         throw new Error('No data found for the selected scope and date range.');
       }
 
       var title = REPORT_TITLES[config.report];
       if (format === 'csv') {
-        downloadCsv(report, config, title.replace(/\s+/g, '_').toLowerCase() + '.csv');
+        downloadCsv(report, config, assets, title.replace(/\s+/g, '_').toLowerCase() + '.csv');
       } else {
         downloadPdf(report, config, assets, title);
       }
