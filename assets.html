@@ -107,12 +107,12 @@
   #assets-table tbody tr:last-child { border-bottom: none; }
   #assets-table tbody tr:hover { background: #111827; }
   #assets-table tbody td { padding: 10px 8px; font-size: 13px; color: #E2E8F0; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #assets-table .col-name { width: 32%; }
-  #assets-table .col-type { width: 14%; }
-  #assets-table .col-make-model { width: 22%; }
-  #assets-table .col-year { width: 10%; }
-  #assets-table .col-life { width: 13%; }
-  #assets-table .col-actions { width: 1%; white-space: nowrap; overflow: visible; text-overflow: clip; }
+  #assets-table .col-name { width: auto; }
+  #assets-table .col-type { width: 130px; min-width: 130px; }
+  #assets-table .col-make-model { width: 220px; min-width: 220px; }
+  #assets-table .col-year { width: 60px; min-width: 60px; }
+  #assets-table .col-life { width: 120px; min-width: 120px; }
+  #assets-table .col-actions { width: 160px; min-width: 160px; white-space: nowrap; overflow: visible; text-overflow: clip; }
   #assets-table thead th.col-actions,
   #assets-table tbody td.col-actions { overflow: visible; text-overflow: clip; }
   thead th { padding: 11px 14px; text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #FFFFFF; border-bottom: 1px solid #2D3748; background: rgba(255,255,255,0.01); white-space: nowrap; }
@@ -846,18 +846,20 @@
   function getColumnLayout() {
     return [
       { label: 'Asset Name', cls: 'col-name' },
-      { label: 'Type', cls: 'col-type' },
-      { label: 'Make / Model', cls: 'col-make-model' },
-      { label: 'Year', cls: 'col-year' },
-      { label: 'Expected Life', cls: 'col-life' },
-      { label: 'Actions', cls: 'col-actions' }
+      { label: 'Type', cls: 'col-type', width: '130px' },
+      { label: 'Make / Model', cls: 'col-make-model', width: '220px' },
+      { label: 'Year', cls: 'col-year', width: '60px' },
+      { label: 'Expected Life', cls: 'col-life', width: '120px' },
+      { label: 'Actions', cls: 'col-actions', width: '160px' }
     ];
   }
 
   function renderTableHeader() {
     var cols = getColumnLayout();
     document.getElementById('assets-colgroup').innerHTML =
-      cols.map(function(c) { return '<col class="' + c.cls + '">'; }).join('');
+      cols.map(function(c) {
+        return '<col class="' + c.cls + '"' + (c.width ? ' style="width:' + c.width + '"' : '') + '>';
+      }).join('');
     document.getElementById('assets-thead').innerHTML =
       '<tr>' + cols.map(function(c) { return '<th class="' + c.cls + '">' + c.label + '</th>'; }).join('') + '</tr>';
   }
