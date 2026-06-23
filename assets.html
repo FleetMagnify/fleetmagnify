@@ -100,25 +100,44 @@
   .search-box input { background: none; border: none; outline: none; font-size: 13px; color: #C8D0DB; font-family: inherit; width: 200px; }
   .search-box input::placeholder { color: #2E3A4A; }
   table { width: 100%; border-collapse: collapse; }
+  .assets-table-wrap { width: 100%; }
+  #assets-table { width: 100%; table-layout: fixed; }
+  #assets-table thead th { padding: 10px 8px; text-align: left; font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #FFFFFF; border-bottom: 1px solid #2D3748; background: rgba(255,255,255,0.01); white-space: normal; line-height: 1.25; word-break: break-word; }
+  #assets-table tbody tr { border-bottom: 1px solid #2D3748; transition: background 0.15s; }
+  #assets-table tbody tr:last-child { border-bottom: none; }
+  #assets-table tbody tr:hover { background: #111827; }
+  #assets-table tbody td { padding: 10px 8px; font-size: 13px; color: #E2E8F0; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #assets-table .col-name { width: 14%; }
+  #assets-table .col-type { width: 7%; }
+  #assets-table .col-make { width: 7%; }
+  #assets-table .col-model { width: 7%; }
+  #assets-table .col-year { width: 4%; }
+  #assets-table .col-fuel { width: 6%; }
+  #assets-table .col-idle { width: 9%; white-space: normal; overflow: visible; text-overflow: clip; }
+  #assets-table .col-life-hrs { width: 6%; }
+  #assets-table .col-serv-hr { width: 7%; }
+  #assets-table .col-life-km { width: 6%; }
+  #assets-table .col-serv-km { width: 7%; }
+  #assets-table .col-actions { width: 1%; white-space: nowrap; overflow: visible; text-overflow: clip; }
   thead th { padding: 11px 14px; text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #FFFFFF; border-bottom: 1px solid #2D3748; background: rgba(255,255,255,0.01); white-space: nowrap; }
   tbody tr { border-bottom: 1px solid #2D3748; transition: background 0.15s; }
   tbody tr:last-child { border-bottom: none; }
   tbody tr:hover { background: #111827; }
   tbody td { padding: 12px 14px; font-size: 13.5px; color: #E2E8F0; vertical-align: middle; }
-  .asset-name-cell { font-weight: 600; color: #D8DFE8; }
-  .asset-type-badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 100px; background: rgba(255,255,255,0.05); border: 1px solid #2D3748; color: #6B7785; white-space: nowrap; }
-  .idle-rate-cell { display: flex; align-items: center; gap: 6px; }
-  .idle-rate-input { width: 64px; background: rgba(255,255,255,0.04); border: 1px solid #2D3748; border-radius: 6px; padding: 5px 8px; color: #F0F2F5; font-size: 12.5px; font-family: inherit; outline: none; transition: border-color 0.2s; }
+  .asset-name-cell { font-weight: 600; color: #D8DFE8; white-space: normal; overflow: visible; text-overflow: clip; }
+  .asset-type-badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 100px; background: rgba(255,255,255,0.05); border: 1px solid #2D3748; color: #6B7785; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .idle-rate-cell { display: flex; align-items: center; gap: 4px; min-width: 0; flex-wrap: nowrap; }
+  .idle-rate-input { width: 100%; max-width: 42px; min-width: 0; flex: 0 1 42px; background: rgba(255,255,255,0.04); border: 1px solid #2D3748; border-radius: 6px; padding: 3px 5px; color: #F0F2F5; font-size: 12px; font-family: inherit; outline: none; transition: border-color 0.2s; box-sizing: border-box; }
   .idle-rate-input:focus { border-color: rgba(14,165,122,0.45); }
-  .idle-rate-unit { font-size: 11px; color: #3A4A5C; }
-  .idle-rate-default-tag { font-size: 9.5px; font-weight: 600; color: #EF9F27; background: rgba(239,159,39,0.10); border: 1px solid rgba(239,159,39,0.22); padding: 1px 6px; border-radius: 100px; white-space: nowrap; }
+  .idle-rate-unit { font-size: 10px; color: #3A4A5C; flex-shrink: 0; }
+  .idle-rate-default-tag { font-size: 9px; font-weight: 600; color: #EF9F27; background: rgba(239,159,39,0.10); border: 1px solid rgba(239,159,39,0.22); padding: 1px 4px; border-radius: 100px; white-space: nowrap; flex-shrink: 0; }
   .idle-rate-save-btn { display: none; background: rgba(14,165,122,0.12); border: 1px solid rgba(14,165,122,0.25); color: #0EA57A; font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
   .idle-rate-save-btn.visible { display: inline-block; }
   .idle-rate-save-btn:hover { background: rgba(14,165,122,0.20); }
-  .actions-cell { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-  .btn-edit { background: none; border: 1px solid transparent; color: #3A4A5C; font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .actions-cell { display: flex; align-items: center; gap: 4px; white-space: nowrap; flex-shrink: 0; }
+  .btn-edit { background: none; border: 1px solid transparent; color: #3A4A5C; font-size: 11px; font-weight: 500; padding: 4px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; flex-shrink: 0; }
   .btn-edit:hover { border-color: rgba(14,165,122,0.35); color: #0EA57A; background: rgba(14,165,122,0.08); }
-  .btn-delete { background: none; border: 1px solid transparent; color: #3A4A5C; font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-delete { background: none; border: 1px solid transparent; color: #3A4A5C; font-size: 11px; font-weight: 500; padding: 4px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; flex-shrink: 0; }
   .btn-delete:hover { border-color: rgba(226,75,74,0.3); color: #F0A8A7; background: rgba(226,75,74,0.08); }
   .empty-state { padding: 60px 24px; text-align: center; }
   .empty-icon { font-size: 40px; margin-bottom: 16px; opacity: 0.4; }
@@ -248,12 +267,13 @@
     font-weight: 600;
     line-height: 1.4;
     color: #EF9F27;
-    max-width: 280px;
+    max-width: 100%;
     cursor: help;
   }
   @media (max-width: 900px) {
     .sidebar { display: none; } .main { margin-left: 0; } .page-content { padding: 20px; }
     .stats-row { grid-template-columns: 1fr 1fr; } .upload-card { flex-direction: column; align-items: flex-start; } .form-row { grid-template-columns: 1fr; }
+    .assets-table-wrap { overflow-x: auto; }
   }
 </style>
 </head>
@@ -394,8 +414,9 @@
             <input type="text" id="search-input" placeholder="Search assets...">
           </div>
         </div>
-        <div style="overflow-x:auto;">
+        <div class="assets-table-wrap">
           <table id="assets-table">
+            <colgroup id="assets-colgroup"></colgroup>
             <thead id="assets-thead">
               <tr>
                 <th>Asset Name</th><th>Type</th><th>Make</th><th>Model</th><th>Year</th><th>Fuel Type</th><th>Idle Burn Rate</th><th>Actions</th>
@@ -720,7 +741,7 @@
         '<td>' + esc(a.model || '—') + '</td>' +
         '<td>' + esc(a.year ? String(a.year) : '—') + '</td>' +
         '<td>' + esc(a.fuel_type || '—') + '</td>' +
-        '<td><div class="idle-rate-cell">' +
+        '<td class="col-idle"><div class="idle-rate-cell">' +
           '<input type="number" class="idle-rate-input" data-id="' + a.id + '" value="' + displayRate.toFixed(1) + '" step="0.1" min="0">' +
           '<span class="idle-rate-unit">L/hr</span>' +
           (!hasCustomRate ? '<span class="idle-rate-default-tag">default</span>' : '') +
@@ -734,7 +755,7 @@
         row += '<td>' + (onRoad ? formatLifeKm(a.expected_life_km) : '—') + '</td>';
         row += '<td>' + (onRoad ? formatServiceKm(a.service_cost_per_km) : '—') + '</td>';
       }
-      row += '<td><div class="actions-cell">' +
+      row += '<td class="col-actions"><div class="actions-cell">' +
           '<button type="button" class="btn-edit" data-id="' + a.id + '">Edit</button>' +
           '<button type="button" class="btn-delete" data-id="' + a.id + '">Delete</button>' +
         '</div></td>' +
@@ -874,17 +895,34 @@
     return '$' + Number(val).toFixed(2) + '/km';
   }
 
-  function renderTableHeader(comp) {
-    var cols = ['Asset Name', 'Type', 'Make', 'Model', 'Year', 'Fuel Type', 'Idle Burn Rate'];
+  function getColumnLayout(comp) {
+    var cols = [
+      { label: 'Asset Name', cls: 'col-name' },
+      { label: 'Type', cls: 'col-type' },
+      { label: 'Make', cls: 'col-make' },
+      { label: 'Model', cls: 'col-model' },
+      { label: 'Year', cls: 'col-year' },
+      { label: 'Fuel Type', cls: 'col-fuel' },
+      { label: 'Idle Burn Rate', cls: 'col-idle' }
+    ];
     if (comp.hasConstruction) {
-      cols.push('Life (hrs)', 'Service ($/hr)');
+      cols.push({ label: 'Life (hrs)', cls: 'col-life-hrs' });
+      cols.push({ label: 'Service ($/hr)', cls: 'col-serv-hr' });
     }
     if (comp.hasOnRoad) {
-      cols.push('Life (km)', 'Service ($/km)');
+      cols.push({ label: 'Life (km)', cls: 'col-life-km' });
+      cols.push({ label: 'Service ($/km)', cls: 'col-serv-km' });
     }
-    cols.push('Actions');
+    cols.push({ label: 'Actions', cls: 'col-actions' });
+    return cols;
+  }
+
+  function renderTableHeader(comp) {
+    var cols = getColumnLayout(comp);
+    document.getElementById('assets-colgroup').innerHTML =
+      cols.map(function(c) { return '<col class="' + c.cls + '">'; }).join('');
     document.getElementById('assets-thead').innerHTML =
-      '<tr>' + cols.map(function(c) { return '<th>' + c + '</th>'; }).join('') + '</tr>';
+      '<tr>' + cols.map(function(c) { return '<th class="' + c.cls + '">' + c.label + '</th>'; }).join('') + '</tr>';
   }
 
   function renderTelematicsBadge(provider) {
