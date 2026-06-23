@@ -291,11 +291,13 @@
 
 <script src="js/supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/fleet-cost-model.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <script>
 (function() {
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var FCM = window.FleetCostModel;
   var currentUser = null;
   var companyName = '';
   var allAssets = [];
@@ -414,7 +416,7 @@
   async function fetchRecords(assetIds, dateFrom, dateTo) {
     var fuelQ = supabase.from('fuel_records').select('asset_id, record_date, litres, total_cost')
       .eq('user_id', currentUser.id).gte('record_date', dateFrom).lte('record_date', dateTo);
-    var telQ = supabase.from('telematics_records').select('asset_id, record_date, operating_hours, idle_hours')
+    var telQ = supabase.from('telematics_records').select('asset_id, record_date, operating_hours, idle_hours, total_engine_hours')
       .eq('user_id', currentUser.id).gte('record_date', dateFrom).lte('record_date', dateTo);
     if (assetIds.length === 1) {
       fuelQ = fuelQ.eq('asset_id', assetIds[0]);
@@ -620,60 +622,235 @@
     };
   }
 
+  function idleFleetSummaryCell(value, anyMissing) {
+    if (anyMissing && (!value || value === 0)) return AWAITING_FUEL_MSG;
+    if (anyMissing) return fmtMoney(value) + ' (partial)';
+    return fmtMoney(value);
+  }
+
+  function idleUnavailableComponents(fuelMissing, deprMissing, deprLifeExceeded, deprLifeNearLimit, servMissing, maintMissing) {
+    var list = [];
+    if (fuelMissing && fuelMissing.length) list.push({ label: 'fuel cost' });
+    if (deprLifeExceeded) list.push({ label: 'depreciation cost' });
+    else if (deprMissing && deprMissing.length) list.push({ label: 'depreciation cost' });
+    if (servMissing && servMissing.length) list.push({ label: 'servicing cost' });
+    if (maintMissing && maintMissing.length) list.push({ label: 'maintenance cost' });
+    return list;
+  }
+
+  function idleCalcPartialSum(fuel, fuelMissing, depr, deprMissing, deprLifeExceeded, service, servMissing, maint, maintMissing) {
+    var total = 0;
+    if (!fuelMissing) total += fuel || 0;
+    if (!deprMissing && !deprLifeExceeded) total += depr !== null ? depr : 0;
+    if (!servMissing) total += service !== null ? service : 0;
+    if (!maintMissing) total += maint !== null ? maint : 0;
+    return total;
+  }
+
+  function idleExportCell(value, missing, lifeExceeded, lifeNearLimit) {
+    if (lifeExceeded) return FCM.formatLifeExceededMessage(lifeNearLimit);
+    if (missing && missing.length) return AWAITING_FUEL_MSG;
+    return fmtMoney(value || 0);
+  }
+
+  function idleExportTotal(fuel, fuelMissing, depr, deprMissing, deprLifeExceeded, deprLifeNearLimit, service, servMissing, maint, maintMissing) {
+    var unavailable = idleUnavailableComponents(fuelMissing, deprMissing, deprLifeExceeded, deprLifeNearLimit, servMissing, maintMissing);
+    var total = idleCalcPartialSum(fuel, fuelMissing, depr, deprMissing, deprLifeExceeded, service, servMissing, maint, maintMissing);
+    if (unavailable.length === 0) return fmtMoney(total);
+    var labels = unavailable.map(function(c) { return c.label; });
+    return fmtMoney(total) + ' (partial — ' + labels.join(', ') + ' unavailable)';
+  }
+
+  function idleDailyRow(r) {
+    return [
+      r.date,
+      r.idleHours.toFixed(1),
+      idleExportCell(r.fuelCost, r.fuelMissing, false, false),
+      idleExportCell(r.deprCost, r.deprMissing, r.deprLifeExceeded, r.deprLifeNearLimit),
+      idleExportCell(r.serviceCost, r.serviceMissing, false, false),
+      idleExportCell(r.maintCost, r.maintMissing, false, false),
+      idleExportTotal(r.fuelCost, r.fuelMissing, r.deprCost, r.deprMissing, r.deprLifeExceeded, r.deprLifeNearLimit, r.serviceCost, r.serviceMissing, r.maintCost, r.maintMissing)
+    ];
+  }
+
   function buildIdleReport(assets, fuel, tel) {
-    var rows = [];
-    var totals = { idleHours: 0, fuelCost: 0, depr: 0, service: 0, total: 0 };
+    var assetSummaries = [];
+    var dailySections = [];
+    var totals = { idleHours: 0, fuelCost: 0, depr: 0, service: 0, maint: 0 };
+    var anyFuelMissing = false;
+    var anyDeprMissing = false;
+    var anyDeprLifeExceeded = false;
+    var anyDeprLifeNearLimit = false;
+    var anyServMissing = false;
+    var anyMaintMissing = false;
 
     assets.forEach(function(asset) {
       var assetFuel = filterByAsset(fuel, asset.id);
       var assetTel = filterByAsset(tel, asset.id);
       var idleRate = getIdleRate(asset);
-      var purchasePrice = parseFloat(asset.purchase_price) || 0;
-      var lifeHours = parseFloat(asset.expected_life_hours) || 0;
-      var servicePerHour = parseFloat(asset.service_cost_per_hour) || 0;
-      var deprPerHour = lifeHours > 0 ? purchasePrice / lifeHours : 0;
 
-      var totalLitres = 0, totalFuelCost = 0;
+      var totalLitres = 0;
+      var totalFuelCost = 0;
       assetFuel.forEach(function(r) {
         totalLitres += parseFloat(r.litres) || 0;
         totalFuelCost += parseFloat(r.total_cost) || 0;
       });
-      var avgCostPerLitre = totalLitres > 0 ? totalFuelCost / totalLitres : 0;
+      var fuelPricingAvailable = assetFuel.length > 0 && totalLitres > 0;
 
-      var byDate = {};
+      var totalIdleHours = 0;
+      var byDateIdle = {};
       assetTel.forEach(function(r) {
-        byDate[r.record_date] = (byDate[r.record_date] || 0) + (parseFloat(r.idle_hours) || 0);
+        var idleHours = parseFloat(r.idle_hours) || 0;
+        totalIdleHours += idleHours;
+        if (idleHours > 0) {
+          byDateIdle[r.record_date] = (byDateIdle[r.record_date] || 0) + idleHours;
+        }
       });
 
-      Object.keys(byDate).sort().forEach(function(date) {
-        var idleHours = byDate[date];
-        var fuelCost = idleHours * idleRate * avgCostPerLitre;
-        var deprCost = idleHours * deprPerHour;
-        var serviceCost = idleHours * servicePerHour;
-        var totalCost = fuelCost + deprCost + serviceCost;
-        rows.push({ asset: asset.asset_name, date: date, idleHours: idleHours, fuelCost: fuelCost, deprCost: deprCost, serviceCost: serviceCost, totalCost: totalCost });
-        totals.idleHours += idleHours; totals.fuelCost += fuelCost;
-        totals.depr += deprCost; totals.service += serviceCost; totals.total += totalCost;
+      if (totalIdleHours <= 0) return;
+
+      var avgCostPerLitre = totalLitres > 0 ? totalFuelCost / totalLitres : 0;
+      var totalEngineHours = FCM.getLatestEngineHours(assetTel, asset.id);
+
+      var sumFuel = 0;
+      var sumDepr = 0;
+      var sumServ = 0;
+      var sumMaint = 0;
+      var aggFuelMissing = null;
+      var aggDeprMissing = null;
+      var aggDeprLifeExceeded = false;
+      var aggDeprLifeNearLimit = false;
+      var aggServMissing = null;
+      var aggMaintMissing = null;
+      var dailyRows = [];
+
+      Object.keys(byDateIdle).sort().forEach(function(date) {
+        var idleHours = byDateIdle[date];
+        var costs = FCM.calcIdleHourCosts(asset, idleHours, avgCostPerLitre, idleRate, totalEngineHours, fuelPricingAvailable);
+
+        if (costs.fuel !== null) sumFuel += costs.fuel;
+        if (costs.depreciation !== null) sumDepr += costs.depreciation;
+        if (costs.servicing !== null) sumServ += costs.servicing;
+        if (costs.maintenance !== null) sumMaint += costs.maintenance;
+        aggFuelMissing = costs.fuelMissing;
+        aggDeprMissing = costs.depreciationMissing;
+        if (costs.depreciationLifeExceeded) aggDeprLifeExceeded = true;
+        if (costs.depreciationLifeNearLimit) aggDeprLifeNearLimit = true;
+        aggServMissing = costs.servicingMissing;
+        aggMaintMissing = costs.maintenanceMissing;
+
+        dailyRows.push({
+          date: date,
+          idleHours: idleHours,
+          fuelCost: costs.fuel,
+          fuelMissing: costs.fuelMissing,
+          deprCost: costs.depreciation,
+          deprMissing: costs.depreciationMissing,
+          deprLifeExceeded: costs.depreciationLifeExceeded,
+          deprLifeNearLimit: costs.depreciationLifeNearLimit,
+          serviceCost: costs.servicing,
+          serviceMissing: costs.servicingMissing,
+          maintCost: costs.maintenance,
+          maintMissing: costs.maintenanceMissing
+        });
       });
+
+      var hasDailyDetail = fuelPricingAvailable && !aggDeprMissing && !aggDeprLifeExceeded;
+      if (hasDailyDetail && dailyRows.length) {
+        dailySections.push({ assetName: asset.asset_name, rows: dailyRows });
+      }
+
+      assetSummaries.push({
+        assetName: asset.asset_name,
+        hasDailyDetail: hasDailyDetail,
+        idleHours: totalIdleHours,
+        fuelCost: sumFuel,
+        fuelMissing: aggFuelMissing,
+        deprCost: sumDepr,
+        deprMissing: aggDeprMissing,
+        deprLifeExceeded: aggDeprLifeExceeded,
+        deprLifeNearLimit: aggDeprLifeNearLimit,
+        serviceCost: sumServ,
+        serviceMissing: aggServMissing,
+        maintCost: sumMaint,
+        maintMissing: aggMaintMissing
+      });
+
+      totals.idleHours += totalIdleHours;
+      if (!aggFuelMissing) totals.fuelCost += sumFuel;
+      else anyFuelMissing = true;
+      if (!aggDeprMissing && !aggDeprLifeExceeded) totals.depr += sumDepr;
+      else {
+        if (aggDeprMissing) anyDeprMissing = true;
+        if (aggDeprLifeExceeded) {
+          anyDeprLifeExceeded = true;
+          if (aggDeprLifeNearLimit) anyDeprLifeNearLimit = true;
+        }
+      }
+      if (!aggServMissing) totals.service += sumServ;
+      else anyServMissing = true;
+      if (!aggMaintMissing) totals.maint += sumMaint;
+      else anyMaintMissing = true;
     });
 
+    assetSummaries.sort(function(a, b) {
+      if (a.hasDailyDetail && !b.hasDailyDetail) return -1;
+      if (!a.hasDailyDetail && b.hasDailyDetail) return 1;
+      if (a.hasDailyDetail && b.hasDailyDetail) {
+        var totalA = idleCalcPartialSum(a.fuelCost, a.fuelMissing, a.deprCost, a.deprMissing, a.deprLifeExceeded, a.serviceCost, a.serviceMissing, a.maintCost, a.maintMissing);
+        var totalB = idleCalcPartialSum(b.fuelCost, b.fuelMissing, b.deprCost, b.deprMissing, b.deprLifeExceeded, b.serviceCost, b.serviceMissing, b.maintCost, b.maintMissing);
+        return totalB - totalA;
+      }
+      return a.assetName.localeCompare(b.assetName);
+    });
+
+    var idleSummaryHeaders = ['Asset', 'Idle Hrs', 'Fuel $', 'Depr $', 'Service $', 'Maintenance $', 'Total $'];
+    var idleDailyHeaders = ['Date', 'Idle Hrs', 'Fuel $', 'Depr $', 'Service $', 'Maintenance $', 'Total $'];
+
     return {
-      rows: rows,
+      reportType: 'idle',
+      assetSummaries: assetSummaries,
+      dailySections: dailySections,
+      rows: assetSummaries,
       summary: [
         ['Total Idle Hours', totals.idleHours.toFixed(1) + ' hr'],
-        ['Idle Fuel Cost', fmtMoney(totals.fuelCost)],
-        ['Depreciation Cost', fmtMoney(totals.depr)],
-        ['Service Cost Impact', fmtMoney(totals.service)],
-        ['Total Idle Cost', fmtMoney(totals.total)]
+        ['Idle Fuel Cost', idleFleetSummaryCell(totals.fuelCost, anyFuelMissing)],
+        ['Depreciation Cost', anyDeprLifeExceeded
+          ? idleExportCell(totals.depr, null, true, anyDeprLifeNearLimit)
+          : idleFleetSummaryCell(totals.depr, anyDeprMissing)],
+        ['Service Cost Impact', idleFleetSummaryCell(totals.service, anyServMissing)],
+        ['Maintenance Cost Impact', idleFleetSummaryCell(totals.maint, anyMaintMissing)],
+        ['Total Idle Cost', idleExportTotal(
+          totals.fuelCost,
+          anyFuelMissing ? ['Fuel records for selected period'] : null,
+          totals.depr,
+          anyDeprMissing ? ['Depreciation'] : null,
+          anyDeprLifeExceeded,
+          anyDeprLifeNearLimit,
+          totals.service,
+          anyServMissing ? ['Servicing'] : null,
+          totals.maint,
+          anyMaintMissing ? ['Maintenance'] : null
+        )]
       ],
-      csvHeaders: ['Asset', 'Date', 'Idle Hours', 'Idle Fuel Cost', 'Depreciation Cost', 'Service Cost', 'Total Idle Cost'],
-      csvRow: function(r) {
-        return [r.asset, r.date, r.idleHours.toFixed(2), r.fuelCost.toFixed(2), r.deprCost.toFixed(2), r.serviceCost.toFixed(2), r.totalCost.toFixed(2)];
+      assetSummaryHeaders: idleSummaryHeaders,
+      assetSummaryRow: function(a) {
+        return [
+          a.assetName,
+          a.idleHours.toFixed(1),
+          idleExportCell(a.fuelCost, a.fuelMissing, false, false),
+          idleExportCell(a.deprCost, a.deprMissing, a.deprLifeExceeded, a.deprLifeNearLimit),
+          idleExportCell(a.serviceCost, a.serviceMissing, false, false),
+          idleExportCell(a.maintCost, a.maintMissing, false, false),
+          idleExportTotal(a.fuelCost, a.fuelMissing, a.deprCost, a.deprMissing, a.deprLifeExceeded, a.deprLifeNearLimit, a.serviceCost, a.serviceMissing, a.maintCost, a.maintMissing)
+        ];
       },
-      pdfHeaders: ['Asset', 'Date', 'Idle Hrs', 'Fuel $', 'Depr $', 'Service $', 'Total $'],
-      pdfRow: function(r) {
-        return [r.asset, r.date, r.idleHours.toFixed(1), r.fuelCost.toFixed(0), r.deprCost.toFixed(0), r.serviceCost.toFixed(0), r.totalCost.toFixed(0)];
-      }
+      dailyHeaders: idleDailyHeaders,
+      dailyRow: idleDailyRow,
+      csvHeaders: idleDailyHeaders,
+      csvRow: idleDailyRow,
+      pdfHeaders: idleDailyHeaders,
+      pdfRow: idleDailyRow
     };
   }
 
@@ -859,6 +1036,10 @@
       downloadFuelCsv(report, config, assets, filename);
       return;
     }
+    if (report.reportType === 'idle') {
+      downloadIdleCsv(report, config, assets, filename);
+      return;
+    }
     var lines = [report.csvHeaders.join(',')];
     report.rows.forEach(function(r) { lines.push(report.csvRow(r).join(',')); });
     if (report.fleetRow) lines.push(report.csvRow(report.fleetRow).join(','));
@@ -905,6 +1086,46 @@
     triggerCsvDownload(lines.join('\n'), filename);
   }
 
+  function downloadIdleCsv(report, config, assets, filename) {
+    var generatedAt = new Date().toLocaleString('en-NZ');
+    var sep = '────────────────────────────────────────────────────────';
+    var lines = [
+      'FleetMagnify  |  Idle Cost Report',
+      sep,
+      'Date Range,' + config.dateFrom + ' to ' + config.dateTo,
+      'Scope,' + scopeLabel(config, assets),
+      'Company,' + companyName,
+      'Generated,' + generatedAt,
+      sep,
+      '',
+      '[ FLEET SUMMARY ]',
+      'Metric,Value'
+    ];
+    report.summary.forEach(function(item) {
+      lines.push(csvEscape(item[0]) + ',' + csvEscape(item[1]));
+    });
+    lines.push('');
+    lines.push('[ ASSET SUMMARY ]');
+    lines.push('Note: "' + AWAITING_FUEL_MSG + '" indicates missing fuel or depreciation data. Totals marked partial exclude unavailable components.');
+    lines.push(report.assetSummaryHeaders.join(','));
+    report.assetSummaries.forEach(function(a) {
+      lines.push(report.assetSummaryRow(a).map(csvEscape).join(','));
+    });
+    report.dailySections.forEach(function(section) {
+      lines.push('');
+      lines.push(sep);
+      lines.push('[ DAILY DETAIL — ' + section.assetName + ' ]');
+      lines.push(report.dailyHeaders.join(','));
+      section.rows.forEach(function(r) {
+        lines.push(report.dailyRow(r).map(csvEscape).join(','));
+      });
+    });
+    lines.push('');
+    lines.push(sep);
+    lines.push('Generated by FleetMagnify,' + generatedAt);
+    triggerCsvDownload(lines.join('\n'), filename);
+  }
+
   function csvEscape(value) {
     var str = String(value);
     if (/[",\n]/.test(str)) return '"' + str.replace(/"/g, '""') + '"';
@@ -923,6 +1144,10 @@
   function downloadPdf(report, config, assets, title) {
     if (report.reportType === 'fuel') {
       downloadFuelPdf(report, config, assets, title);
+      return;
+    }
+    if (report.reportType === 'idle') {
+      downloadIdlePdf(report, config, assets, title);
       return;
     }
     var jsPDF = window.jspdf.jsPDF;
@@ -1122,6 +1347,78 @@
     };
   }
 
+  function idlePdfTableOptions(margin) {
+    var opts = fuelPdfTableOptions(margin);
+    var baseDidParse = opts.didParseCell;
+    opts.didParseCell = function(data) {
+      if (baseDidParse) baseDidParse(data);
+      if (data.section !== 'body' || typeof data.cell.raw !== 'string') return;
+      var raw = data.cell.raw;
+      if (raw === AWAITING_FUEL_MSG || raw.indexOf('(partial') !== -1 || raw.indexOf('Cannot calculate') === 0) {
+        data.cell.styles.textColor = FUEL_PDF.amber;
+        if (raw === AWAITING_FUEL_MSG || raw.indexOf('(partial') !== -1) {
+          data.cell.styles.fontStyle = 'italic';
+        }
+      }
+    };
+    return opts;
+  }
+
+  function downloadIdlePdf(report, config, assets, title) {
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    var pageW = doc.internal.pageSize.getWidth();
+    var pageH = doc.internal.pageSize.getHeight();
+    var margin = FUEL_PDF.margin;
+    var generatedAt = new Date().toLocaleString('en-NZ');
+    var tableOpts = idlePdfTableOptions(margin);
+
+    fuelPdfSetFill(doc, FUEL_PDF.white);
+    doc.rect(0, 0, pageW, pageH, 'F');
+
+    fuelPdfDrawHeaderBand(doc, pageW, margin, title);
+    var y = fuelPdfDrawMetadata(doc, pageW, margin, FUEL_PDF.headerBandH + 6, config, assets, generatedAt);
+    y = fuelPdfDrawFleetSummaryCard(doc, pageW, margin, y, report.summary);
+
+    y = fuelPdfDrawSectionBar(doc, pageW, margin, y, 'Asset Summary');
+    doc.autoTable(Object.assign({}, tableOpts, {
+      startY: y + 1,
+      head: [report.assetSummaryHeaders],
+      body: report.assetSummaries.map(report.assetSummaryRow),
+      tableWidth: pageW - margin * 2
+    }));
+
+    y = doc.lastAutoTable.finalY + 6;
+    report.dailySections.forEach(function(section) {
+      var sectionLabel = 'Daily Detail — ' + section.assetName;
+      var barH = 7;
+      var minSpace = barH + 18;
+      if (y + minSpace > pageH - FUEL_PDF.contentBottomPad) {
+        doc.addPage();
+        fuelPdfSetFill(doc, FUEL_PDF.white);
+        doc.rect(0, 0, pageW, pageH, 'F');
+        y = margin;
+      }
+      y = fuelPdfDrawSectionBar(doc, pageW, margin, y, sectionLabel);
+      doc.autoTable(Object.assign({}, tableOpts, {
+        startY: y + 0.5,
+        head: [report.dailyHeaders],
+        body: section.rows.map(report.dailyRow),
+        tableWidth: pageW - margin * 2,
+        styles: Object.assign({}, tableOpts.styles, { fontSize: 7 })
+      }));
+      y = doc.lastAutoTable.finalY + 5;
+    });
+
+    var totalPages = doc.internal.getNumberOfPages();
+    for (var p = 1; p <= totalPages; p++) {
+      doc.setPage(p);
+      fuelPdfDrawFooter(doc, pageW, pageH, generatedAt);
+    }
+
+    doc.save(title.replace(/\s+/g, '_').toLowerCase() + '.pdf');
+  }
+
   function downloadFuelPdf(report, config, assets, title) {
     var jsPDF = window.jspdf.jsPDF;
     var doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -1207,9 +1504,11 @@
       var records = await fetchRecords(assets.map(function(a) { return a.id; }), config.dateFrom, config.dateTo);
       var report = buildReport(config.report, assets, records, config.dateFrom, config.dateTo);
 
-      if (config.report === 'fuel') {
+      if (config.report === 'fuel' || config.report === 'idle') {
         if (!report.assetSummaries || report.assetSummaries.length === 0) {
-          throw new Error('No fuel or telematics activity found for the selected scope and date range.');
+          throw new Error(config.report === 'fuel'
+            ? 'No fuel or telematics activity found for the selected scope and date range.'
+            : 'No idle activity found for the selected scope and date range.');
         }
       } else if (report.rows.length === 0) {
         throw new Error('No data found for the selected scope and date range.');
