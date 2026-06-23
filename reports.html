@@ -653,10 +653,13 @@
     return fmtMoney(value || 0);
   }
 
-  function idleExportTotal(fuel, fuelMissing, depr, deprMissing, deprLifeExceeded, deprLifeNearLimit, service, servMissing, maint, maintMissing) {
+  function idleExportTotal(fuel, fuelMissing, depr, deprMissing, deprLifeExceeded, deprLifeNearLimit, service, servMissing, maint, maintMissing, fleetPartial) {
     var unavailable = idleUnavailableComponents(fuelMissing, deprMissing, deprLifeExceeded, deprLifeNearLimit, servMissing, maintMissing);
     var total = idleCalcPartialSum(fuel, fuelMissing, depr, deprMissing, deprLifeExceeded, service, servMissing, maint, maintMissing);
     if (unavailable.length === 0) return fmtMoney(total);
+    if (fleetPartial) {
+      return fmtMoney(total) + ' (partial — some assets have incomplete data)';
+    }
     var labels = unavailable.map(function(c) { return c.label; });
     return fmtMoney(total) + ' (partial — ' + labels.join(', ') + ' unavailable)';
   }
@@ -830,7 +833,8 @@
           totals.service,
           anyServMissing ? ['Servicing'] : null,
           totals.maint,
-          anyMaintMissing ? ['Maintenance'] : null
+          anyMaintMissing ? ['Maintenance'] : null,
+          true
         )]
       ],
       assetSummaryHeaders: idleSummaryHeaders,
