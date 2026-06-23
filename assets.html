@@ -107,38 +107,26 @@
   #assets-table tbody tr:last-child { border-bottom: none; }
   #assets-table tbody tr:hover { background: #111827; }
   #assets-table tbody td { padding: 10px 8px; font-size: 13px; color: #E2E8F0; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #assets-table .col-name { width: 14%; }
-  #assets-table .col-type { width: 7%; }
-  #assets-table .col-make { width: 7%; }
-  #assets-table .col-model { width: 7%; }
-  #assets-table .col-year { width: 4%; }
-  #assets-table .col-fuel { width: 6%; }
-  #assets-table .col-idle { width: 9%; white-space: normal; overflow: visible; text-overflow: clip; }
-  #assets-table .col-life-hrs { width: 6%; }
-  #assets-table .col-serv-hr { width: 7%; }
-  #assets-table .col-life-km { width: 6%; }
-  #assets-table .col-serv-km { width: 7%; }
-  #assets-table .col-actions { width: 1%; white-space: nowrap; overflow: visible; text-overflow: clip; }
+  #assets-table .col-name { width: 32%; }
+  #assets-table .col-type { width: 14%; }
+  #assets-table .col-make-model { width: 22%; }
+  #assets-table .col-year { width: 10%; }
+  #assets-table .col-life { width: 14%; }
+  #assets-table .col-edit { width: 1%; white-space: nowrap; overflow: visible; text-overflow: clip; }
   thead th { padding: 11px 14px; text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #FFFFFF; border-bottom: 1px solid #2D3748; background: rgba(255,255,255,0.01); white-space: nowrap; }
   tbody tr { border-bottom: 1px solid #2D3748; transition: background 0.15s; }
   tbody tr:last-child { border-bottom: none; }
   tbody tr:hover { background: #111827; }
   tbody td { padding: 12px 14px; font-size: 13.5px; color: #E2E8F0; vertical-align: middle; }
+  #assets-table .col-name,
+  #assets-table .col-make-model { white-space: normal; overflow: visible; text-overflow: clip; }
   .asset-name-cell { font-weight: 600; color: #D8DFE8; white-space: normal; overflow: visible; text-overflow: clip; }
-  .asset-type-badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 100px; background: rgba(255,255,255,0.05); border: 1px solid #2D3748; color: #6B7785; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .idle-rate-cell { display: flex; align-items: center; gap: 4px; min-width: 0; flex-wrap: nowrap; }
-  .idle-rate-input { width: 100%; max-width: 42px; min-width: 0; flex: 0 1 42px; background: rgba(255,255,255,0.04); border: 1px solid #2D3748; border-radius: 6px; padding: 3px 5px; color: #F0F2F5; font-size: 12px; font-family: inherit; outline: none; transition: border-color 0.2s; box-sizing: border-box; }
-  .idle-rate-input:focus { border-color: rgba(14,165,122,0.45); }
-  .idle-rate-unit { font-size: 10px; color: #3A4A5C; flex-shrink: 0; }
-  .idle-rate-default-tag { font-size: 9px; font-weight: 600; color: #EF9F27; background: rgba(239,159,39,0.10); border: 1px solid rgba(239,159,39,0.22); padding: 1px 4px; border-radius: 100px; white-space: nowrap; flex-shrink: 0; }
-  .idle-rate-save-btn { display: none; background: rgba(14,165,122,0.12); border: 1px solid rgba(14,165,122,0.25); color: #0EA57A; font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
-  .idle-rate-save-btn.visible { display: inline-block; }
-  .idle-rate-save-btn:hover { background: rgba(14,165,122,0.20); }
-  .actions-cell { display: flex; align-items: center; gap: 4px; white-space: nowrap; flex-shrink: 0; }
-  .btn-edit { background: none; border: 1px solid transparent; color: #3A4A5C; font-size: 11px; font-weight: 500; padding: 4px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; flex-shrink: 0; }
-  .btn-edit:hover { border-color: rgba(14,165,122,0.35); color: #0EA57A; background: rgba(14,165,122,0.08); }
-  .btn-delete { background: none; border: 1px solid transparent; color: #3A4A5C; font-size: 11px; font-weight: 500; padding: 4px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; flex-shrink: 0; }
-  .btn-delete:hover { border-color: rgba(226,75,74,0.3); color: #F0A8A7; background: rgba(226,75,74,0.08); }
+  .asset-type-badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 100px; background: rgba(255,255,255,0.05); border: 1px solid #2D3748; color: #6B7785; white-space: nowrap; }
+  .actions-cell { display: flex; align-items: center; white-space: nowrap; flex-shrink: 0; }
+  .btn-edit { background: none; border: 1px solid rgba(14,165,122,0.25); color: #0EA57A; font-size: 12px; font-weight: 600; padding: 5px 14px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; flex-shrink: 0; white-space: nowrap; }
+  .btn-edit:hover { border-color: rgba(14,165,122,0.45); background: rgba(14,165,122,0.10); }
+  .btn-delete { background: none; border: 1px solid transparent; color: #6B7785; font-size: 13px; font-weight: 500; padding: 12px 0; margin-right: auto; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-delete:hover { color: #F0A8A7; }
   .empty-state { padding: 60px 24px; text-align: center; }
   .empty-icon { font-size: 40px; margin-bottom: 16px; opacity: 0.4; }
   .empty-title { font-size: 16px; font-weight: 700; color: #4A5568; margin-bottom: 8px; }
@@ -240,7 +228,8 @@
     line-height: 1.5;
   }
   .telematics-coming-soon.visible { display: block; }
-  .asset-name-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .asset-name-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
+  .asset-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .telematics-badge {
     display: inline-flex;
     align-items: center;
@@ -419,11 +408,11 @@
             <colgroup id="assets-colgroup"></colgroup>
             <thead id="assets-thead">
               <tr>
-                <th>Asset Name</th><th>Type</th><th>Make</th><th>Model</th><th>Year</th><th>Fuel Type</th><th>Idle Burn Rate</th><th>Actions</th>
+                <th>Asset Name</th><th>Type</th><th>Make / Model</th><th>Year</th><th>Expected Life</th><th></th>
               </tr>
             </thead>
             <tbody id="assets-tbody">
-              <tr class="loading-row"><td colspan="8">Loading assets...</td></tr>
+              <tr class="loading-row"><td colspan="6">Loading assets...</td></tr>
             </tbody>
           </table>
         </div>
@@ -584,6 +573,7 @@
       <div id="telematics-visionlink-msg" class="telematics-coming-soon">VisionLink connection coming soon</div>
     </div>
     <div class="modal-actions">
+      <button type="button" class="btn-delete" id="delete-asset-modal-btn" hidden>Delete Asset</button>
       <button type="button" class="btn-cancel" id="cancel-modal-btn">Cancel</button>
       <button type="submit" class="btn-save" id="save-asset-btn">Add Asset</button>
     </div>
@@ -675,8 +665,7 @@
   }
 
   async function loadAssets() {
-    var comp = getFleetComposition(allAssets.length ? allAssets : []);
-    var colCount = getTableColCount(comp);
+    var colCount = getTableColCount();
     var tbody = document.getElementById('assets-tbody');
     tbody.innerHTML = '<tr class="loading-row"><td colspan="' + colCount + '">Loading assets...</td></tr>';
     var { data, error } = await supabase.from('assets').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
@@ -719,10 +708,22 @@
     return '<span class="life-warning-badge" title="' + esc(msg) + '">' + esc(msg) + '</span>';
   }
 
+  function formatMakeModel(make, model) {
+    var m = (make || '').trim();
+    var mo = (model || '').trim();
+    if (!m && !mo) return '—';
+    if (m && mo) return m + ' ' + mo;
+    return m || mo;
+  }
+
+  function formatExpectedLife(asset) {
+    if (assetIsOnRoad(asset)) return formatLifeKm(asset.expected_life_km);
+    return formatLifeHours(asset.expected_life_hours);
+  }
+
   function renderAssets(assets) {
-    var comp = getFleetComposition(assets);
-    var colCount = getTableColCount(comp);
-    renderTableHeader(comp);
+    var colCount = getTableColCount();
+    renderTableHeader();
     var tbody = document.getElementById('assets-tbody');
     var count = document.getElementById('table-count');
     count.textContent = assets.length + ' asset' + (assets.length !== 1 ? 's' : '');
@@ -731,33 +732,17 @@
       return;
     }
     tbody.innerHTML = assets.map(function(a) {
-      var onRoad = assetIsOnRoad(a);
-      var hasCustomRate = a.idle_burn_rate_lph !== null && a.idle_burn_rate_lph !== undefined;
-      var displayRate = hasCustomRate ? a.idle_burn_rate_lph : (DEFAULT_IDLE_RATES[a.asset_type] || 3.0);
       var row = '<tr>' +
-        '<td class="asset-name-cell"><div class="asset-name-wrap">' + esc(a.asset_name || '—') + renderTelematicsBadge(a.telematics_provider) + renderApproachingLifeBadge(a) + '</div></td>' +
-        '<td><span class="asset-type-badge">' + esc(a.asset_type || '—') + '</span></td>' +
-        '<td>' + esc(a.make || '—') + '</td>' +
-        '<td>' + esc(a.model || '—') + '</td>' +
-        '<td>' + esc(a.year ? String(a.year) : '—') + '</td>' +
-        '<td>' + esc(a.fuel_type || '—') + '</td>' +
-        '<td class="col-idle"><div class="idle-rate-cell">' +
-          '<input type="number" class="idle-rate-input" data-id="' + a.id + '" value="' + displayRate.toFixed(1) + '" step="0.1" min="0">' +
-          '<span class="idle-rate-unit">L/hr</span>' +
-          (!hasCustomRate ? '<span class="idle-rate-default-tag">default</span>' : '') +
-          '<button class="idle-rate-save-btn" data-id="' + a.id + '">Save</button>' +
-        '</div></td>';
-      if (comp.hasConstruction) {
-        row += '<td>' + (onRoad ? '—' : formatLifeHours(a.expected_life_hours)) + '</td>';
-        row += '<td>' + (onRoad ? '—' : formatServiceHour(a.service_cost_per_hour)) + '</td>';
-      }
-      if (comp.hasOnRoad) {
-        row += '<td>' + (onRoad ? formatLifeKm(a.expected_life_km) : '—') + '</td>';
-        row += '<td>' + (onRoad ? formatServiceKm(a.service_cost_per_km) : '—') + '</td>';
-      }
-      row += '<td class="col-actions"><div class="actions-cell">' +
+        '<td class="asset-name-cell col-name"><div class="asset-name-wrap">' +
+          '<div class="asset-name-row">' + esc(a.asset_name || '—') + renderTelematicsBadge(a.telematics_provider) + '</div>' +
+          renderApproachingLifeBadge(a) +
+        '</div></td>' +
+        '<td class="col-type"><span class="asset-type-badge">' + esc(a.asset_type || '—') + '</span></td>' +
+        '<td class="col-make-model">' + esc(formatMakeModel(a.make, a.model)) + '</td>' +
+        '<td class="col-year">' + esc(a.year ? String(a.year) : '—') + '</td>' +
+        '<td class="col-life">' + esc(formatExpectedLife(a)) + '</td>' +
+        '<td class="col-edit"><div class="actions-cell">' +
           '<button type="button" class="btn-edit" data-id="' + a.id + '">Edit</button>' +
-          '<button type="button" class="btn-delete" data-id="' + a.id + '">Delete</button>' +
         '</div></td>' +
       '</tr>';
       return row;
@@ -765,28 +750,6 @@
 
     tbody.querySelectorAll('.btn-edit').forEach(function(btn) {
       btn.addEventListener('click', function() { openEditModal(btn.dataset.id); });
-    });
-    tbody.querySelectorAll('.btn-delete').forEach(function(btn) {
-      btn.addEventListener('click', function() { openConfirmDelete(btn.dataset.id); });
-    });
-    tbody.querySelectorAll('.idle-rate-input').forEach(function(input) {
-      input.addEventListener('input', function() {
-        this.closest('.idle-rate-cell').querySelector('.idle-rate-save-btn').classList.add('visible');
-      });
-    });
-    tbody.querySelectorAll('.idle-rate-save-btn').forEach(function(btn) {
-      btn.addEventListener('click', async function() {
-        var id = this.dataset.id;
-        var input = this.closest('.idle-rate-cell').querySelector('.idle-rate-input');
-        var newRate = parseFloat(input.value);
-        if (isNaN(newRate) || newRate < 0) { showToast('Please enter a valid rate', 'error'); return; }
-        this.disabled = true; this.textContent = '...';
-        var { error } = await supabase.from('assets').update({ idle_burn_rate_lph: newRate }).eq('id', Number(id)).eq('user_id', currentUser.id);
-        this.disabled = false; this.textContent = 'Save';
-        if (error) { showToast('Failed to update idle rate', 'error'); return; }
-        showToast('Idle burn rate updated', 'success');
-        loadAssets();
-      });
     });
   }
 
@@ -858,21 +821,8 @@
     return isOnRoadType(asset.asset_type);
   }
 
-  function getFleetComposition(assets) {
-    var hasOnRoad = false;
-    var hasConstruction = false;
-    assets.forEach(function(a) {
-      if (assetIsOnRoad(a)) hasOnRoad = true;
-      else hasConstruction = true;
-    });
-    return { hasOnRoad: hasOnRoad, hasConstruction: hasConstruction };
-  }
-
-  function getTableColCount(comp) {
-    var n = 8;
-    if (comp.hasConstruction) n += 2;
-    if (comp.hasOnRoad) n += 2;
-    return n;
+  function getTableColCount() {
+    return 6;
   }
 
   function formatLifeHours(val) {
@@ -885,40 +835,19 @@
     return Number(val).toLocaleString() + ' km';
   }
 
-  function formatServiceHour(val) {
-    if (val == null || val === '') return '—';
-    return '$' + Number(val).toFixed(2) + '/hr';
-  }
-
-  function formatServiceKm(val) {
-    if (val == null || val === '') return '—';
-    return '$' + Number(val).toFixed(2) + '/km';
-  }
-
-  function getColumnLayout(comp) {
-    var cols = [
+  function getColumnLayout() {
+    return [
       { label: 'Asset Name', cls: 'col-name' },
       { label: 'Type', cls: 'col-type' },
-      { label: 'Make', cls: 'col-make' },
-      { label: 'Model', cls: 'col-model' },
+      { label: 'Make / Model', cls: 'col-make-model' },
       { label: 'Year', cls: 'col-year' },
-      { label: 'Fuel Type', cls: 'col-fuel' },
-      { label: 'Idle Burn Rate', cls: 'col-idle' }
+      { label: 'Expected Life', cls: 'col-life' },
+      { label: '', cls: 'col-edit' }
     ];
-    if (comp.hasConstruction) {
-      cols.push({ label: 'Life (hrs)', cls: 'col-life-hrs' });
-      cols.push({ label: 'Service ($/hr)', cls: 'col-serv-hr' });
-    }
-    if (comp.hasOnRoad) {
-      cols.push({ label: 'Life (km)', cls: 'col-life-km' });
-      cols.push({ label: 'Service ($/km)', cls: 'col-serv-km' });
-    }
-    cols.push({ label: 'Actions', cls: 'col-actions' });
-    return cols;
   }
 
-  function renderTableHeader(comp) {
-    var cols = getColumnLayout(comp);
+  function renderTableHeader() {
+    var cols = getColumnLayout();
     document.getElementById('assets-colgroup').innerHTML =
       cols.map(function(c) { return '<col class="' + c.cls + '">'; }).join('');
     document.getElementById('assets-thead').innerHTML =
@@ -1130,6 +1059,7 @@
 
   function openAddModal() {
     editingAssetId = null;
+    document.getElementById('delete-asset-modal-btn').hidden = true;
     document.getElementById('asset-modal-title').textContent = 'Add New Asset';
     document.getElementById('asset-modal-sub').textContent = 'Enter the details for this asset. You can add fuel and telematics data from the Upload Data page.';
     document.getElementById('save-asset-btn').textContent = 'Add Asset';
@@ -1143,6 +1073,7 @@
     var asset = allAssets.find(function(a) { return Number(a.id) === Number(id); });
     if (!asset) { showToast('Asset not found', 'error'); return; }
     editingAssetId = asset.id;
+    document.getElementById('delete-asset-modal-btn').hidden = false;
     document.getElementById('asset-modal-title').textContent = 'Edit Asset';
     document.getElementById('asset-modal-sub').textContent = 'Update the details for ' + (asset.asset_name || 'this asset') + '.';
     document.getElementById('save-asset-btn').textContent = 'Save Changes';
@@ -1175,11 +1106,18 @@
 
   function closeAssetModal() {
     document.getElementById('add-modal').classList.remove('open');
+    document.getElementById('delete-asset-modal-btn').hidden = true;
     editingAssetId = null;
   }
 
   document.getElementById('add-asset-btn').addEventListener('click', openAddModal);
   document.getElementById('cancel-modal-btn').addEventListener('click', closeAssetModal);
+  document.getElementById('delete-asset-modal-btn').addEventListener('click', function() {
+    if (editingAssetId == null) return;
+    var id = editingAssetId;
+    closeAssetModal();
+    openConfirmDelete(id);
+  });
   document.getElementById('add-modal').addEventListener('click', function(e) { if (e.target === this) closeAssetModal(); });
 
   document.getElementById('asset-form').addEventListener('change', function(e) {
