@@ -9,7 +9,7 @@
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html { scroll-behavior: smooth; }
-  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #F0F2F5; overflow-x: hidden; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #E2E8F0; overflow-x: hidden; }
 
   /* ── NAV ── */
   nav {
@@ -17,7 +17,7 @@
     background: rgba(8,12,18,0.90);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid #2D3748;
     padding: 0 3rem;
   }
   .nav-inner {
@@ -39,7 +39,7 @@
   .nav-links a:hover { color: #F0F2F5; }
   .nav-actions { display: flex; align-items: center; gap: 12px; }
   .btn-ghost {
-    background: none; border: 1px solid rgba(255,255,255,0.10);
+    background: none; border: 1px solid #2D3748;
     color: #C8D0DB; font-size: 13px; font-weight: 500;
     padding: 8px 20px; border-radius: 8px; cursor: pointer;
     transition: all 0.2s; font-family: inherit;
@@ -108,7 +108,7 @@
   }
   .btn-hero-cta:hover { background: #0BC48E; transform: translateY(-1px); }
   .btn-hero-outline {
-    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10);
+    background: rgba(255,255,255,0.04); border: 1px solid #2D3748;
     color: #C8D0DB; font-size: 15px; font-weight: 500; padding: 14px 26px;
     border-radius: 10px; cursor: pointer; transition: all 0.2s; font-family: inherit;
     display: flex; align-items: center; gap: 9px;
@@ -124,7 +124,7 @@
   .hero-visual { position: relative; }
   .hero-img-wrap {
     border-radius: 16px; overflow: hidden;
-    border: 1px solid rgba(255,255,255,0.07);
+    border: 1px solid #2D3748;
     position: relative;
   }
   .hero-img-wrap img {
@@ -139,8 +139,8 @@
   /* ── PILOT STRIP ── */
   .pilot-strip {
     padding: 28px 3rem;
-    border-top: 1px solid rgba(255,255,255,0.04);
-    border-bottom: 1px solid rgba(255,255,255,0.04);
+    border-top: 1px solid #2D3748;
+    border-bottom: 1px solid #2D3748;
     background: rgba(255,255,255,0.012);
     text-align: center;
   }
@@ -175,8 +175,8 @@
     border: 1px solid rgba(14,165,122,0.12);
   }
   .module-group.on-road {
-    background: rgba(255,255,255,0.015);
-    border: 1px solid rgba(255,255,255,0.06);
+    background: #111827;
+    border: 1px solid #2D3748;
   }
   .module-group-label {
     display: inline-block; font-size: 10px; font-weight: 700;
@@ -203,7 +203,7 @@
   .module-group.on-road .features-grid { grid-template-columns: repeat(2,1fr); }
   .feat-card {
     background: rgba(255,255,255,0.018);
-    border: 1px solid rgba(255,255,255,0.06);
+    border: 1px solid #2D3748;
     border-radius: 16px; padding: 32px;
     transition: border-color 0.25s, background 0.25s;
     position: relative; overflow: hidden;
@@ -252,13 +252,13 @@
   /* Dashboard mockup */
   .dash-frame {
     background: rgba(10,16,26,0.85);
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid #2D3748;
     border-radius: 16px; overflow: hidden;
   }
   .dash-bar {
     display: flex; align-items: center; gap: 7px;
-    padding: 13px 18px; border-bottom: 1px solid rgba(255,255,255,0.05);
-    background: rgba(255,255,255,0.02);
+    padding: 13px 18px; border-bottom: 1px solid #2D3748;
+    background: #111827;
   }
   .traffic-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.08); }
   .dash-bar-title { font-size: 12px; color: #2E3A4A; margin: 0 auto; }
@@ -269,11 +269,11 @@
   .dash-asset-label { font-size: 11.5px; font-weight: 700; color: #3A4A5C; letter-spacing: 0.06em; text-transform: uppercase; }
   .dash-site-badge {
     font-size: 10px; color: #2E3A4A; background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.05); padding: 3px 10px; border-radius: 6px;
+    border: 1px solid #2D3748; padding: 3px 10px; border-radius: 6px;
   }
   .kpi-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 14px; }
   .kpi {
-    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.03); border: 1px solid #2D3748;
     border-radius: 10px; padding: 13px 15px;
   }
   .kpi-label { font-size: 9.5px; font-weight: 700; color: #2E3A4A; text-transform: uppercase; letter-spacing: 0.09em; margin-bottom: 6px; }
@@ -285,7 +285,7 @@
   .kpi-delta.pos { color: rgba(14,165,122,0.65); }
   .kpi-delta.neg { color: rgba(239,159,39,0.65); }
   .chart-block {
-    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04);
+    background: #111827; border: 1px solid #2D3748;
     border-radius: 10px; padding: 14px;
   }
   .chart-label { font-size: 10px; font-weight: 700; color: #2E3A4A; margin-bottom: 12px; letter-spacing: 0.07em; text-transform: uppercase; }
@@ -298,13 +298,13 @@
   .dash-total-row {
     display: flex; align-items: center; justify-content: space-between;
     margin-top: 12px; padding-top: 12px;
-    border-top: 1px solid rgba(255,255,255,0.04);
+    border-top: 1px solid #2D3748;
   }
   .dash-total-label { font-size: 11px; color: #2E3A4A; }
   .dash-total-val { font-size: 18px; font-weight: 800; color: #0EA57A; letter-spacing: -0.5px; }
 
   /* ── HOW IT WORKS ── */
-  .how { padding: 100px 3rem; background: rgba(255,255,255,0.01); border-top: 1px solid rgba(255,255,255,0.04); }
+  .how { padding: 100px 3rem; background: rgba(255,255,255,0.01); border-top: 1px solid #2D3748; }
   .how-inner { max-width: 1280px; margin: 0 auto; }
   .how-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 0; margin-top: 60px; }
   .how-step { padding: 0 40px 0 0; position: relative; }
@@ -357,7 +357,7 @@
   }
   .btn-cta-main:hover { background: #0BC48E; transform: translateY(-1px); }
   .btn-cta-sec {
-    background: none; border: 1px solid rgba(255,255,255,0.10);
+    background: none; border: 1px solid #2D3748;
     color: #9BA4B0; font-size: 15px; font-weight: 500; padding: 16px 30px;
     border-radius: 10px; cursor: pointer; transition: all 0.2s; font-family: inherit;
   }
@@ -365,7 +365,7 @@
 
   /* ── FOOTER ── */
   footer {
-    border-top: 1px solid rgba(255,255,255,0.04);
+    border-top: 1px solid #2D3748;
     padding: 48px 3rem;
   }
   .footer-inner {
@@ -399,7 +399,7 @@
   .modal {
     width: 100%; max-width: 480px;
     background: rgba(10,16,26,0.98);
-    border: 1px solid rgba(255,255,255,0.09);
+    border: 1px solid #2D3748;
     border-radius: 20px; padding: 40px 36px 36px;
     position: relative;
     box-shadow: 0 24px 80px rgba(0,0,0,0.55);
@@ -410,7 +410,7 @@
   .modal-close {
     position: absolute; top: 16px; right: 16px;
     width: 32px; height: 32px; border-radius: 8px;
-    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04); border: 1px solid #2D3748;
     color: #6B7785; font-size: 20px; line-height: 1;
     cursor: pointer; transition: all 0.2s; font-family: inherit;
     display: flex; align-items: center; justify-content: center;
@@ -436,7 +436,7 @@
   .form-group select {
     width: 100%; padding: 12px 14px;
     background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.10);
+    border: 1px solid #2D3748;
     border-radius: 10px; color: #F0F2F5;
     font-size: 14px; font-family: inherit;
     transition: border-color 0.2s, background 0.2s;
@@ -473,7 +473,7 @@
   .modal-thanks h2 { margin-bottom: 12px; }
   .modal-thanks p { font-size: 15px; color: #5A6474; line-height: 1.65; margin-bottom: 28px; }
   .btn-modal-done {
-    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10);
+    background: rgba(255,255,255,0.04); border: 1px solid #2D3748;
     color: #C8D0DB; font-size: 14px; font-weight: 500;
     padding: 12px 28px; border-radius: 10px; cursor: pointer;
     transition: all 0.2s; font-family: inherit;
