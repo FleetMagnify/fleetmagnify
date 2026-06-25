@@ -6,6 +6,7 @@
 <title>Assets | FleetMagnify</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/mobile-responsive.css">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html { scroll-behavior: smooth; }
@@ -262,11 +263,6 @@
     color: #EF9F27;
     max-width: 100%;
     cursor: help;
-  }
-  @media (max-width: 900px) {
-    .sidebar { display: none; } .main { margin-left: 0; } .page-content { padding: 20px; }
-    .stats-row { grid-template-columns: 1fr 1fr; } .upload-card { flex-direction: column; align-items: flex-start; } .form-row { grid-template-columns: 1fr; }
-    .assets-table-wrap { overflow-x: auto; }
   }
 </style>
 </head>
@@ -1812,5 +1808,6 @@
   init();
 })();
 </script>
+<script src="js/mobile-nav.js" defer></script>
 </body>
 </html>

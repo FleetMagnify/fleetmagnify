@@ -6,6 +6,7 @@
 <title>Upload Data | FleetMagnify</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/mobile-responsive.css">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #E2E8F0; min-height: 100vh; display: flex; }
@@ -247,13 +248,6 @@
   .toast.success { border-color: rgba(14,165,122,0.3); }
   .toast.error { border-color: rgba(226,75,74,0.3); }
 
-  @media (max-width: 900px) {
-    .sidebar { display: none; }
-    .main { margin-left: 0; }
-    .upload-grid { grid-template-columns: 1fr; }
-    .help-grid { grid-template-columns: 1fr; }
-    .page-content { padding: 20px; }
-  }
 </style>
 </head>
 <body>
@@ -1253,5 +1247,6 @@
   init();
 })();
 </script>
+<script src="js/mobile-nav.js" defer></script>
 </body>
 </html>

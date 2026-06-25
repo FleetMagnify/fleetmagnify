@@ -6,6 +6,7 @@
 <title>Dashboard | FleetMagnify</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/mobile-responsive.css">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -157,24 +158,6 @@
   }
   .btn-module:hover { background: #0BC48E; transform: translateY(-1px); }
 
-  @media (max-width: 900px) {
-    .app-shell { flex-direction: column; }
-    .sidebar {
-      width: 100%; height: auto; position: static;
-      padding: 16px 0;
-    }
-    .sidebar-logo { padding: 0 20px 16px; margin-bottom: 12px; }
-    .sidebar-nav {
-      flex-direction: row; flex-wrap: wrap;
-      padding: 0 12px 8px; gap: 6px;
-    }
-    .sidebar-link { padding: 8px 12px; font-size: 12.5px; }
-    .sidebar-label { display: none; }
-    .topbar { padding: 16px 20px; }
-    .content { padding: 24px 20px 40px; }
-    .content-header h1 { font-size: 26px; }
-    .modules-grid { grid-template-columns: 1fr; }
-  }
 </style>
 </head>
 <body>
@@ -365,5 +348,6 @@
   })();
 </script>
 
+<script src="js/mobile-nav.js" defer></script>
 </body>
 </html>

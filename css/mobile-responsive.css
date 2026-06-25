@@ -1,0 +1,499 @@
+/* FleetMagnify — mobile layout (max-width: 768px). Desktop unchanged. */
+
+.mobile-menu-btn,
+.sidebar-backdrop,
+.landing-nav-panel,
+.landing-nav-backdrop {
+  display: none;
+}
+
+@media (max-width: 768px) {
+
+  /* ── App sidebar drawer ── */
+  .mobile-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid #2D3748;
+    border-radius: 8px;
+    color: #C8D0DB;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    font-family: inherit;
+    padding: 0;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .mobile-menu-btn:hover {
+    border-color: rgba(14, 165, 122, 0.35);
+    color: #0EA57A;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 55;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.28s ease;
+  }
+  body.sidebar-open .sidebar-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  body.sidebar-open {
+    overflow: hidden;
+  }
+
+  aside.sidebar,
+  .app-shell > .sidebar {
+    display: flex !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 240px !important;
+    max-width: 85vw !important;
+    height: 100vh !important;
+    z-index: 60 !important;
+    transform: translateX(-100%);
+    transition: transform 0.28s ease;
+    overflow-y: auto;
+    padding: 0 !important;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+  }
+  body.sidebar-open aside.sidebar,
+  body.sidebar-open .app-shell > .sidebar {
+    transform: translateX(0);
+  }
+
+  .app-shell {
+    flex-direction: row !important;
+  }
+  .app-shell > .sidebar .sidebar-nav {
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    padding: 0 12px !important;
+  }
+  .app-shell > .sidebar .sidebar-label {
+    display: block !important;
+  }
+  .app-shell > .sidebar .sidebar-logo {
+    padding: 24px 20px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .main,
+  .main-area {
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .topbar {
+    padding: 14px 16px !important;
+    gap: 12px;
+    align-items: center;
+  }
+  .topbar > div:not(.user-pill) {
+    min-width: 0;
+    flex: 1;
+  }
+  .topbar-title {
+    font-size: 16px !important;
+  }
+  .breadcrumb {
+    font-size: 11px !important;
+  }
+  .user-pill .user-name {
+    display: none;
+  }
+
+  /* ── Landing page nav drawer ── */
+  .nav-inner > .nav-links,
+  .nav-inner > .nav-actions {
+    display: none !important;
+  }
+  .landing-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 105;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.28s ease;
+  }
+  body.nav-open .landing-nav-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  body.nav-open {
+    overflow: hidden;
+  }
+  .landing-nav-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: min(300px, 85vw);
+    height: 100vh;
+    background: rgba(10, 16, 26, 0.98);
+    border-left: 1px solid #2D3748;
+    z-index: 110;
+    padding: 72px 24px 32px;
+    transform: translateX(100%);
+    transition: transform 0.28s ease;
+    overflow-y: auto;
+  }
+  body.nav-open .landing-nav-panel {
+    transform: translateX(0);
+  }
+  .landing-nav-panel .nav-links {
+    display: flex !important;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .landing-nav-panel .nav-links a {
+    display: block;
+    width: 100%;
+    padding: 12px 10px;
+    font-size: 15px;
+    border-radius: 8px;
+  }
+  .landing-nav-panel .nav-links a:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .landing-nav-panel .nav-actions {
+    display: flex !important;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: auto;
+  }
+  .landing-nav-panel .nav-actions a,
+  .landing-nav-panel .nav-actions button {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+  }
+  nav {
+    padding: 0 16px !important;
+  }
+  .nav-inner {
+    height: 60px;
+  }
+  .nav-inner .mobile-menu-btn {
+    margin-left: auto;
+  }
+
+  /* ── Page spacing & typography ── */
+  .page-content,
+  .content {
+    padding: 20px 16px !important;
+  }
+  .page-title,
+  .content-header h1 {
+    font-size: 22px !important;
+    letter-spacing: -0.6px !important;
+  }
+  .page-sub,
+  .content-header p {
+    font-size: 13px !important;
+    margin-bottom: 20px !important;
+  }
+  .page-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 16px !important;
+  }
+  .page-actions {
+    flex-wrap: wrap;
+  }
+  .hero-kpi {
+    padding: 20px 18px !important;
+    margin-bottom: 18px !important;
+  }
+  .hero-value {
+    font-size: 32px !important;
+  }
+  .kpi-value,
+  .stat-card-value {
+    font-size: 22px !important;
+  }
+  .stat-card {
+    padding: 16px 18px !important;
+  }
+  .kpi-card,
+  .chart-card {
+    padding: 16px 18px !important;
+  }
+  .filter-bar,
+  .method-note,
+  .info-strip,
+  .no-fuel-banner {
+    padding: 14px 16px !important;
+    margin-bottom: 20px !important;
+  }
+  .filter-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .filter-group select,
+  .filter-group input,
+  .idle-rate-value {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+  .filter-date-row {
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+  .filter-date-row input {
+    width: 100% !important;
+  }
+  .section-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .upload-card {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    padding: 18px 20px !important;
+  }
+  .template-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+  .panel-header,
+  .panel-body {
+    padding: 16px 18px !important;
+  }
+  .modal {
+    padding: 24px 20px !important;
+    margin: 12px;
+  }
+  .modal h2 {
+    font-size: 20px !important;
+  }
+  .toast {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    max-width: none;
+  }
+
+  /* ── Grids → single column ── */
+  .kpi-row,
+  .kpi-pair-cards,
+  .charts-grid,
+  .stats-row,
+  .upload-grid,
+  .help-grid,
+  .jobs-grid,
+  .reports-grid,
+  .modules-grid,
+  .form-row,
+  .date-row,
+  .export-row,
+  .cost-breakdown-row,
+  .highlight-row,
+  .related-grid,
+  .features-grid,
+  .how-grid,
+  .positioning-columns,
+  .hero-inner,
+  .demo-inner,
+  .kpi-section {
+    grid-template-columns: 1fr !important;
+  }
+  .kpi-section {
+    flex-direction: column !important;
+  }
+  .kpi-pair-divider {
+    width: 100% !important;
+    height: 1px !important;
+    margin: 4px 0 14px !important;
+  }
+  .report-card.featured {
+    grid-column: auto !important;
+  }
+  .outcomes-strip {
+    grid-template-columns: 1fr !important;
+    padding: 20px 16px !important;
+  }
+  .article-wrap .sidebar {
+    grid-template-columns: 1fr !important;
+  }
+  .sidebar-cta {
+    grid-column: span 1 !important;
+  }
+
+  /* Calendar keeps 7 columns but shrinks */
+  .cal-grid {
+    gap: 2px !important;
+  }
+  .cal-day {
+    font-size: 11px !important;
+    padding: 6px 2px !important;
+  }
+
+  /* ── Tables ── */
+  .table-card,
+  .assets-table-wrap,
+  .preview-wrap,
+  .table-scroll-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .table-card table,
+  .preview-wrap table,
+  .preview-table,
+  table.data-table {
+    min-width: 560px;
+  }
+  #assets-table {
+    min-width: 680px;
+    table-layout: auto !important;
+  }
+  .table-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 14px 16px !important;
+  }
+  .search-box {
+    width: 100%;
+  }
+  .search-box input {
+    width: 100% !important;
+  }
+
+  /* ── Charts ── */
+  .chart-wrap,
+  .chart-card,
+  .recharts-responsive-container,
+  .recharts-wrapper {
+    max-width: 100% !important;
+    overflow: hidden;
+  }
+  .chart-wrap {
+    height: 220px !important;
+  }
+  .fleet-section .chart-wrap {
+    height: 200px !important;
+  }
+  .chart-wrap canvas {
+    max-width: 100% !important;
+  }
+  .chart-card-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+  }
+  .chart-legend {
+    flex-wrap: wrap;
+    gap: 10px !important;
+  }
+
+  /* ── Auth pages ── */
+  header {
+    padding: 16px 1.25rem !important;
+  }
+  main {
+    padding: 32px 1.25rem 48px !important;
+  }
+  .auth-card {
+    padding: 28px 22px 24px !important;
+  }
+  .auth-card h1 {
+    font-size: 24px !important;
+  }
+
+  /* ── Landing page sections ── */
+  .hero {
+    padding: 64px 1.25rem 48px !important;
+  }
+  .hero h1 {
+    font-size: 36px !important;
+  }
+  .hero-visual {
+    display: none !important;
+  }
+  .positioning {
+    padding: 48px 1.25rem 56px !important;
+  }
+  .positioning-headline {
+    font-size: 22px !important;
+    margin-bottom: 28px !important;
+  }
+  .contrast-point {
+    grid-template-columns: 1fr !important;
+    gap: 6px !important;
+    text-align: left !important;
+    padding: 14px 16px !important;
+  }
+  .contrast-point .vs {
+    display: none !important;
+  }
+  .pilot-strip {
+    padding: 20px 1.25rem !important;
+  }
+  .features,
+  .how,
+  .cta {
+    padding: 48px 1.25rem !important;
+  }
+  .section-title {
+    font-size: 28px !important;
+  }
+  .module-group {
+    padding: 24px 16px 28px !important;
+  }
+  .module-group-title {
+    font-size: 20px !important;
+  }
+  .demo {
+    padding: 40px 1.25rem 56px !important;
+  }
+  .cta-card {
+    padding: 40px 24px !important;
+  }
+  .cta-card h2 {
+    font-size: 28px !important;
+  }
+  .page-hero {
+    padding: 56px 1.25rem 48px !important;
+  }
+  .page-hero h1 {
+    font-size: 32px !important;
+  }
+  .article-wrap {
+    padding: 40px 1.25rem 56px !important;
+    gap: 32px !important;
+  }
+  .footer-inner {
+    flex-direction: column !important;
+    gap: 16px !important;
+    text-align: center;
+  }
+  .footer-left {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  .cta-banner-card {
+    flex-direction: column !important;
+    padding: 32px 24px !important;
+    gap: 24px !important;
+  }
+}
