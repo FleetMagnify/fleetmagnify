@@ -93,6 +93,38 @@
   .kpi-value.unavailable { color: #EF9F27; cursor: help; }
   .kpi-value.partial-total { color: #EF9F27; line-height: 1.25; cursor: help; }
   .kpi-partial-suffix { font-size: 11px; font-weight: 600; letter-spacing: 0; display: block; }
+  .idle-insight-banner {
+    background: rgba(239, 159, 39, 0.06);
+    border: 1px solid rgba(239, 159, 39, 0.22);
+    border-left: 4px solid #EF9F27;
+    border-radius: 14px;
+    padding: 22px 26px;
+    margin-bottom: 24px;
+  }
+  .idle-insight-banner[hidden] { display: none !important; }
+  .idle-insight-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: #EF9F27; margin-bottom: 16px;
+  }
+  .idle-insight-metrics {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 14px;
+  }
+  .idle-insight-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: #3A4A5C; margin-bottom: 8px;
+  }
+  .idle-insight-hours {
+    font-size: 36px; font-weight: 800; letter-spacing: -1.2px; color: #0EA57A; line-height: 1;
+  }
+  .idle-insight-cost {
+    font-size: 36px; font-weight: 800; letter-spacing: -1.2px; color: #EF9F27; line-height: 1;
+  }
+  .idle-insight-cost.partial { cursor: help; }
+  .idle-insight-cost.unavailable { cursor: help; }
+  .idle-insight-partial { font-size: 14px; font-weight: 600; letter-spacing: 0; }
+  .idle-insight-context {
+    font-size: 13px; color: #5A6474; line-height: 1.55; max-width: 720px;
+  }
   .cell-missing { color: #EF9F27; cursor: help; }
   .cell-partial-suffix { font-size: 10.5px; font-weight: 600; margin-left: 4px; }
 
@@ -150,6 +182,11 @@
   .toast.error { border-color: rgba(226,75,74,0.3); }
 
   @media (max-width: 1200px) { .kpi-row { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 768px) {
+    .idle-insight-metrics { grid-template-columns: 1fr; gap: 16px; }
+    .idle-insight-hours, .idle-insight-cost { font-size: 28px; }
+    .idle-insight-banner { padding: 18px 20px; }
+  }
 </style>
 </head>
 <body>
@@ -250,6 +287,21 @@
             <div class="kpi-label">Grand Total Job Cost</div>
             <div class="kpi-value" id="kpi-grand">—</div>
           </div>
+        </div>
+
+        <div class="idle-insight-banner" id="idle-insight-banner" hidden>
+          <div class="idle-insight-title">Idle Cost Insight</div>
+          <div class="idle-insight-metrics">
+            <div>
+              <div class="idle-insight-label">Total Idle Hours</div>
+              <div class="idle-insight-hours" id="idle-insight-hours">—</div>
+            </div>
+            <div>
+              <div class="idle-insight-label">True Idle Cost</div>
+              <div class="idle-insight-cost" id="idle-insight-cost">—</div>
+            </div>
+          </div>
+          <p class="idle-insight-context">This is the cost of machines running without working. Reducing idle time is the fastest way to reduce job cost.</p>
         </div>
 
         <div class="table-header-row">
@@ -531,6 +583,7 @@
     if (!currentJob || jobAssignments.length === 0) {
       costBreakdown = []; costTotals = null;
       setKpisEmpty();
+      hideIdleInsightBanner();
       document.getElementById('breakdown-tbody').innerHTML = '<tr><td colspan="8" class="empty-state">Assign assets and work days to see cost breakdown.</td></tr>';
       return;
     }
@@ -603,7 +656,7 @@
     });
 
     var byAsset = {};
-    var totals = { fuel: 0, fuelMissing: false, idle: 0, idleMissing: null, idleLifeExceeded: false, idleLifeNearLimit: false, depr: 0, deprMissing: null, deprLifeExceeded: false, deprLifeNearLimit: false, service: 0, servMissing: null, maint: 0, maintMissing: null, emissions: 0 };
+    var totals = { fuel: 0, fuelMissing: false, idle: 0, idleHours: 0, idleMissing: null, idleLifeExceeded: false, idleLifeNearLimit: false, depr: 0, deprMissing: null, deprLifeExceeded: false, deprLifeNearLimit: false, service: 0, servMissing: null, maint: 0, maintMissing: null, emissions: 0 };
 
     jobAssignments.forEach(function(row) {
       var asset = allAssets.find(function(a) { return a.id === row.asset_id; });
@@ -612,6 +665,7 @@
       var fuel = fuelMap[key] || { litres: 0, cost: 0 };
       var idleHours = telMap[key] || 0;
       var operatingHours = opMap[key] || 0;
+      totals.idleHours += idleHours;
       var idleRate = getIdleRate(asset);
       var costPerLitre = fuel.litres > 0 ? fuel.cost / fuel.litres : 0;
       var fuelPricingAvailable = !!assetHasFuel[asset.id];
@@ -735,6 +789,7 @@
     setKpiMoneyOrMissing('kpi-maintenance', totals.maint, totals.maintMissing);
     document.getElementById('kpi-emissions').textContent = (totals.emissions / 1000).toFixed(2) + ' t';
     setKpiGrandTotal('kpi-grand', totals.grand, totals.fuelMissing, totals.idleMissing, totals.deprMissing, totals.deprLifeExceeded, totals.deprLifeNearLimit, totals.servMissing, totals.maintMissing);
+    updateIdleInsightBanner(totals);
 
     if (costBreakdown.length === 0) {
       document.getElementById('breakdown-tbody').innerHTML = '<tr><td colspan="8" class="empty-state">No cost data available.</td></tr>';
@@ -767,6 +822,48 @@
       el.removeAttribute('title');
       el.textContent = '—';
     });
+    hideIdleInsightBanner();
+  }
+
+  function fmtIdleHours(n) {
+    var v = Number(n || 0);
+    return v % 1 === 0
+      ? v.toLocaleString(undefined, { maximumFractionDigits: 0 })
+      : v.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  }
+
+  function hideIdleInsightBanner() {
+    var banner = document.getElementById('idle-insight-banner');
+    if (banner) banner.hidden = true;
+  }
+
+  function updateIdleInsightBanner(totals) {
+    var banner = document.getElementById('idle-insight-banner');
+    var hoursEl = document.getElementById('idle-insight-hours');
+    var costEl = document.getElementById('idle-insight-cost');
+    if (!banner || !hoursEl || !costEl) return;
+    banner.hidden = false;
+    hoursEl.textContent = fmtIdleHours(totals.idleHours);
+    costEl.className = 'idle-insight-cost';
+    costEl.removeAttribute('title');
+    if (totals.idleLifeExceeded) {
+      costEl.className = 'idle-insight-cost unavailable';
+      costEl.setAttribute('title', FCM.formatLifeExceededMessage(totals.idleLifeNearLimit));
+      costEl.textContent = totals.idle > 0 ? fmtMoney(totals.idle) : '—';
+    } else if (totals.idleMissing && totals.idleMissing.length) {
+      costEl.className = 'idle-insight-cost partial';
+      costEl.setAttribute('title', FCM.formatMissingMessage(totals.idleMissing));
+      costEl.textContent = totals.idle > 0 ? fmtMoney(totals.idle) : '—';
+    } else {
+      costEl.textContent = fmtMoney(totals.idle);
+    }
+  }
+
+  function fmtPdfIdleCost(totals) {
+    if (totals.idleLifeExceeded && totals.idle <= 0) return '—';
+    if (totals.idleMissing && totals.idleMissing.length && totals.idle <= 0) return '—';
+    if (totals.idleMissing && totals.idleMissing.length && totals.idle > 0) return fmtMoney(totals.idle) + ' (partial)';
+    return fmtMoney(totals.idle);
   }
 
   function openCreateModal() {
@@ -932,13 +1029,40 @@
         doc.setFont('helvetica', 'normal'); y += 6;
       });
 
+      var boxY = y + 6;
+      var boxH = 36;
+      var boxW = pageW - margin * 2;
+      doc.setFillColor(255, 247, 237);
+      doc.setDrawColor(239, 159, 39);
+      doc.roundedRect(margin, boxY, boxW, boxH, 2, 2, 'FD');
+      doc.setFillColor(239, 159, 39);
+      doc.rect(margin, boxY, 3, boxH, 'F');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(30, 40, 55);
+      doc.text('Idle Cost Insight', margin + 7, boxY + 8);
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(14, 165, 122);
+      doc.text('Total Idle Hours: ' + fmtIdleHours(costTotals.idleHours) + ' hrs', margin + 7, boxY + 16);
+
+      doc.setTextColor(180, 95, 10);
+      doc.text('True Idle Cost: ' + fmtPdfIdleCost(costTotals), margin + 7, boxY + 24);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(90, 70, 40);
+      doc.text('This is the cost of machines running without working. Reducing idle time is the fastest way to reduce job cost.', margin + 7, boxY + 31, { maxWidth: boxW - 12 });
+
       var body = costBreakdown.map(function(r) {
         return [r.name, String(r.days), fmtMoney(r.fuel), fmtMoney(r.idle), fmtMoney(r.depr), fmtMoney(r.service), fmtMoney(r.maint), fmtMoney(r.total)];
       });
       body.push(['GRAND TOTAL', '', fmtMoney(costTotals.fuel), fmtMoney(costTotals.idle), fmtMoney(costTotals.depr), fmtMoney(costTotals.service), fmtMoney(costTotals.maint), fmtMoney(costTotals.grand)]);
 
       doc.autoTable({
-        startY: y + 4,
+        startY: boxY + boxH + 8,
         head: [['Asset', 'Days', 'Fuel', 'Idle', 'Depr', 'Service', 'Maint', 'Total']],
         body: body,
         margin: { left: margin, right: margin },
