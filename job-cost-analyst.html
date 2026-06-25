@@ -535,8 +535,15 @@
 
     var fuelResult = await supabase.from('fuel_records').select('asset_id, record_date, litres, total_cost')
       .eq('user_id', currentUser.id).in('asset_id', assetIds).in('record_date', dates);
-    var telResult = await supabase.from('telematics_records').select('asset_id, record_date, idle_hours, total_engine_hours')
-      .eq('user_id', currentUser.id).in('asset_id', assetIds).in('record_date', dates);
+    var minDate = dates.reduce(function(a,b){ return a < b ? a : b; });
+    var maxDate = dates.reduce(function(a,b){ return a > b ? a : b; });
+
+    var telResult = await supabase.from('telematics_records')
+      .select('asset_id, record_date, idle_hours, total_engine_hours')
+      .eq('user_id', currentUser.id)
+      .in('asset_id', assetIds)
+      .gte('record_date', minDate)
+      .lte('record_date', maxDate);
     var latestTelResult = await supabase.from('telematics_records').select('asset_id, total_engine_hours, record_date')
       .eq('user_id', currentUser.id).in('asset_id', assetIds).order('record_date', { ascending: false });
 
@@ -559,10 +566,31 @@
       fuelMap[key].cost += parseFloat(r.total_cost) || 0;
       if ((parseFloat(r.litres) || 0) > 0) assetHasFuel[r.asset_id] = true;
     });
+    var workDatesByAsset = {};
+    jobAssignments.forEach(function(row) {
+      if (!workDatesByAsset[row.asset_id]) workDatesByAsset[row.asset_id] = [];
+      if (workDatesByAsset[row.asset_id].indexOf(row.work_date) === -1) {
+        workDatesByAsset[row.asset_id].push(row.work_date);
+      }
+    });
     var telMap = {};
     (telResult.data || []).forEach(function(r) {
-      var key = r.asset_id + '|' + r.record_date;
-      telMap[key] = (telMap[key] || 0) + (parseFloat(r.idle_hours) || 0);
+      var snapshotDate = String(r.record_date);
+      var snapshotParts = snapshotDate.split('-').map(Number);
+      var windowStartDt = new Date(snapshotParts[0], snapshotParts[1] - 1, snapshotParts[2]);
+      windowStartDt.setDate(windowStartDt.getDate() - 7);
+      var windowStart = windowStartDt.getFullYear() + '-' +
+        String(windowStartDt.getMonth() + 1).padStart(2, '0') + '-' +
+        String(windowStartDt.getDate()).padStart(2, '0');
+      var matching = (workDatesByAsset[r.asset_id] || []).filter(function(wd) {
+        return wd > windowStart && wd <= snapshotDate;
+      });
+      if (matching.length === 0) return;
+      var share = (parseFloat(r.idle_hours) || 0) / matching.length;
+      matching.forEach(function(wd) {
+        var key = r.asset_id + '|' + wd;
+        telMap[key] = (telMap[key] || 0) + share;
+      });
     });
 
     var byAsset = {};
