@@ -442,9 +442,13 @@
     return totalOp > 0 || totalIdle > 0;
   }
 
-  function updateNoFuelBanner(fuelRows, telRows, isMachinery) {
+  function telHasLitresConsumed(telRows) {
+    return telRows.some(function(r) { return (parseFloat(r.litres_consumed) || 0) > 0; });
+  }
+
+  function updateNoFuelBanner(telRows) {
     var banner = document.getElementById('no-fuel-banner');
-    if (!isMachinery || fuelRows.length > 0 || !telHasActivity(telRows)) {
+    if (telHasLitresConsumed(telRows) || !telHasActivity(telRows)) {
       banner.hidden = true;
       return;
     }
@@ -546,17 +550,30 @@
     return { dailyKm: dailyKm, totalKm: totalKm, hasOdometerData: odoDates.length > 0 };
   }
 
-  function buildMachineryFuelRows(telRows, costPerLitre) {
-    return telRows
-      .filter(function(r) { return (parseFloat(r.litres_consumed) || 0) > 0; })
-      .map(function(r) {
-        var litres = parseFloat(r.litres_consumed) || 0;
-        return {
-          record_date: r.record_date,
-          litres: litres,
-          total_cost: litres * (costPerLitre || 0)
-        };
+  function buildMachineryDailyRows(telRows, idleRate, costPerLitre) {
+    var dailyRows = [];
+    telRows.forEach(function(r) {
+      var litres = parseFloat(r.litres_consumed) || 0;
+      var idleHours = parseFloat(r.idle_hours) || 0;
+      var opHours = parseFloat(r.operating_hours) || 0;
+      if (litres === 0 && idleHours === 0 && opHours === 0) return;
+      var idleFuel = idleHours * idleRate;
+      if (idleFuel > litres) idleFuel = litres;
+      var operatingFuel = litres - idleFuel;
+      dailyRows.push({
+        date: String(r.record_date),
+        litres: litres,
+        cost: litres * costPerLitre,
+        opHours: opHours,
+        idleHours: idleHours,
+        operatingFuel: operatingFuel,
+        idleFuel: idleFuel,
+        hasFuel: litres > 0,
+        hasTel: true
       });
+    });
+    dailyRows.sort(function(a, b) { return a.date.localeCompare(b.date); });
+    return dailyRows;
   }
 
   function parseDateStr(str) {
@@ -838,59 +855,47 @@
         .lte('record_date', dateTo)
         .order('record_date');
       fuelRows = fuelResult.data || [];
-    } else {
-      fuelRows = buildMachineryFuelRows(telResult.data || [], defaultMachineryFuelCostPerLitre || 0);
     }
 
     btn.disabled = false; btn.textContent = 'Apply Filters';
 
     var telRows = telResult.data || [];
 
-    if (fuelRows.length === 0 && telRows.length === 0) {
-      hideNoFuelBanner();
-      showEmpty(isOnRoadAsset(selectedAsset));
-      return;
-    }
-
     if (isOnRoad) {
+      if (fuelRows.length === 0 && telRows.length === 0) {
+        hideNoFuelBanner();
+        showEmpty(true);
+        return;
+      }
       hideNoFuelBanner();
       runOnRoadAnalysis(fuelRows, telRows, idleRate);
     } else {
-      runConstructionAnalysis(fuelRows, telRows, idleRate);
+      if (telRows.length === 0) {
+        hideNoFuelBanner();
+        showEmpty(false);
+        return;
+      }
+      runConstructionAnalysis(telRows, idleRate);
     }
   }
 
-  function runConstructionAnalysis(fuelRows, telRows, idleRate) {
+  function runConstructionAnalysis(telRows, idleRate) {
     setViewMode(false);
-    updateNoFuelBanner(fuelRows, telRows, true);
+    updateNoFuelBanner(telRows);
+    var costPerLitre = defaultMachineryFuelCostPerLitre || 0;
+    var dailyRows = buildMachineryDailyRows(telRows, idleRate, costPerLitre);
     var hasAnyTel = telRows.length > 0;
-    var telLitres = 0, telCost = 0;
-    fuelRows.forEach(function(r) {
-      telLitres += parseFloat(r.litres) || 0;
-      telCost += parseFloat(r.total_cost) || 0;
-    });
-    var avgCostPerLitre = telLitres > 0 ? (telCost / telLitres) : (defaultMachineryFuelCostPerLitre || 0);
-    var useEstimatedPricing = fuelRows.length === 0 && avgCostPerLitre > 0;
-    var byDate = mergeFuelAndTelematics(fuelRows, telRows);
-    var dailyRows = buildConstructionDailyRows(byDate, idleRate, avgCostPerLitre, useEstimatedPricing);
 
     var totalLitres = 0, totalCost = 0, totalIdleFuel = 0, totalOperatingFuel = 0;
     var totalOperatingHours = 0, totalIdleHours = 0;
 
     dailyRows.forEach(function(r) {
-      if (useEstimatedPricing) {
-        totalLitres += r.idleFuel + r.operatingFuel;
-        totalCost += r.cost;
-      } else {
-        totalLitres += r.litres;
-        totalCost += r.cost;
-      }
+      totalLitres += r.litres;
+      totalCost += r.cost;
       totalIdleFuel += r.idleFuel;
       totalOperatingFuel += r.operatingFuel;
-      if (r.hasTel) {
-        totalOperatingHours += r.opHours;
-        totalIdleHours += r.idleHours;
-      }
+      totalOperatingHours += r.opHours;
+      totalIdleHours += r.idleHours;
     });
 
     if (hasAnyTel && totalOperatingHours > 0) {
@@ -910,9 +915,7 @@
     document.getElementById('kpi-total-cost').textContent = fmtMoney(totalCost);
     document.getElementById('kpi-total-cost').removeAttribute('title');
     document.getElementById('kpi-total-litres-sub').textContent = totalLitres.toLocaleString(undefined, {maximumFractionDigits:0}) + ' litres total';
-    var idleCost = totalLitres > 0
-      ? (useEstimatedPricing ? totalIdleFuel * avgCostPerLitre : totalCost * (totalIdleFuel / totalLitres))
-      : 0;
+    var idleCost = totalIdleFuel * costPerLitre;
     var idlePct = totalCost > 0 ? (idleCost / totalCost * 100) : 0;
     document.getElementById('kpi-idle-cost').textContent = fmtMoney(idleCost);
     document.getElementById('kpi-idle-pct-sub').textContent = idlePct.toFixed(1) + '% of total fuel cost';
