@@ -546,39 +546,80 @@
     return { dailyKm: dailyKm, totalKm: totalKm, hasOdometerData: odoDates.length > 0 };
   }
 
+  function parseDateStr(str) {
+    var parts = String(str).split('-').map(Number);
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  }
+
+  function dateToStr(dt) {
+    return dt.getFullYear() + '-' +
+      String(dt.getMonth() + 1).padStart(2, '0') + '-' +
+      String(dt.getDate()).padStart(2, '0');
+  }
+
+  function snapshotWindowStart(snapshotDate) {
+    var dt = parseDateStr(snapshotDate);
+    dt.setDate(dt.getDate() - 7);
+    return dateToStr(dt);
+  }
+
+  function fuelDateInSnapshotWindow(fuelDate, snapshotDate) {
+    var windowStart = snapshotWindowStart(snapshotDate);
+    return fuelDate > windowStart && fuelDate <= snapshotDate;
+  }
+
+  function findNearestSnapshotForFuelDate(fuelDate, telRows) {
+    var best = null;
+    var bestGap = Infinity;
+    telRows.forEach(function(r) {
+      var snapshotDate = String(r.record_date);
+      if (!fuelDateInSnapshotWindow(fuelDate, snapshotDate)) return;
+      var gap = parseDateStr(snapshotDate).getTime() - parseDateStr(fuelDate).getTime();
+      if (gap < bestGap) {
+        bestGap = gap;
+        best = r;
+      }
+    });
+    return best;
+  }
+
   function mergeFuelAndTelematics(fuelRows, telRows) {
     var byDate = {};
     fuelRows.forEach(function(r) {
-      byDate[r.record_date] = byDate[r.record_date] || {};
-      byDate[r.record_date].hasFuel = true;
-      byDate[r.record_date].litres = (byDate[r.record_date].litres || 0) + (parseFloat(r.litres) || 0);
-      byDate[r.record_date].cost = (byDate[r.record_date].cost || 0) + (parseFloat(r.total_cost) || 0);
+      var fuelDate = String(r.record_date);
+      byDate[fuelDate] = byDate[fuelDate] || {};
+      byDate[fuelDate].hasFuel = true;
+      byDate[fuelDate].litres = (byDate[fuelDate].litres || 0) + (parseFloat(r.litres) || 0);
+      byDate[fuelDate].cost = (byDate[fuelDate].cost || 0) + (parseFloat(r.total_cost) || 0);
     });
-    var fuelDates = [];
-    fuelRows.forEach(function(r) {
-      if (fuelDates.indexOf(r.record_date) === -1) fuelDates.push(r.record_date);
+
+    var snapshotGroups = {};
+    fuelRows.forEach(function(fuelRow) {
+      var fuelDate = String(fuelRow.record_date);
+      var snap = findNearestSnapshotForFuelDate(fuelDate, telRows);
+      if (!snap) return;
+      var snapKey = String(snap.record_date);
+      if (!snapshotGroups[snapKey]) {
+        snapshotGroups[snapKey] = { snap: snap, fuelRecords: [] };
+      }
+      snapshotGroups[snapKey].fuelRecords.push(fuelRow);
     });
-    telRows.forEach(function(r) {
-      var snapshotDate = String(r.record_date);
-      var snapshotParts = snapshotDate.split('-').map(Number);
-      var windowStartDt = new Date(snapshotParts[0], snapshotParts[1] - 1, snapshotParts[2]);
-      windowStartDt.setDate(windowStartDt.getDate() - 7);
-      var windowStart = windowStartDt.getFullYear() + '-' +
-        String(windowStartDt.getMonth() + 1).padStart(2, '0') + '-' +
-        String(windowStartDt.getDate()).padStart(2, '0');
-      var matching = fuelDates.filter(function(fd) {
-        return fd > windowStart && fd <= snapshotDate;
-      });
-      if (matching.length === 0) return;
-      var idleShare = (parseFloat(r.idle_hours) || 0) / matching.length;
-      var opShare = (parseFloat(r.operating_hours) || 0) / matching.length;
-      matching.forEach(function(fd) {
+
+    Object.keys(snapshotGroups).forEach(function(snapKey) {
+      var group = snapshotGroups[snapKey];
+      var count = group.fuelRecords.length;
+      if (count === 0) return;
+      var idleShare = (parseFloat(group.snap.idle_hours) || 0) / count;
+      var opShare = (parseFloat(group.snap.operating_hours) || 0) / count;
+      group.fuelRecords.forEach(function(fuelRow) {
+        var fd = String(fuelRow.record_date);
         byDate[fd] = byDate[fd] || {};
         byDate[fd].hasTel = true;
         byDate[fd].operating_hours = (byDate[fd].operating_hours || 0) + opShare;
         byDate[fd].idle_hours = (byDate[fd].idle_hours || 0) + idleShare;
       });
     });
+
     return byDate;
   }
 
