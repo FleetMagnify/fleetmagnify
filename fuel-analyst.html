@@ -552,11 +552,30 @@
       byDate[r.record_date].litres = (byDate[r.record_date].litres || 0) + (parseFloat(r.litres) || 0);
       byDate[r.record_date].cost = (byDate[r.record_date].cost || 0) + (parseFloat(r.total_cost) || 0);
     });
+    var fuelDates = [];
+    fuelRows.forEach(function(r) {
+      if (fuelDates.indexOf(r.record_date) === -1) fuelDates.push(r.record_date);
+    });
     telRows.forEach(function(r) {
-      byDate[r.record_date] = byDate[r.record_date] || {};
-      byDate[r.record_date].hasTel = true;
-      byDate[r.record_date].operating_hours = (byDate[r.record_date].operating_hours || 0) + (parseFloat(r.operating_hours) || 0);
-      byDate[r.record_date].idle_hours = (byDate[r.record_date].idle_hours || 0) + (parseFloat(r.idle_hours) || 0);
+      var snapshotDate = String(r.record_date);
+      var snapshotParts = snapshotDate.split('-').map(Number);
+      var windowStartDt = new Date(snapshotParts[0], snapshotParts[1] - 1, snapshotParts[2]);
+      windowStartDt.setDate(windowStartDt.getDate() - 7);
+      var windowStart = windowStartDt.getFullYear() + '-' +
+        String(windowStartDt.getMonth() + 1).padStart(2, '0') + '-' +
+        String(windowStartDt.getDate()).padStart(2, '0');
+      var matching = fuelDates.filter(function(fd) {
+        return fd > windowStart && fd <= snapshotDate;
+      });
+      if (matching.length === 0) return;
+      var idleShare = (parseFloat(r.idle_hours) || 0) / matching.length;
+      var opShare = (parseFloat(r.operating_hours) || 0) / matching.length;
+      matching.forEach(function(fd) {
+        byDate[fd] = byDate[fd] || {};
+        byDate[fd].hasTel = true;
+        byDate[fd].operating_hours = (byDate[fd].operating_hours || 0) + opShare;
+        byDate[fd].idle_hours = (byDate[fd].idle_hours || 0) + idleShare;
+      });
     });
     return byDate;
   }
