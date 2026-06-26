@@ -560,13 +560,13 @@
   var FUEL_NOTE = 'Each row is one asset on one date. Duplicate a row for each date you have data for. Do not change asset_id or asset_name.';
   var TEL_NOTE = 'Each row is one asset on one date. Duplicate a row for each date you have data for. Do not change asset_id or asset_name.';
   var FUEL_HEADERS = ['asset_id', 'asset_name', 'record_date', 'litres', 'cost_per_litre', 'total_cost', 'supplier'];
-  var TEL_HEADERS = ['asset_id', 'asset_name', 'record_date', 'total_engine_hours', 'operating_hours', 'idle_hours', 'odometer_km'];
+  var TEL_HEADERS = ['asset_id', 'asset_name', 'record_date', 'total_engine_hours', 'operating_hours', 'idle_hours', 'litres_consumed', 'odometer_km'];
   var TRUCK_FUEL_NOTE = 'Each row is one fuel purchase. vehicle_name must match an asset in your fleet. Do not change vehicle_name.';
   var TRUCK_MILEAGE_NOTE = 'Each row is one odometer reading. vehicle_name must match an asset in your fleet.';
   var TRUCK_FUEL_HEADERS = ['vehicle_name', 'purchase_date', 'litres', 'cost_nzd', 'source'];
   var TRUCK_MILEAGE_HEADERS = ['vehicle_name', 'reading_date', 'odometer_km', 'source'];
   var FUEL_PREVIEW_COLS = ['asset_name', 'record_date', 'litres', 'cost_per_litre', 'total_cost', 'supplier'];
-  var TEL_PREVIEW_COLS = ['asset_name', 'record_date', 'total_engine_hours', 'operating_hours', 'idle_hours', 'odometer_km'];
+  var TEL_PREVIEW_COLS = ['asset_name', 'record_date', 'total_engine_hours', 'operating_hours', 'idle_hours', 'litres_consumed', 'odometer_km'];
   var FUEL_HEADER_KEYS = ['asset_name', 'record_date'];
   var TEL_HEADER_KEYS = ['asset_name', 'record_date'];
   var TRUCK_FUEL_HEADER_KEYS = ['vehicle_name', 'purchase_date'];
@@ -1041,6 +1041,7 @@
         total_engine_hours: parseOptionalFloat(r.total_engine_hours),
         operating_hours: parseOptionalFloat(r.operating_hours),
         idle_hours: parseOptionalFloat(r.idle_hours),
+        litres_consumed: parseOptionalFloat(r.litres_consumed),
         odometer_km: parseOptionalFloat(r.odometer_km)
       });
     });
