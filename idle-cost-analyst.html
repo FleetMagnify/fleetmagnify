@@ -235,6 +235,7 @@
     <a class="nav-item" href="assets.html"><span class="nav-icon">🚧</span> Assets</a>
     <a class="nav-item" href="upload.html"><span class="nav-icon">📤</span> Upload Data</a>
     <a class="nav-item" href="integrations.html"><span class="nav-icon">🔌</span> Integrations</a>
+    <a class="nav-item" href="settings.html"><span class="nav-icon">⚙️</span> Settings</a>
   </nav>
   <div class="sidebar-footer">
     <button class="btn-signout" id="signout-btn">↩ Sign Out</button>
@@ -383,6 +384,7 @@
   var idleChart = null;
   var lastDateFrom = '';
   var lastDateTo = '';
+  var defaultMachineryFuelCostPerLitre = null;
 
   // Default idle burn rates by asset type (litres/hour) — same as Fuel Analyst, used as fallback
   var DEFAULT_IDLE_RATES = {
@@ -390,6 +392,18 @@
     'Bulldozer': 5.0, 'Crane': 4.5, 'Forklift': 1.5, 'Light Vehicle': 1.2,
     'Rigid Truck': 2.5, 'Semi Trailer': 3.0, 'Water Truck': 3.5, 'Other': 3.0
   };
+
+  async function loadUserSettings() {
+    var result = await supabase
+      .from('user_settings')
+      .select('machinery_fuel_cost_per_litre')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+    if (result.data && result.data.machinery_fuel_cost_per_litre != null) {
+      var val = parseFloat(result.data.machinery_fuel_cost_per_litre);
+      if (!isNaN(val)) defaultMachineryFuelCostPerLitre = val;
+    }
+  }
 
   async function init() {
     var { data: { session } } = await supabase.auth.getSession();
@@ -407,6 +421,7 @@
     document.getElementById('date-to').value = today.toISOString().slice(0,10);
     document.getElementById('date-from').value = monthAgo.toISOString().slice(0,10);
 
+    await loadUserSettings();
     await loadAssets();
   }
 
@@ -676,8 +691,8 @@
       totalLitres += parseFloat(r.litres) || 0;
       totalFuelCost += parseFloat(r.total_cost) || 0;
     });
-    var avgCostPerLitre = totalLitres > 0 ? (totalFuelCost / totalLitres) : 0;
-    var fuelPricingAvailable = fuelRows.length > 0 && totalLitres > 0;
+    var avgCostPerLitre = totalLitres > 0 ? (totalFuelCost / totalLitres) : (defaultMachineryFuelCostPerLitre || 0);
+    var fuelPricingAvailable = (fuelRows.length > 0 && totalLitres > 0) || (defaultMachineryFuelCostPerLitre > 0);
 
     var byDate = {};
     telRows.forEach(function(r) {

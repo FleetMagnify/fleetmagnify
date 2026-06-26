@@ -135,6 +135,7 @@
     <a class="nav-item" href="assets.html"><span class="nav-icon">🚧</span> Assets</a>
     <a class="nav-item" href="upload.html"><span class="nav-icon">📤</span> Upload Data</a>
     <a class="nav-item" href="integrations.html"><span class="nav-icon">🔌</span> Integrations</a>
+    <a class="nav-item" href="settings.html"><span class="nav-icon">⚙️</span> Settings</a>
   </nav>
   <div class="sidebar-footer">
     <button class="btn-signout" id="signout-btn">↩ Sign Out</button>
@@ -236,6 +237,7 @@
   var currentUser = null;
   var companyName = '';
   var charts = {};
+  var defaultMachineryFuelCostPerLitre = null;
 
   var DEFAULT_IDLE_RATES = {
     'Excavator': 4.0, 'Dump Truck': 5.5, 'Wheel Loader': 4.5, 'Motor Grader': 4.0,
@@ -268,6 +270,18 @@
     return Math.round((end - start) / 86400000) + 1;
   }
 
+  async function loadUserSettings() {
+    var result = await supabase
+      .from('user_settings')
+      .select('machinery_fuel_cost_per_litre')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+    if (result.data && result.data.machinery_fuel_cost_per_litre != null) {
+      var val = parseFloat(result.data.machinery_fuel_cost_per_litre);
+      if (!isNaN(val)) defaultMachineryFuelCostPerLitre = val;
+    }
+  }
+
   async function init() {
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
@@ -282,6 +296,7 @@
     document.getElementById('month-title').textContent =
       now.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' }) + ' Fleet Overview';
 
+    await loadUserSettings();
     await loadDashboard();
     document.getElementById('signout-btn').addEventListener('click', async function() {
       await supabase.auth.signOut(); window.location.href = 'login.html';
@@ -392,11 +407,13 @@
         opHours += parseFloat(r.operating_hours) || 0;
       });
 
-      var avgCpl = litres > 0 ? fuelCost / litres : 0;
+      var avgCpl = litres > 0 ? fuelCost / litres : (!FCM.isOnRoad(asset) && defaultMachineryFuelCostPerLitre) || 0;
       var idleRate = getIdleRate(asset);
       var engineEntry = engineHoursMap[Number(asset.id)];
       var totalEngineHours = engineEntry ? engineEntry.hours : null;
-      var idleCosts = FCM.calcIdleHourCosts(asset, idleHours, avgCpl, idleRate, totalEngineHours);
+      var fuelPricingAvailable = (assetFuel.length > 0 && litres > 0) ||
+        (!FCM.isOnRoad(asset) && defaultMachineryFuelCostPerLitre > 0);
+      var idleCosts = FCM.calcIdleHourCosts(asset, idleHours, avgCpl, idleRate, totalEngineHours, fuelPricingAvailable);
       var idlePartialTotal = calcPartialIdleTotal(idleCosts);
       mergeFleetUnavailable(fleetUnavailable, idleCosts);
 

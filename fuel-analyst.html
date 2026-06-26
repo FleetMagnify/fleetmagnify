@@ -247,6 +247,7 @@
     <a class="nav-item" href="assets.html"><span class="nav-icon">🚧</span> Assets</a>
     <a class="nav-item" href="upload.html"><span class="nav-icon">📤</span> Upload Data</a>
     <a class="nav-item" href="integrations.html"><span class="nav-icon">🔌</span> Integrations</a>
+    <a class="nav-item" href="settings.html"><span class="nav-icon">⚙️</span> Settings</a>
   </nav>
   <div class="sidebar-footer">
     <button class="btn-signout" id="signout-btn">↩ Sign Out</button>
@@ -420,6 +421,7 @@
   var fuelChart = null;
   var lastDateFrom = '';
   var lastDateTo = '';
+  var defaultMachineryFuelCostPerLitre = null;
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var NO_ODOMETER_MSG = 'No odometer data available yet — this will populate automatically once your eRoad integration is connected';
@@ -580,7 +582,7 @@
     return byDate;
   }
 
-  function buildConstructionDailyRows(byDate, idleRate) {
+  function buildConstructionDailyRows(byDate, idleRate, avgCostPerLitre, useEstimatedPricing) {
     var dates = Object.keys(byDate).sort();
     var dailyRows = [];
     dates.forEach(function(date) {
@@ -592,8 +594,19 @@
       var opHours = hasTel ? (d.operating_hours || 0) : 0;
       var idleHours = hasTel ? (d.idle_hours || 0) : 0;
       var idleFuel = hasTel ? idleHours * idleRate : 0;
-      if (idleFuel > litres) idleFuel = litres;
-      var operatingFuel = litres - idleFuel;
+      var operatingFuel;
+      if (litres > 0) {
+        if (idleFuel > litres) idleFuel = litres;
+        operatingFuel = litres - idleFuel;
+      } else if (useEstimatedPricing && hasTel) {
+        operatingFuel = 0;
+      } else {
+        idleFuel = 0;
+        operatingFuel = 0;
+      }
+      if (cost === 0 && useEstimatedPricing && avgCostPerLitre > 0 && hasTel) {
+        cost = (idleFuel + operatingFuel) * avgCostPerLitre;
+      }
       dailyRows.push({
         date: date, litres: litres, cost: cost, opHours: opHours, idleHours: idleHours,
         operatingFuel: operatingFuel, idleFuel: idleFuel,
@@ -660,6 +673,18 @@
     'Other': 3.0
   };
 
+  async function loadUserSettings() {
+    var result = await supabase
+      .from('user_settings')
+      .select('machinery_fuel_cost_per_litre')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+    if (result.data && result.data.machinery_fuel_cost_per_litre != null) {
+      var val = parseFloat(result.data.machinery_fuel_cost_per_litre);
+      if (!isNaN(val)) defaultMachineryFuelCostPerLitre = val;
+    }
+  }
+
   async function init() {
     var { data: { session } } = await supabase.auth.getSession();
     if (!session) { window.location.href = 'login.html'; return; }
@@ -676,6 +701,7 @@
     document.getElementById('date-to').value = today.toISOString().slice(0,10);
     document.getElementById('date-from').value = monthAgo.toISOString().slice(0,10);
 
+    await loadUserSettings();
     await loadAssets();
   }
 
@@ -775,15 +801,27 @@
     setViewMode(false);
     updateNoFuelBanner(fuelRows, telRows, true);
     var hasAnyTel = telRows.length > 0;
+    var invoiceLitres = 0, invoiceCost = 0;
+    fuelRows.forEach(function(r) {
+      invoiceLitres += parseFloat(r.litres) || 0;
+      invoiceCost += parseFloat(r.total_cost) || 0;
+    });
+    var avgCostPerLitre = invoiceLitres > 0 ? (invoiceCost / invoiceLitres) : (defaultMachineryFuelCostPerLitre || 0);
+    var useEstimatedPricing = fuelRows.length === 0 && avgCostPerLitre > 0;
     var byDate = mergeFuelAndTelematics(fuelRows, telRows);
-    var dailyRows = buildConstructionDailyRows(byDate, idleRate);
+    var dailyRows = buildConstructionDailyRows(byDate, idleRate, avgCostPerLitre, useEstimatedPricing);
 
     var totalLitres = 0, totalCost = 0, totalIdleFuel = 0, totalOperatingFuel = 0;
     var totalOperatingHours = 0, totalIdleHours = 0;
 
     dailyRows.forEach(function(r) {
-      totalLitres += r.litres;
-      totalCost += r.cost;
+      if (useEstimatedPricing) {
+        totalLitres += r.idleFuel + r.operatingFuel;
+        totalCost += r.cost;
+      } else {
+        totalLitres += r.litres;
+        totalCost += r.cost;
+      }
       totalIdleFuel += r.idleFuel;
       totalOperatingFuel += r.operatingFuel;
       if (r.hasTel) {
@@ -809,7 +847,9 @@
     document.getElementById('kpi-total-cost').textContent = fmtMoney(totalCost);
     document.getElementById('kpi-total-cost').removeAttribute('title');
     document.getElementById('kpi-total-litres-sub').textContent = totalLitres.toLocaleString(undefined, {maximumFractionDigits:0}) + ' litres total';
-    var idleCost = totalLitres > 0 ? (totalCost * (totalIdleFuel / totalLitres)) : 0;
+    var idleCost = totalLitres > 0
+      ? (useEstimatedPricing ? totalIdleFuel * avgCostPerLitre : totalCost * (totalIdleFuel / totalLitres))
+      : 0;
     var idlePct = totalCost > 0 ? (idleCost / totalCost * 100) : 0;
     document.getElementById('kpi-idle-cost').textContent = fmtMoney(idleCost);
     document.getElementById('kpi-idle-pct-sub').textContent = idlePct.toFixed(1) + '% of total fuel cost';
@@ -822,7 +862,7 @@
     setViewMode(true);
     var byDate = mergeFuelAndTelematics(fuelRows, telRows);
     var odo = computeOdometerKmByDate(telRows);
-    var dailyRows = buildConstructionDailyRows(byDate, idleRate);
+    var dailyRows = buildConstructionDailyRows(byDate, idleRate, 0, false);
 
     var totalLitres = 0, totalCost = 0, totalIdleFuel = 0;
     dailyRows.forEach(function(r) {
