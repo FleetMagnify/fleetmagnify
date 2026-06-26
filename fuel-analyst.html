@@ -546,6 +546,19 @@
     return { dailyKm: dailyKm, totalKm: totalKm, hasOdometerData: odoDates.length > 0 };
   }
 
+  function buildMachineryFuelRows(telRows, costPerLitre) {
+    return telRows
+      .filter(function(r) { return (parseFloat(r.litres_consumed) || 0) > 0; })
+      .map(function(r) {
+        var litres = parseFloat(r.litres_consumed) || 0;
+        return {
+          record_date: r.record_date,
+          litres: litres,
+          total_cost: litres * (costPerLitre || 0)
+        };
+      });
+  }
+
   function parseDateStr(str) {
     var parts = String(str).split('-').map(Number);
     return new Date(parts[0], parts[1] - 1, parts[2]);
@@ -800,29 +813,38 @@
     btn.disabled = true; btn.textContent = 'Loading...';
 
     var idleRate = selectedAsset.idle_burn_rate_lph || DEFAULT_IDLE_RATES[selectedAsset.asset_type] || 3.0;
+    var isOnRoad = isOnRoadAsset(selectedAsset);
 
-    var fuelResult = await supabase
-      .from('fuel_records')
-      .select('record_date, litres, total_cost')
-      .eq('asset_id', selectedAsset.id)
-      .eq('user_id', currentUser.id)
-      .gte('record_date', dateFrom)
-      .lte('record_date', dateTo)
-      .order('record_date');
+    var telSelect = 'record_date, operating_hours, idle_hours, total_engine_hours, odometer_km';
+    if (!isOnRoad) telSelect += ', litres_consumed';
 
     var telResult = await supabase
       .from('telematics_records')
-      .select('record_date, operating_hours, idle_hours, total_engine_hours, odometer_km')
+      .select(telSelect)
       .eq('asset_id', selectedAsset.id)
       .eq('user_id', currentUser.id)
       .gte('record_date', dateFrom)
       .lte('record_date', dateTo)
       .order('record_date');
 
+    var fuelRows = [];
+    if (isOnRoad) {
+      var fuelResult = await supabase
+        .from('fuel_records')
+        .select('record_date, litres, total_cost')
+        .eq('asset_id', selectedAsset.id)
+        .eq('user_id', currentUser.id)
+        .gte('record_date', dateFrom)
+        .lte('record_date', dateTo)
+        .order('record_date');
+      fuelRows = fuelResult.data || [];
+    } else {
+      fuelRows = buildMachineryFuelRows(telResult.data || [], defaultMachineryFuelCostPerLitre || 0);
+    }
+
     btn.disabled = false; btn.textContent = 'Apply Filters';
 
-    var fuelRows = (fuelResult.data || []);
-    var telRows = (telResult.data || []);
+    var telRows = telResult.data || [];
 
     if (fuelRows.length === 0 && telRows.length === 0) {
       hideNoFuelBanner();
@@ -830,7 +852,7 @@
       return;
     }
 
-    if (isOnRoadAsset(selectedAsset)) {
+    if (isOnRoad) {
       hideNoFuelBanner();
       runOnRoadAnalysis(fuelRows, telRows, idleRate);
     } else {
@@ -842,12 +864,12 @@
     setViewMode(false);
     updateNoFuelBanner(fuelRows, telRows, true);
     var hasAnyTel = telRows.length > 0;
-    var invoiceLitres = 0, invoiceCost = 0;
+    var telLitres = 0, telCost = 0;
     fuelRows.forEach(function(r) {
-      invoiceLitres += parseFloat(r.litres) || 0;
-      invoiceCost += parseFloat(r.total_cost) || 0;
+      telLitres += parseFloat(r.litres) || 0;
+      telCost += parseFloat(r.total_cost) || 0;
     });
-    var avgCostPerLitre = invoiceLitres > 0 ? (invoiceCost / invoiceLitres) : (defaultMachineryFuelCostPerLitre || 0);
+    var avgCostPerLitre = telLitres > 0 ? (telCost / telLitres) : (defaultMachineryFuelCostPerLitre || 0);
     var useEstimatedPricing = fuelRows.length === 0 && avgCostPerLitre > 0;
     var byDate = mergeFuelAndTelematics(fuelRows, telRows);
     var dailyRows = buildConstructionDailyRows(byDate, idleRate, avgCostPerLitre, useEstimatedPricing);
