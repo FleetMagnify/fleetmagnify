@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Platform Guide | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --teal: #0EA57A;
+  --teal-dim: rgba(14,165,122,0.12);
+  --teal-border: rgba(14,165,122,0.25);
+  --navy: #1E3A5F;
+  --amber: #EF9F27;
+  --amber-dim: rgba(239,159,39,0.12);
+  --bg: #080C12;
+  --surface: #111827;
+  --surface-2: #0D1520;
+  --border: #2D3748;
+  --text: #E2E8F0;
+  --text-muted: #5A6474;
+  --text-mid: #9BA4B0;
+  --white: #FFFFFF;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* ── NAV ── */
+.nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(8,12,18,0.92);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 40px;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 64px;
+}
+.nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.logo-mark {
+  width: 32px; height: 32px; border-radius: 8px; background: var(--teal);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800; color: var(--bg);
+}
+.logo-name { font-size: 15px; font-weight: 700; color: var(--white); letter-spacing: -0.3px; }
+.logo-name span { color: var(--teal); }
+.nav-links { display: flex; align-items: center; gap: 28px; }
+.nav-links a {
+  font-size: 13px; font-weight: 500; color: var(--text-muted);
+  text-decoration: none; transition: color 0.2s;
+}
+.nav-links a:hover { color: var(--text); }
+.nav-links a.active { color: var(--teal); }
+.nav-cta {
+  background: var(--teal); border: none; color: var(--bg);
+  font-size: 13px; font-weight: 700; padding: 8px 18px;
+  border-radius: 8px; cursor: pointer; font-family: inherit;
+  text-decoration: none; transition: background 0.2s;
+}
+.nav-cta:hover { background: #0BC48E; }
+
+/* ── HERO ── */
+.hero {
+  padding: 100px 40px 80px;
+  max-width: 900px; margin: 0 auto;
+  text-align: center;
+}
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--teal);
+  margin-bottom: 24px;
+}
+.hero-eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); }
+.hero-title {
+  font-size: clamp(36px, 5vw, 58px); font-weight: 800;
+  letter-spacing: -2px; line-height: 1.1;
+  color: var(--white); margin-bottom: 20px;
+}
+.hero-title .accent { color: var(--teal); }
+.hero-sub {
+  font-size: 17px; color: var(--text-muted); line-height: 1.65;
+  max-width: 620px; margin: 0 auto 40px;
+}
+.hero-tagline {
+  display: inline-block;
+  font-size: 14px; font-style: italic; color: var(--text-mid);
+  border-left: 2px solid var(--teal); padding-left: 16px;
+  text-align: left;
+}
+.hero-tagline strong { color: var(--teal); font-style: normal; }
+
+/* ── SECTION LAYOUT ── */
+.section { padding: 80px 40px; max-width: 1100px; margin: 0 auto; }
+.section-eyebrow {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--teal); margin-bottom: 12px;
+}
+.section-title {
+  font-size: clamp(24px, 3vw, 34px); font-weight: 800;
+  letter-spacing: -1px; color: var(--white); margin-bottom: 14px;
+}
+.section-sub {
+  font-size: 15px; color: var(--text-muted); line-height: 1.65;
+  max-width: 580px; margin-bottom: 48px;
+}
+.divider {
+  border: none; border-top: 1px solid var(--border);
+  max-width: 1100px; margin: 0 auto;
+}
+
+/* ── HOW IT WORKS ── */
+.sources-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px; margin-bottom: 0;
+}
+.source-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 24px 20px;
+}
+.source-icon { font-size: 24px; margin-bottom: 12px; }
+.source-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--teal); margin-bottom: 6px; }
+.source-name { font-size: 14px; font-weight: 700; color: var(--white); margin-bottom: 6px; }
+.source-desc { font-size: 12.5px; color: var(--text-muted); line-height: 1.55; }
+
+/* ── MODULES ── */
+.modules-section { padding: 80px 40px; }
+.modules-inner { max-width: 1100px; margin: 0 auto; }
+
+.module-group { margin-bottom: 64px; }
+.group-label {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; padding: 5px 14px; border-radius: 100px;
+  margin-bottom: 28px;
+}
+.group-label.machinery { background: rgba(14,165,122,0.10); color: var(--teal); border: 1px solid var(--teal-border); }
+.group-label.trucks { background: rgba(239,159,39,0.10); color: var(--amber); border: 1px solid rgba(239,159,39,0.25); }
+.group-label.fleet { background: rgba(255,255,255,0.05); color: var(--text-mid); border: 1px solid var(--border); }
+
+.modules-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+
+.module-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 28px; position: relative; overflow: hidden;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.module-card:hover { border-color: rgba(14,165,122,0.35); transform: translateY(-2px); }
+.module-card.amber:hover { border-color: rgba(239,159,39,0.35); }
+
+.module-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--teal), transparent);
+}
+.module-card.amber::before { background: linear-gradient(90deg, var(--amber), transparent); }
+
+.module-emoji { font-size: 28px; margin-bottom: 14px; display: block; }
+.module-name { font-size: 16px; font-weight: 700; color: var(--white); margin-bottom: 8px; letter-spacing: -0.3px; }
+.module-desc { font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 20px; }
+.module-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill {
+  font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 100px;
+  background: var(--teal-dim); color: var(--teal); border: 1px solid var(--teal-border);
+}
+.pill.amber { background: var(--amber-dim); color: var(--amber); border-color: rgba(239,159,39,0.25); }
+.pill.grey { background: rgba(255,255,255,0.04); color: var(--text-mid); border-color: var(--border); }
+
+/* ── CROWN JEWEL FEATURE ── */
+.feature-spotlight {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 20px; padding: 48px;
+  position: relative; overflow: hidden;
+  margin: 0 40px 80px; max-width: 1100px;
+}
+.feature-spotlight::before {
+  content: ''; position: absolute; top: -60px; right: -60px;
+  width: 240px; height: 240px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(14,165,122,0.08) 0%, transparent 70%);
+}
+.spotlight-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--amber);
+  background: var(--amber-dim); border: 1px solid rgba(239,159,39,0.25);
+  padding: 4px 12px; border-radius: 100px; margin-bottom: 20px;
+}
+.spotlight-title {
+  font-size: clamp(22px, 2.5vw, 30px); font-weight: 800;
+  letter-spacing: -0.8px; color: var(--white); margin-bottom: 14px;
+}
+.spotlight-sub { font-size: 15px; color: var(--text-muted); line-height: 1.65; max-width: 560px; margin-bottom: 32px; }
+
+.cost-breakdown {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px; margin-bottom: 32px;
+}
+.cost-item {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px;
+}
+.cost-item-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+.cost-item-value { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+.cost-item-value.teal { color: var(--teal); }
+.cost-item-value.amber { color: var(--amber); }
+.cost-item-value.white { color: var(--white); }
+
+.idle-insight {
+  background: rgba(239,159,39,0.06); border: 1px solid rgba(239,159,39,0.20);
+  border-radius: 12px; padding: 20px 24px;
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  flex-wrap: wrap;
+}
+.idle-insight-left { }
+.idle-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--amber); margin-bottom: 4px; }
+.idle-hours { font-size: 32px; font-weight: 800; letter-spacing: -1px; color: var(--teal); }
+.idle-sublabel { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.idle-cost { font-size: 40px; font-weight: 800; letter-spacing: -1.5px; color: var(--amber); }
+.idle-insight-text { font-size: 13px; color: var(--text-muted); line-height: 1.6; max-width: 320px; }
+
+/* ── GETTING STARTED ── */
+.steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+.step-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 28px;
+}
+.step-num {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--teal-dim); border: 1px solid var(--teal-border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 800; color: var(--teal);
+  margin-bottom: 16px;
+}
+.step-title { font-size: 15px; font-weight: 700; color: var(--white); margin-bottom: 8px; }
+.step-desc { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+.step-note {
+  margin-top: 12px; font-size: 12px; font-weight: 600; color: var(--teal);
+  display: flex; align-items: center; gap: 6px;
+}
+
+/* ── INTEGRATIONS ── */
+.integrations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
+.integration-pill {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 10px;
+}
+.int-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); flex-shrink: 0; }
+.int-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.int-type { font-size: 11px; color: var(--text-muted); }
+
+/* ── CTA ── */
+.cta-section {
+  padding: 80px 40px; text-align: center;
+  background: linear-gradient(180deg, transparent, rgba(14,165,122,0.04) 50%, transparent);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.cta-title { font-size: clamp(26px, 3vw, 38px); font-weight: 800; letter-spacing: -1px; color: var(--white); margin-bottom: 14px; }
+.cta-sub { font-size: 15px; color: var(--text-muted); margin-bottom: 32px; max-width: 480px; margin-left: auto; margin-right: auto; }
+.cta-buttons { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
+.btn-primary {
+  background: var(--teal); border: none; color: var(--bg);
+  font-size: 14px; font-weight: 700; padding: 13px 28px;
+  border-radius: 10px; cursor: pointer; font-family: inherit;
+  text-decoration: none; transition: background 0.2s;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.btn-primary:hover { background: #0BC48E; }
+.btn-outline {
+  background: none; border: 1px solid var(--border); color: var(--text-mid);
+  font-size: 14px; font-weight: 600; padding: 12px 24px;
+  border-radius: 10px; cursor: pointer; font-family: inherit;
+  text-decoration: none; transition: all 0.2s;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.btn-outline:hover { border-color: rgba(14,165,122,0.4); color: var(--teal); }
+
+/* ── FOOTER ── */
+.footer {
+  padding: 40px; text-align: center;
+  border-top: 1px solid var(--border);
+}
+.footer-logo { font-size: 15px; font-weight: 700; color: var(--text-mid); margin-bottom: 8px; }
+.footer-logo span { color: var(--teal); }
+.footer-text { font-size: 12.5px; color: var(--text-muted); }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  .nav { padding: 0 20px; }
+  .nav-links { display: none; }
+  .hero { padding: 60px 20px 50px; }
+  .section { padding: 50px 20px; }
+  .modules-section { padding: 50px 20px; }
+  .feature-spotlight { margin: 0 20px 50px; padding: 28px 20px; }
+  .cta-section { padding: 60px 20px; }
+  .footer { padding: 32px 20px; }
+  .idle-insight { flex-direction: column; }
+  .cost-breakdown { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <a class="nav-logo" href="index.html">
+    <div class="logo-mark">FM</div>
+    <span class="logo-name">Fleet<span>Magnify</span></span>
+  </a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="#modules">Modules</a>
+    <a href="#how-it-works">How It Works</a>
+    <a href="#get-started">Get Started</a>
+    <a href="platform-guide.html" class="active">Platform Guide</a>
+  </div>
+  <a href="signup.html" class="nav-cta">Get Started →</a>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-eyebrow"><div class="dot"></div> Platform Guide</div>
+  <h1 class="hero-title">Everything your fleet costs.<br><span class="accent">Finally, in one place.</span></h1>
+  <p class="hero-sub">FleetMagnify connects to your existing telematics and fuel card systems and calculates the true cost of operating every machine and vehicle in your fleet — automatically, every day.</p>
+  <div class="hero-tagline">
+    Telematics tells you where your fleet is.<br>
+    <strong>FleetMagnify tells you what it's costing you.</strong>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- HOW IT WORKS -->
+<div class="section" id="how-it-works">
+  <div class="section-eyebrow">How It Works</div>
+  <h2 class="section-title">Connect once. Costs calculated daily.</h2>
+  <p class="section-sub">FleetMagnify pulls from the data sources you already have. No manual entry, no spreadsheets — once your APIs are connected, the platform runs itself.</p>
+
+  <div class="sources-grid">
+    <div class="source-card">
+      <div class="source-icon">📡</div>
+      <div class="source-label">Machinery</div>
+      <div class="source-name">OEM Telematics</div>
+      <div class="source-desc">VisionLink, Komtrax, ConSite, ActiveCare and other OEM platforms provide engine hours, idle hours, and fuel consumption directly from the ECU.</div>
+    </div>
+    <div class="source-card">
+      <div class="source-icon">⛽</div>
+      <div class="source-label">Trucks</div>
+      <div class="source-name">BP Fleet Card</div>
+      <div class="source-desc">Every fill-to-fill transaction flows automatically — litres, cost, and the card number that links each fill to the right vehicle.</div>
+    </div>
+    <div class="source-card">
+      <div class="source-icon">🗺️</div>
+      <div class="source-label">Trucks</div>
+      <div class="source-name">eRoad Telematics</div>
+      <div class="source-desc">Daily odometer readings per vehicle give precise kilometre calculations for fuel efficiency, trip costing, and depreciation per km.</div>
+    </div>
+    <div class="source-card">
+      <div class="source-icon">⚙️</div>
+      <div class="source-label">All Assets</div>
+      <div class="source-name">Asset Settings</div>
+      <div class="source-desc">Depreciation values, service costs, maintenance budgets, and utilisation targets — configured once per asset, applied across every module.</div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- CROWN JEWEL SPOTLIGHT -->
+<div style="max-width:1180px; margin: 0 auto;">
+<div class="feature-spotlight">
+  <div class="spotlight-tag">★ Job Cost Analyst</div>
+  <h2 class="spotlight-title">The true cost of every job.<br>A number no one else can show you.</h2>
+  <p class="spotlight-sub">Assign machines to a project by work day. FleetMagnify calculates every cost component — fuel, idle waste, depreciation, servicing and maintenance — and adds them into a single, defensible job cost figure.</p>
+
+  <div class="cost-breakdown">
+    <div class="cost-item">
+      <div class="cost-item-label">Total Fuel Cost</div>
+      <div class="cost-item-value teal">$5,508</div>
+    </div>
+    <div class="cost-item">
+      <div class="cost-item-label">True Idle Cost</div>
+      <div class="cost-item-value amber">$2,142</div>
+    </div>
+    <div class="cost-item">
+      <div class="cost-item-label">Depreciation</div>
+      <div class="cost-item-value white">$4,813</div>
+    </div>
+    <div class="cost-item">
+      <div class="cost-item-label">Servicing</div>
+      <div class="cost-item-value white">$1,049</div>
+    </div>
+    <div class="cost-item">
+      <div class="cost-item-label">Maintenance</div>
+      <div class="cost-item-value white">$1,058</div>
+    </div>
+    <div class="cost-item" style="background: rgba(14,165,122,0.06); border-color: rgba(14,165,122,0.2);">
+      <div class="cost-item-label" style="color: var(--teal);">Grand Total</div>
+      <div class="cost-item-value teal">$14,570</div>
+    </div>
+  </div>
+
+  <div class="idle-insight">
+    <div class="idle-insight-left">
+      <div class="idle-label">⏱ Idle Cost Insight</div>
+      <div class="idle-hours">36.6 hr</div>
+      <div class="idle-sublabel">total idle hours on this job</div>
+    </div>
+    <div>
+      <div class="idle-label">True Idle Cost</div>
+      <div class="idle-cost">$2,142</div>
+    </div>
+    <div class="idle-insight-text">
+      This is the cost of machines running without working. Reducing idle time is the fastest way to reduce job cost — and it requires no capital investment.
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- MODULES -->
+<div class="modules-section" id="modules">
+  <div class="modules-inner">
+    <div class="section-eyebrow">Platform Modules</div>
+    <h2 class="section-title">Built for owners. Not fleet managers.</h2>
+    <p class="section-sub" style="margin-bottom: 56px;">Every module answers a question that the person signing the cheques actually needs answered.</p>
+
+    <!-- Machinery -->
+    <div class="module-group">
+      <div class="group-label machinery">⚙️ Machinery Modules</div>
+      <div class="modules-grid">
+        <div class="module-card">
+          <span class="module-emoji">⛽</span>
+          <div class="module-name">Fuel Analyst</div>
+          <div class="module-desc">Daily fuel consumption split between operating and idle burn. Rates come directly from your OEM telematics ECU — not invoices.</div>
+          <div class="module-pills">
+            <span class="pill">L/hr operating</span>
+            <span class="pill">L/hr idle</span>
+            <span class="pill">Daily chart</span>
+          </div>
+        </div>
+        <div class="module-card">
+          <span class="module-emoji">⏱</span>
+          <div class="module-name">Idle Cost Analyst</div>
+          <div class="module-desc">The true financial cost of idling — not just wasted fuel, but the accelerated depreciation, servicing and maintenance that most operators never see.</div>
+          <div class="module-pills">
+            <span class="pill">Idle fuel</span>
+            <span class="pill">Depreciation</span>
+            <span class="pill">Servicing</span>
+            <span class="pill">Maintenance</span>
+          </div>
+        </div>
+        <div class="module-card">
+          <span class="module-emoji">🌍</span>
+          <div class="module-name">Emissions Intelligence</div>
+          <div class="module-desc">CO₂-e emissions per asset, calculated using NZ Ministry for the Environment official emission factors (Measuring Emissions Catalogue 2026).</div>
+          <div class="module-pills">
+            <span class="pill">NZ MEG 2026</span>
+            <span class="pill">2.68 kg CO₂-e/L</span>
+            <span class="pill">ESG reporting</span>
+          </div>
+        </div>
+        <div class="module-card">
+          <span class="module-emoji">📊</span>
+          <div class="module-name">Utilisation Analyst</div>
+          <div class="module-desc">Actual operating hours vs planned capacity, benchmarked against your target utilisation. Scoped to your recorded-data window for accuracy.</div>
+          <div class="module-pills">
+            <span class="pill">vs target</span>
+            <span class="pill">Daily view</span>
+            <span class="pill">Variance</span>
+          </div>
+        </div>
+        <div class="module-card">
+          <span class="module-emoji">🏗</span>
+          <div class="module-name">Job Cost Analyst</div>
+          <div class="module-desc">Assign machines to projects by work day. Get the complete true cost — fuel, idle waste, depreciation, servicing and maintenance — in a single exportable report.</div>
+          <div class="module-pills">
+            <span class="pill">True idle cost</span>
+            <span class="pill">5 components</span>
+            <span class="pill">PDF export</span>
+          </div>
+        </div>
+        <div class="module-card">
+          <span class="module-emoji">📋</span>
+          <div class="module-name">Reports</div>
+          <div class="module-desc">Professional PDF reports for every module — shareable with clients, site managers, and stakeholders. Branded and ready to present.</div>
+          <div class="module-pills">
+            <span class="pill">PDF export</span>
+            <span class="pill">CSV export</span>
+            <span class="pill">All modules</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trucks -->
+    <div class="module-group">
+      <div class="group-label trucks">🚛 Truck Modules</div>
+      <div class="modules-grid">
+        <div class="module-card amber">
+          <span class="module-emoji">🚛</span>
+          <div class="module-name">Fuel Cost Analyst</div>
+          <div class="module-desc">Fill-to-fill fuel analysis using BP Fleet Card data matched against eRoad odometer readings. The most accurate measure of real-world fuel consumption.</div>
+          <div class="module-pills">
+            <span class="pill amber">L/100km</span>
+            <span class="pill amber">$/km fuel</span>
+            <span class="pill amber">Fill-to-fill</span>
+          </div>
+        </div>
+        <div class="module-card amber">
+          <span class="module-emoji">📏</span>
+          <div class="module-name">Cost Per KM Analyst</div>
+          <div class="module-desc">True cost per kilometre including fuel, depreciation, servicing and maintenance. The number that should be driving your freight pricing decisions.</div>
+          <div class="module-pills">
+            <span class="pill amber">Total $/km</span>
+            <span class="pill amber">4 components</span>
+            <span class="pill amber">Pricing tool</span>
+          </div>
+        </div>
+        <div class="module-card amber">
+          <span class="module-emoji">🌿</span>
+          <div class="module-name">Emissions Analyst</div>
+          <div class="module-desc">Per-vehicle CO₂-e emissions from actual BP fill data. NZ government emission factors. Ready for corporate sustainability reporting.</div>
+          <div class="module-pills">
+            <span class="pill amber">Per vehicle</span>
+            <span class="pill amber">NZ MEG 2026</span>
+            <span class="pill amber">ESG ready</span>
+          </div>
+        </div>
+        <div class="module-card amber">
+          <span class="module-emoji">🗺️</span>
+          <div class="module-name">Trip Report</div>
+          <div class="module-desc">Select any vehicle and time window. Get the complete cost of that trip — distance, fuel, depreciation, servicing and maintenance — in a professional PDF.</div>
+          <div class="module-pills">
+            <span class="pill amber">eRoad distance</span>
+            <span class="pill amber">True cost</span>
+            <span class="pill amber">PDF export</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fleet Management -->
+    <div class="module-group">
+      <div class="group-label fleet">🔧 Fleet Management</div>
+      <div class="modules-grid">
+        <div class="module-card">
+          <span class="module-emoji">🚧</span>
+          <div class="module-name">Assets</div>
+          <div class="module-desc">Your central fleet register. Add machines and vehicles once with their depreciation values, service rates, and maintenance budgets. Every calculation flows from here.</div>
+          <div class="module-pills">
+            <span class="pill grey">Machinery</span>
+            <span class="pill grey">Trucks</span>
+            <span class="pill grey">Excel import</span>
+          </div>
+        </div>
+        <div class="module-card">
+          <span class="module-emoji">🔌</span>
+          <div class="module-name">Integrations</div>
+          <div class="module-desc">Connect eRoad, BP Fleet Card, and your OEM telematics platform. Configure once — data flows automatically every night from that point on.</div>
+          <div class="module-pills">
+            <span class="pill grey">eRoad</span>
+            <span class="pill grey">BP Fleet</span>
+            <span class="pill grey">OEM telematics</span>
+          </div>
+        </div>
+        <div class="module-card">
+          <span class="module-emoji">⚙️</span>
+          <div class="module-name">Settings</div>
+          <div class="module-desc">Set your bulk diesel price per litre once. FleetMagnify applies it across all machinery fuel calculations automatically — update it when your tank price changes.</div>
+          <div class="module-pills">
+            <span class="pill grey">Fuel price</span>
+            <span class="pill grey">Account level</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- INTEGRATIONS -->
+<div class="section">
+  <div class="section-eyebrow">Integrations</div>
+  <h2 class="section-title">Works with what you already have.</h2>
+  <p class="section-sub">Every major OEM has telematics fitted as standard on modern machinery. FleetMagnify connects to it.</p>
+  <div class="integrations-grid">
+    <div class="integration-pill"><div class="int-dot"></div><div><div class="int-name">VisionLink</div><div class="int-type">Caterpillar</div></div></div>
+    <div class="integration-pill"><div class="int-dot"></div><div><div class="int-name">Komtrax</div><div class="int-type">Komatsu</div></div></div>
+    <div class="integration-pill"><div class="int-dot"></div><div><div class="int-name">ConSite</div><div class="int-type">Hitachi</div></div></div>
+    <div class="integration-pill"><div class="int-dot"></div><div><div class="int-name">ActiveCare</div><div class="int-type">Volvo CE</div></div></div>
+    <div class="integration-pill"><div class="int-dot"></div><div><div class="int-name">LiDAT</div><div class="int-type">Liebherr</div></div></div>
+    <div class="integration-pill"><div class="int-dot"></div><div><div class="int-name">eRoad</div><div class="int-type">Truck telematics</div></div></div>
+    <div class="integration-pill"><div class="int-dot"></div><div><div class="int-name">BP Fleet Card</div><div class="int-type">Fuel transactions</div></div></div>
+    <div class="integration-pill" style="border-style: dashed; opacity: 0.5;"><div class="int-dot" style="background: var(--text-muted)"></div><div><div class="int-name">More coming</div><div class="int-type">Continuously expanding</div></div></div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- GET STARTED -->
+<div class="section" id="get-started">
+  <div class="section-eyebrow">Setup</div>
+  <h2 class="section-title">Up and running in under 10 minutes.</h2>
+  <p class="section-sub">Two things to set up: your API keys and your diesel price. After that, you never touch it again.</p>
+  <div class="steps-grid">
+    <div class="step-card">
+      <div class="step-num">1</div>
+      <div class="step-title">Add Your Assets</div>
+      <div class="step-desc">Download the Asset Import Template, complete the Machinery and Trucks sheets, and upload to add your entire fleet at once.</div>
+      <div class="step-note">→ Download template from Upload Data page</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">2</div>
+      <div class="step-title">Set Your Fuel Price</div>
+      <div class="step-desc">Enter your current bulk diesel price per litre in Settings. This is applied to all machinery fuel calculations from your OEM telematics data.</div>
+      <div class="step-note">→ Settings → Machinery Fuel Cost per Litre</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">3</div>
+      <div class="step-title">Connect Your APIs</div>
+      <div class="step-desc">Paste your eRoad API key, BP Fleet Card key, and OEM telematics credentials into the Integrations page. Data flows automatically from that night onwards.</div>
+      <div class="step-note">→ Fleet Management → Integrations</div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- CTA -->
+<div class="cta-section">
+  <h2 class="cta-title">Ready to see what your fleet is actually costing?</h2>
+  <p class="cta-sub">For less than the cost of a barrel of Cat engine oil per month.</p>
+  <div class="cta-buttons">
+    <a href="signup.html" class="btn-primary">Get Started →</a>
+    <a href="login.html" class="btn-outline">Sign In</a>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-logo">Fleet<span>Magnify</span></div>
+  <div class="footer-text">Fleet Cost Intelligence Platform · New Zealand</div>
+</footer>
+
+</body>
+</html>
