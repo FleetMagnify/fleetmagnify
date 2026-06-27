@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pricing | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --teal: #0EA57A;
+  --teal-dim: rgba(14,165,122,0.10);
+  --teal-border: rgba(14,165,122,0.22);
+  --amber: #EF9F27;
+  --amber-dim: rgba(239,159,39,0.10);
+  --amber-border: rgba(239,159,39,0.22);
+  --bg: #080C12;
+  --surface: #111827;
+  --border: #2D3748;
+  --text: #E2E8F0;
+  --text-muted: #5A6474;
+  --text-mid: #9BA4B0;
+  --white: #FFFFFF;
+}
+
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh; line-height: 1.6;
+}
+
+/* ── NAV ── */
+.nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(8,12,18,0.92); backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 40px; display: flex; align-items: center;
+  justify-content: space-between; height: 64px;
+}
+.nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.logo-mark {
+  width: 32px; height: 32px; border-radius: 8px; background: var(--teal);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800; color: var(--bg);
+}
+.logo-name { font-size: 15px; font-weight: 700; color: var(--white); letter-spacing: -0.3px; }
+.logo-name span { color: var(--teal); }
+.nav-links { display: flex; align-items: center; gap: 28px; }
+.nav-links a { font-size: 13px; font-weight: 500; color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
+.nav-links a:hover { color: var(--text); }
+.nav-links a.active { color: var(--teal); }
+.nav-cta {
+  background: var(--teal); border: none; color: var(--bg);
+  font-size: 13px; font-weight: 700; padding: 8px 18px;
+  border-radius: 8px; cursor: pointer; font-family: inherit;
+  text-decoration: none; transition: background 0.2s;
+}
+.nav-cta:hover { background: #0BC48E; }
+.nav-actions { display: flex; align-items: center; gap: 12px; }
+.nav-signin { font-size: 13px; font-weight: 500; color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
+.nav-signin:hover { color: var(--text); }
+
+/* ── HERO ── */
+.hero {
+  padding: 80px 40px 60px;
+  text-align: center; max-width: 700px; margin: 0 auto;
+}
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--teal); margin-bottom: 20px;
+}
+.hero-eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); }
+.hero-title {
+  font-size: clamp(32px, 4vw, 50px); font-weight: 800;
+  letter-spacing: -1.5px; color: var(--white); margin-bottom: 16px; line-height: 1.1;
+}
+.hero-sub {
+  font-size: 16px; color: var(--text-muted); line-height: 1.65;
+}
+
+/* ── BILLING TOGGLE ── */
+.billing-toggle {
+  display: flex; align-items: center; justify-content: center;
+  gap: 12px; margin: 32px auto 0;
+}
+.toggle-label { font-size: 13px; font-weight: 500; color: var(--text-mid); }
+.toggle-label.active { color: var(--white); }
+
+/* ── PRICING CARDS ── */
+.cards-section { padding: 60px 40px 0; max-width: 1160px; margin: 0 auto; }
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px; align-items: start;
+}
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 20px; padding: 32px 28px;
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.card:hover { transform: translateY(-3px); }
+
+.card.featured {
+  border-color: var(--teal-border);
+  background: linear-gradient(160deg, rgba(14,165,122,0.06) 0%, var(--surface) 60%);
+}
+.card.featured:hover { border-color: rgba(14,165,122,0.45); }
+
+.card.coming-soon {
+  opacity: 0.7;
+  border-style: dashed;
+}
+
+.card-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; padding: 4px 10px; border-radius: 100px;
+  margin-bottom: 20px; width: fit-content;
+}
+.card-badge.popular { background: var(--teal-dim); color: var(--teal); border: 1px solid var(--teal-border); }
+.card-badge.soon { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-border); }
+.card-badge.spacer { height: 26px; margin-bottom: 20px; }
+
+.card-icon { font-size: 28px; margin-bottom: 14px; }
+.card-name { font-size: 18px; font-weight: 700; color: var(--white); margin-bottom: 6px; letter-spacing: -0.3px; }
+.card-desc { font-size: 13px; color: var(--text-muted); line-height: 1.55; margin-bottom: 28px; min-height: 40px; }
+
+.card-price { margin-bottom: 28px; }
+.price-amount {
+  font-size: 44px; font-weight: 800; letter-spacing: -2px;
+  color: var(--white); line-height: 1;
+}
+.price-amount .currency { font-size: 22px; font-weight: 600; letter-spacing: 0; vertical-align: top; margin-top: 8px; display: inline-block; color: var(--text-mid); }
+.price-amount .accent { color: var(--teal); }
+.price-unit { font-size: 12.5px; color: var(--text-muted); margin-top: 6px; }
+.price-both { display: flex; flex-direction: column; gap: 8px; }
+.price-row { display: flex; align-items: baseline; gap: 6px; }
+.price-row .amount { font-size: 28px; font-weight: 800; letter-spacing: -1px; color: var(--teal); }
+.price-row .per { font-size: 12px; color: var(--text-muted); }
+.price-row .plus { font-size: 13px; color: var(--text-muted); margin: 0 2px; }
+
+.price-soon {
+  font-size: 28px; font-weight: 800; letter-spacing: -1px;
+  color: var(--amber); margin-bottom: 4px;
+}
+.price-soon-sub { font-size: 12.5px; color: var(--text-muted); }
+
+.card-divider { border: none; border-top: 1px solid var(--border); margin-bottom: 24px; }
+
+.feature-list { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 32px; flex: 1; }
+.feature-item { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--text-mid); line-height: 1.45; }
+.feature-check { color: var(--teal); flex-shrink: 0; margin-top: 1px; font-size: 13px; }
+.feature-check.amber { color: var(--amber); }
+.feature-check.grey { color: var(--text-muted); }
+
+.card-cta {
+  display: block; width: 100%; padding: 12px;
+  border-radius: 10px; font-size: 13px; font-weight: 700;
+  text-align: center; text-decoration: none; cursor: pointer;
+  font-family: inherit; transition: all 0.2s; border: none;
+}
+.card-cta.primary { background: var(--teal); color: var(--bg); }
+.card-cta.primary:hover { background: #0BC48E; }
+.card-cta.outline { background: none; border: 1px solid var(--border); color: var(--text-mid); }
+.card-cta.outline:hover { border-color: var(--teal-border); color: var(--teal); }
+.card-cta.disabled { background: none; border: 1px solid var(--border); color: var(--text-muted); cursor: not-allowed; opacity: 0.6; }
+
+.no-contract {
+  text-align: center; margin-top: 20px;
+  font-size: 12px; color: var(--text-muted);
+  display: flex; align-items: center; justify-content: center; gap: 20px;
+}
+.no-contract span { display: flex; align-items: center; gap: 5px; }
+.no-contract .check { color: var(--teal); }
+
+/* ── ESTIMATOR ── */
+.estimator-section {
+  max-width: 760px; margin: 60px auto 0; padding: 0 40px;
+}
+.estimator {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 20px; padding: 40px;
+}
+.estimator-title {
+  font-size: 18px; font-weight: 700; color: var(--white);
+  letter-spacing: -0.4px; margin-bottom: 6px;
+}
+.estimator-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 32px; }
+
+.estimator-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
+.input-group label {
+  display: block; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-muted); margin-bottom: 8px;
+}
+.input-wrap { position: relative; }
+.input-wrap input {
+  width: 100%; padding: 14px 16px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 10px; color: var(--white); font-size: 22px;
+  font-weight: 700; font-family: inherit; outline: none;
+  transition: border-color 0.2s; appearance: none;
+  -webkit-appearance: none;
+}
+.input-wrap input:focus { border-color: var(--teal-border); }
+.input-wrap input::placeholder { color: var(--text-muted); font-weight: 400; font-size: 16px; }
+.input-suffix {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  font-size: 12px; color: var(--text-muted); font-weight: 500; pointer-events: none;
+}
+
+.estimator-divider { border: none; border-top: 1px solid var(--border); margin-bottom: 28px; }
+
+.estimator-result {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 16px;
+}
+.result-breakdown { display: flex; flex-direction: column; gap: 6px; }
+.result-line { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
+.result-line .dot { width: 6px; height: 6px; border-radius: 50%; }
+.result-line .dot.teal { background: var(--teal); }
+.result-line .dot.amber { background: var(--amber); }
+.result-amount { font-size: 13px; font-weight: 600; color: var(--text-mid); margin-left: auto; }
+
+.result-total { text-align: right; }
+.result-total-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+.result-total-amount { font-size: 44px; font-weight: 800; letter-spacing: -2px; color: var(--teal); line-height: 1; }
+.result-total-per { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.result-zero { font-size: 15px; color: var(--text-muted); font-style: italic; }
+
+/* ── FAQ ── */
+.faq-section { max-width: 720px; margin: 80px auto 0; padding: 0 40px 100px; }
+.faq-title { font-size: 22px; font-weight: 700; color: var(--white); letter-spacing: -0.5px; margin-bottom: 28px; }
+.faq-item { border-bottom: 1px solid var(--border); padding: 20px 0; }
+.faq-item:first-of-type { border-top: 1px solid var(--border); }
+.faq-q { font-size: 14px; font-weight: 600; color: var(--white); margin-bottom: 8px; }
+.faq-a { font-size: 13.5px; color: var(--text-muted); line-height: 1.65; }
+
+/* ── FOOTER ── */
+.footer { padding: 40px; text-align: center; border-top: 1px solid var(--border); }
+.footer-logo { font-size: 15px; font-weight: 700; color: var(--text-mid); margin-bottom: 8px; }
+.footer-logo span { color: var(--teal); }
+.footer-text { font-size: 12.5px; color: var(--text-muted); }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 1000px) {
+  .cards-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .nav { padding: 0 20px; }
+  .nav-links { display: none; }
+  .hero { padding: 50px 20px 40px; }
+  .cards-section { padding: 40px 20px 0; }
+  .cards-grid { grid-template-columns: 1fr; }
+  .estimator-section { padding: 0 20px; }
+  .estimator { padding: 24px 20px; }
+  .estimator-inputs { grid-template-columns: 1fr; }
+  .faq-section { padding: 0 20px 60px; }
+  .footer { padding: 32px 20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <a class="nav-logo" href="index.html">
+    <div class="logo-mark">FM</div>
+    <span class="logo-name">Fleet<span>Magnify</span></span>
+  </a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="features.html">Features</a>
+    <a href="platform-guide.html">Platform Guide</a>
+    <a href="pricing.html" class="active">Pricing</a>
+  </div>
+  <div class="nav-actions">
+    <a href="login.html" class="nav-signin">Sign in</a>
+    <a href="signup.html" class="nav-cta">Sign Up</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-eyebrow"><div class="dot"></div> Pricing</div>
+  <h1 class="hero-title">Simple pricing.<br>No surprises.</h1>
+  <p class="hero-sub">No setup fees. No fixed terms. No minimum commitment. Cancel anytime.</p>
+</div>
+
+<!-- CARDS -->
+<div class="cards-section">
+  <div class="cards-grid">
+
+    <!-- Trucks Only -->
+    <div class="card">
+      <div class="card-badge spacer"></div>
+      <div class="card-icon">🚛</div>
+      <div class="card-name">Trucks</div>
+      <div class="card-desc">For on-road fleets running BP Fleet Card and eRoad.</div>
+      <div class="card-price">
+        <div class="price-amount"><span class="currency">$</span><span class="accent">8</span></div>
+        <div class="price-unit">per truck / per month</div>
+      </div>
+      <hr class="card-divider">
+      <ul class="feature-list">
+        <li class="feature-item"><span class="feature-check">✓</span> Fuel Cost Analyst — fill-to-fill analysis</li>
+        <li class="feature-item"><span class="feature-check">✓</span> Cost Per KM Analyst — true cost per km</li>
+        <li class="feature-item"><span class="feature-check">✓</span> Emissions Analyst — CO₂-e per vehicle</li>
+        <li class="feature-item"><span class="feature-check">✓</span> Trip Report — full cost per trip</li>
+        <li class="feature-item"><span class="feature-check">✓</span> eRoad integration</li>
+        <li class="feature-item"><span class="feature-check">✓</span> BP Fleet Card integration</li>
+        <li class="feature-item"><span class="feature-check">✓</span> PDF report exports</li>
+      </ul>
+      <a href="signup.html" class="card-cta outline">Get Started →</a>
+    </div>
+
+    <!-- Machinery Only -->
+    <div class="card">
+      <div class="card-badge spacer"></div>
+      <div class="card-icon">🚧</div>
+      <div class="card-name">Machinery</div>
+      <div class="card-desc">For construction and plant fleets with OEM telematics.</div>
+      <div class="card-price">
+        <div class="price-amount"><span class="currency">$</span><span class="accent">15</span></div>
+        <div class="price-unit">per machine / per month</div>
+      </div>
+      <hr class="card-divider">
+      <ul class="feature-list">
+        <li class="feature-item"><span class="feature-check">✓</span> Fuel Analyst — operating vs idle burn</li>
+        <li class="feature-item"><span class="feature-check">✓</span> Idle Cost Analyst — true 4-component idle cost</li>
+        <li class="feature-item"><span class="feature-check">✓</span> Emissions Intelligence — NZ MEG 2026</li>
+        <li class="feature-item"><span class="feature-check">✓</span> Utilisation Analyst — vs target benchmark</li>
+        <li class="feature-item"><span class="feature-check">✓</span> Job Cost Analyst — true project cost</li>
+        <li class="feature-item"><span class="feature-check">✓</span> OEM telematics integration (VisionLink, Komtrax, ConSite + more)</li>
+        <li class="feature-item"><span class="feature-check">✓</span> PDF report exports</li>
+      </ul>
+      <a href="signup.html" class="card-cta outline">Get Started →</a>
+    </div>
+
+    <!-- Full Fleet — FEATURED -->
+    <div class="card featured">
+      <div class="card-badge popular">★ Most Popular</div>
+      <div class="card-icon">🏗</div>
+      <div class="card-name">Full Fleet</div>
+      <div class="card-desc">For mixed fleets — machines and trucks on one platform.</div>
+      <div class="card-price">
+        <div class="price-both">
+          <div class="price-row">
+            <span class="amount">$8</span>
+            <span class="per">/ truck / month</span>
+          </div>
+          <div class="price-row">
+            <span class="plus">+</span>
+            <span class="amount">$15</span>
+            <span class="per">/ machine / month</span>
+          </div>
+        </div>
+      </div>
+      <hr class="card-divider">
+      <ul class="feature-list">
+        <li class="feature-item"><span class="feature-check">✓</span> Everything in Trucks</li>
+        <li class="feature-item"><span class="feature-check">✓</span> Everything in Machinery</li>
+        <li class="feature-item"><span class="feature-check">✓</span> Fleet Overview dashboard</li>
+        <li class="feature-item"><span class="feature-check">✓</span> Combined fleet reporting</li>
+        <li class="feature-item"><span class="feature-check">✓</span> Job Cost Analyst across mixed fleet</li>
+        <li class="feature-item"><span class="feature-check">✓</span> All integrations included</li>
+        <li class="feature-item"><span class="feature-check">✓</span> PDF report exports</li>
+      </ul>
+      <a href="signup.html" class="card-cta primary">Get Started →</a>
+    </div>
+
+    <!-- Pro Insights — Coming Soon -->
+    <div class="card coming-soon">
+      <div class="card-badge soon">Coming Soon</div>
+      <div class="card-icon">🤖</div>
+      <div class="card-name">Pro Insights</div>
+      <div class="card-desc">AI-powered fleet intelligence — anomaly detection, predictive analysis, and natural language fleet queries.</div>
+      <div class="card-price">
+        <div class="price-soon">AI Layer</div>
+        <div class="price-soon-sub">Pricing to be announced</div>
+      </div>
+      <hr class="card-divider">
+      <ul class="feature-list">
+        <li class="feature-item"><span class="feature-check amber">✓</span> Everything in Full Fleet</li>
+        <li class="feature-item"><span class="feature-check amber">✓</span> AI anomaly detection</li>
+        <li class="feature-item"><span class="feature-check amber">✓</span> Predictive cost analysis</li>
+        <li class="feature-item"><span class="feature-check amber">✓</span> Natural language fleet queries</li>
+        <li class="feature-item"><span class="feature-check amber">✓</span> Load factor & tonne-km analysis</li>
+        <li class="feature-item"><span class="feature-check amber">✓</span> Automated insight reports</li>
+      </ul>
+      <button class="card-cta disabled" disabled>Notify Me</button>
+    </div>
+
+  </div>
+
+  <!-- No contract strip -->
+  <div class="no-contract">
+    <span><span class="check">✓</span> No setup fees</span>
+    <span><span class="check">✓</span> No fixed contracts</span>
+    <span><span class="check">✓</span> Cancel anytime</span>
+    <span><span class="check">✓</span> Add or remove assets monthly</span>
+  </div>
+</div>
+
+<!-- ESTIMATOR -->
+<div class="estimator-section">
+  <div class="estimator">
+    <div class="estimator-title">Estimate your monthly cost</div>
+    <div class="estimator-sub">Enter your fleet size to see what FleetMagnify costs you each month.</div>
+
+    <div class="estimator-inputs">
+      <div class="input-group">
+        <label>Trucks</label>
+        <div class="input-wrap">
+          <input type="number" id="truck-count" min="0" placeholder="0">
+          <span class="input-suffix">× $8/mo</span>
+        </div>
+      </div>
+      <div class="input-group">
+        <label>Machines</label>
+        <div class="input-wrap">
+          <input type="number" id="machine-count" min="0" placeholder="0">
+          <span class="input-suffix">× $15/mo</span>
+        </div>
+      </div>
+    </div>
+
+    <hr class="estimator-divider">
+
+    <div class="estimator-result" id="estimator-result">
+      <div class="result-zero">Enter your fleet size above</div>
+    </div>
+  </div>
+</div>
+
+<!-- FAQ -->
+<div class="faq-section">
+  <div class="faq-title">Common questions</div>
+
+  <div class="faq-item">
+    <div class="faq-q">How does billing work?</div>
+    <div class="faq-a">You are billed monthly based on the number of active assets in your account. Add or remove assets at any time — billing adjusts the following month.</div>
+  </div>
+  <div class="faq-item">
+    <div class="faq-q">Is there a minimum commitment?</div>
+    <div class="faq-a">No. There are no minimum terms, no setup fees, and no lock-in periods. You pay month to month for exactly what you have.</div>
+  </div>
+  <div class="faq-item">
+    <div class="faq-q">What counts as a machine vs a truck?</div>
+    <div class="faq-a">Machinery includes excavators, dump trucks, wheel loaders, motor graders, bulldozers, cranes, forklifts, water trucks, and other plant assets that use OEM telematics. Trucks covers light vehicles, rigid trucks, and semi trailers operating on public roads using eRoad and BP Fleet Card.</div>
+  </div>
+  <div class="faq-item">
+    <div class="faq-q">Do I need to pay for integrations?</div>
+    <div class="faq-a">No. All integrations — eRoad, BP Fleet Card, VisionLink, Komtrax, ConSite, and all other OEM telematics platforms — are included in the base price. There are no per-integration fees.</div>
+  </div>
+  <div class="faq-item">
+    <div class="faq-q">Can I start with just trucks or just machinery?</div>
+    <div class="faq-a">Yes. Start with whatever assets you want to connect first. You can add additional asset types at any time — billing simply reflects what is active in your account.</div>
+  </div>
+  <div class="faq-item">
+    <div class="faq-q">When is Pro Insights available?</div>
+    <div class="faq-a">Pro Insights is currently in development. Pricing and availability will be announced to existing customers first. If you would like to be notified, contact us directly.</div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-logo">Fleet<span>Magnify</span></div>
+  <div class="footer-text">Fleet Cost Intelligence Platform · New Zealand</div>
+</footer>
+
+<script>
+(function() {
+  const truckInput = document.getElementById('truck-count');
+  const machineInput = document.getElementById('machine-count');
+  const resultEl = document.getElementById('estimator-result');
+
+  function fmt(n) {
+    return '$' + n.toLocaleString('en-NZ', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+
+  function update() {
+    const trucks = Math.max(0, parseInt(truckInput.value) || 0);
+    const machines = Math.max(0, parseInt(machineInput.value) || 0);
+    const truckCost = trucks * 8;
+    const machineCost = machines * 15;
+    const total = truckCost + machineCost;
+
+    if (total === 0) {
+      resultEl.innerHTML = '<div class="result-zero">Enter your fleet size above</div>';
+      return;
+    }
+
+    let breakdownHTML = '<div class="result-breakdown">';
+    if (trucks > 0) {
+      breakdownHTML += `<div class="result-line"><div class="dot teal"></div>${trucks} truck${trucks !== 1 ? 's' : ''} × $8<span class="result-amount">${fmt(truckCost)}/mo</span></div>`;
+    }
+    if (machines > 0) {
+      breakdownHTML += `<div class="result-line"><div class="dot amber"></div>${machines} machine${machines !== 1 ? 's' : ''} × $15<span class="result-amount">${fmt(machineCost)}/mo</span></div>`;
+    }
+    breakdownHTML += '</div>';
+
+    const totalHTML = `
+      <div class="result-total">
+        <div class="result-total-label">Monthly total</div>
+        <div class="result-total-amount">${fmt(total)}</div>
+        <div class="result-total-per">${fmt(total * 12)} per year</div>
+      </div>`;
+
+    resultEl.innerHTML = breakdownHTML + totalHTML;
+  }
+
+  truckInput.addEventListener('input', update);
+  machineInput.addEventListener('input', update);
+})();
+</script>
+
+</body>
+</html>

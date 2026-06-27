@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Features | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --teal: #0EA57A;
+  --teal-dim: rgba(14,165,122,0.10);
+  --teal-border: rgba(14,165,122,0.22);
+  --amber: #EF9F27;
+  --amber-dim: rgba(239,159,39,0.10);
+  --amber-border: rgba(239,159,39,0.22);
+  --bg: #080C12;
+  --surface: #111827;
+  --surface-2: #0D1520;
+  --border: #2D3748;
+  --text: #E2E8F0;
+  --text-muted: #5A6474;
+  --text-mid: #9BA4B0;
+  --white: #FFFFFF;
+}
+
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh; line-height: 1.6;
+}
+
+/* ── NAV ── */
+.nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(8,12,18,0.92); backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 40px; display: flex; align-items: center;
+  justify-content: space-between; height: 64px;
+}
+.nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.logo-mark {
+  width: 32px; height: 32px; border-radius: 8px; background: var(--teal);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800; color: var(--bg);
+}
+.logo-name { font-size: 15px; font-weight: 700; color: var(--white); letter-spacing: -0.3px; }
+.logo-name span { color: var(--teal); }
+.nav-links { display: flex; align-items: center; gap: 28px; }
+.nav-links a { font-size: 13px; font-weight: 500; color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
+.nav-links a:hover { color: var(--text); }
+.nav-links a.active { color: var(--teal); }
+.nav-cta {
+  background: var(--teal); border: none; color: var(--bg);
+  font-size: 13px; font-weight: 700; padding: 8px 18px;
+  border-radius: 8px; cursor: pointer; font-family: inherit;
+  text-decoration: none; transition: background 0.2s;
+}
+.nav-cta:hover { background: #0BC48E; }
+.nav-actions { display: flex; align-items: center; gap: 12px; }
+.nav-signin { font-size: 13px; font-weight: 500; color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
+.nav-signin:hover { color: var(--text); }
+
+/* ── HERO ── */
+.hero {
+  padding: 80px 40px 60px;
+  text-align: center; max-width: 760px; margin: 0 auto;
+}
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--teal); margin-bottom: 20px;
+}
+.hero-eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); }
+.hero-title {
+  font-size: clamp(32px, 4vw, 52px); font-weight: 800;
+  letter-spacing: -1.5px; color: var(--white); margin-bottom: 16px; line-height: 1.1;
+}
+.hero-sub {
+  font-size: 16px; color: var(--text-muted); line-height: 1.65; max-width: 580px; margin: 0 auto;
+}
+
+/* ── SECTION NAV ── */
+.section-nav {
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; padding: 32px 40px 0; flex-wrap: wrap;
+}
+.section-nav a {
+  font-size: 13px; font-weight: 600; padding: 7px 16px;
+  border-radius: 100px; text-decoration: none; transition: all 0.2s;
+  border: 1px solid var(--border); color: var(--text-muted);
+}
+.section-nav a:hover { border-color: var(--teal-border); color: var(--teal); }
+.section-nav a.machinery { background: var(--teal-dim); color: var(--teal); border-color: var(--teal-border); }
+.section-nav a.trucks { background: var(--amber-dim); color: var(--amber); border-color: var(--amber-border); }
+
+/* ── SHARED LAYOUT ── */
+.features-wrap { max-width: 1100px; margin: 0 auto; padding: 0 40px; }
+
+.group-header {
+  padding: 80px 0 40px;
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 24px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0;
+}
+.group-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; padding: 5px 14px; border-radius: 100px;
+  margin-bottom: 12px; width: fit-content;
+}
+.group-eyebrow.teal { background: var(--teal-dim); color: var(--teal); border: 1px solid var(--teal-border); }
+.group-eyebrow.amber { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-border); }
+.group-eyebrow.grey { background: rgba(255,255,255,0.04); color: var(--text-mid); border: 1px solid var(--border); }
+.group-title { font-size: clamp(22px, 2.5vw, 30px); font-weight: 800; letter-spacing: -0.8px; color: var(--white); margin-bottom: 8px; }
+.group-desc { font-size: 14px; color: var(--text-muted); line-height: 1.6; max-width: 480px; }
+
+/* ── MODULE FEATURE BLOCKS ── */
+.module-block {
+  border-bottom: 1px solid var(--border);
+  padding: 56px 0;
+  display: grid; grid-template-columns: 340px 1fr;
+  gap: 60px; align-items: start;
+}
+.module-block:last-child { border-bottom: none; }
+
+.module-left { position: sticky; top: 84px; }
+.module-tag {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; padding: 4px 12px; border-radius: 100px;
+  margin-bottom: 16px;
+}
+.module-tag.teal { background: var(--teal-dim); color: var(--teal); border: 1px solid var(--teal-border); }
+.module-tag.amber { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-border); }
+.module-tag.grey { background: rgba(255,255,255,0.04); color: var(--text-mid); border: 1px solid var(--border); }
+
+.module-emoji { font-size: 36px; display: block; margin-bottom: 14px; }
+.module-name { font-size: 22px; font-weight: 800; color: var(--white); letter-spacing: -0.5px; margin-bottom: 10px; }
+.module-tagline { font-size: 13.5px; color: var(--text-muted); line-height: 1.6; }
+
+.module-right { display: flex; flex-direction: column; gap: 20px; }
+
+/* KPI cards */
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.kpi-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 14px;
+}
+.kpi-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+.kpi-value { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; }
+.kpi-value.teal { color: var(--teal); }
+.kpi-value.amber { color: var(--amber); }
+.kpi-value.white { color: var(--white); }
+
+/* Feature list */
+.feature-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 24px;
+}
+.feature-card-title { font-size: 13px; font-weight: 700; color: var(--white); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.feature-card-title .icon { font-size: 16px; }
+.feature-list { list-style: none; display: flex; flex-direction: column; gap: 9px; }
+.feature-item { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+.check { flex-shrink: 0; margin-top: 1px; }
+.check.teal { color: var(--teal); }
+.check.amber { color: var(--amber); }
+
+/* Callout */
+.callout {
+  border-radius: 12px; padding: 18px 20px;
+  display: flex; gap: 12px; align-items: flex-start;
+}
+.callout.teal { background: var(--teal-dim); border: 1px solid var(--teal-border); }
+.callout.amber { background: var(--amber-dim); border: 1px solid var(--amber-border); }
+.callout-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.callout-text { font-size: 13px; color: var(--text-mid); line-height: 1.6; }
+.callout-text strong { color: var(--white); font-weight: 600; }
+
+/* Data table */
+.data-table { border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+.data-table-head { display: grid; background: var(--surface-2); padding: 10px 16px; }
+.data-table-head span { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+.data-row { display: grid; padding: 12px 16px; border-top: 1px solid var(--border); align-items: center; }
+.data-row:nth-child(odd) { background: var(--surface); }
+.data-row:nth-child(even) { background: rgba(255,255,255,0.01); }
+.data-cell { font-size: 13px; color: var(--text-mid); }
+.data-cell.bold { color: var(--white); font-weight: 600; }
+.data-cell.teal { color: var(--teal); font-weight: 600; }
+.data-cell.amber { color: var(--amber); font-weight: 600; }
+
+/* cols-2 and cols-3 helpers */
+.data-table.cols-2 .data-table-head,
+.data-table.cols-2 .data-row { grid-template-columns: 1fr 1fr; gap: 12px; }
+.data-table.cols-3 .data-table-head,
+.data-table.cols-3 .data-row { grid-template-columns: 1.2fr 1fr 1fr; gap: 12px; }
+.data-table.cols-4 .data-table-head,
+.data-table.cols-4 .data-row { grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 10px; }
+
+/* ── CTA ── */
+.cta-section {
+  padding: 80px 40px; text-align: center;
+  border-top: 1px solid var(--border);
+  background: linear-gradient(180deg, transparent, rgba(14,165,122,0.03) 50%, transparent);
+}
+.cta-title { font-size: clamp(24px, 3vw, 36px); font-weight: 800; letter-spacing: -1px; color: var(--white); margin-bottom: 14px; }
+.cta-sub { font-size: 15px; color: var(--text-muted); margin-bottom: 32px; }
+.cta-buttons { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
+.btn-primary {
+  background: var(--teal); border: none; color: var(--bg);
+  font-size: 14px; font-weight: 700; padding: 13px 28px;
+  border-radius: 10px; cursor: pointer; font-family: inherit;
+  text-decoration: none; transition: background 0.2s;
+}
+.btn-primary:hover { background: #0BC48E; }
+.btn-outline {
+  background: none; border: 1px solid var(--border); color: var(--text-mid);
+  font-size: 14px; font-weight: 600; padding: 12px 24px;
+  border-radius: 10px; cursor: pointer; font-family: inherit;
+  text-decoration: none; transition: all 0.2s;
+}
+.btn-outline:hover { border-color: var(--teal-border); color: var(--teal); }
+
+/* ── FOOTER ── */
+.footer { padding: 40px; text-align: center; border-top: 1px solid var(--border); }
+.footer-logo { font-size: 15px; font-weight: 700; color: var(--text-mid); margin-bottom: 8px; }
+.footer-logo span { color: var(--teal); }
+.footer-text { font-size: 12.5px; color: var(--text-muted); }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 860px) {
+  .module-block { grid-template-columns: 1fr; gap: 32px; }
+  .module-left { position: static; }
+  .section-nav { padding: 24px 20px 0; }
+}
+@media (max-width: 640px) {
+  .nav { padding: 0 20px; }
+  .nav-links { display: none; }
+  .hero { padding: 50px 20px 40px; }
+  .features-wrap { padding: 0 20px; }
+  .group-header { padding: 50px 0 32px; }
+  .module-block { padding: 40px 0; }
+  .cta-section { padding: 60px 20px; }
+  .footer { padding: 32px 20px; }
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <a class="nav-logo" href="index.html">
+    <div class="logo-mark">FM</div>
+    <span class="logo-name">Fleet<span>Magnify</span></span>
+  </a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="features.html" class="active">Features</a>
+    <a href="platform-guide.html">Platform Guide</a>
+    <a href="pricing.html">Pricing</a>
+  </div>
+  <div class="nav-actions">
+    <a href="login.html" class="nav-signin">Sign in</a>
+    <a href="signup.html" class="nav-cta">Sign Up</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-eyebrow"><div class="dot"></div> Features</div>
+  <h1 class="hero-title">Every module.<br>Every calculation.</h1>
+  <p class="hero-sub">A complete walkthrough of what FleetMagnify shows you, how it calculates it, and what you can do with it.</p>
+</div>
+
+<!-- SECTION NAV -->
+<div class="section-nav">
+  <a href="#machinery" class="machinery">⚙️ Machinery Modules</a>
+  <a href="#trucks" class="trucks">🚛 Truck Modules</a>
+  <a href="#fleet" >🔧 Fleet Management</a>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- MACHINERY MODULES -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="features-wrap" id="machinery">
+  <div class="group-header">
+    <div>
+      <div class="group-eyebrow teal">⚙️ Machinery Modules</div>
+      <h2 class="group-title">Powered by OEM telematics</h2>
+      <p class="group-desc">Data flows from VisionLink, Komtrax, ConSite, ActiveCare and other OEM platforms — direct from the ECU, updated every night.</p>
+    </div>
+  </div>
+
+  <!-- ── FUEL ANALYST ── -->
+  <div class="module-block">
+    <div class="module-left">
+      <div class="module-tag teal">Machinery</div>
+      <span class="module-emoji">⛽</span>
+      <div class="module-name">Fuel Analyst</div>
+      <div class="module-tagline">Daily fuel consumption split between productive operating burn and wasted idle burn — calculated from ECU data, not invoices.</div>
+    </div>
+    <div class="module-right">
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-label">Travelling Rate</div><div class="kpi-value teal">27.5 L/hr</div></div>
+        <div class="kpi-card"><div class="kpi-label">Idle Rate</div><div class="kpi-value amber">5.5 L/hr</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Fuel Cost</div><div class="kpi-value white">$3,808</div></div>
+        <div class="kpi-card"><div class="kpi-label">Idle Fuel Cost</div><div class="kpi-value amber">$225</div></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-title"><span class="icon">📊</span> What it shows</div>
+        <ul class="feature-list">
+          <li class="feature-item"><span class="check teal">✓</span> Daily fuel consumption chart — operating fuel vs idle fuel, stacked per day</li>
+          <li class="feature-item"><span class="check teal">✓</span> Travelling fuel rate (L/hr under load) and idle fuel rate (L/hr at idle)</li>
+          <li class="feature-item"><span class="check teal">✓</span> Total fuel cost for the selected period based on your bulk diesel price</li>
+          <li class="feature-item"><span class="check teal">✓</span> Idle fuel cost as a dollar figure and percentage of total fuel spend</li>
+          <li class="feature-item"><span class="check teal">✓</span> Daily breakdown table — litres, operating hours, idle hours, and rates per day</li>
+        </ul>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-title"><span class="icon">🔢</span> How it calculates</div>
+        <ul class="feature-list">
+          <li class="feature-item"><span class="check teal">✓</span> Total litres consumed comes from your OEM telematics ECU — not from fuel invoices</li>
+          <li class="feature-item"><span class="check teal">✓</span> Idle fuel = idle hours × idle burn rate (set per asset, or platform default by machine type)</li>
+          <li class="feature-item"><span class="check teal">✓</span> Operating fuel = total litres minus idle fuel</li>
+          <li class="feature-item"><span class="check teal">✓</span> Fuel cost = litres × bulk diesel price per litre (set in Settings — update when your tank price changes)</li>
+        </ul>
+      </div>
+      <div class="callout teal">
+        <span class="callout-icon">💡</span>
+        <div class="callout-text">Idle burn rate defaults apply by machine type if not set on the individual asset — <strong>Excavator 4.0 L/hr, Dump Truck 5.5 L/hr, Wheel Loader 4.5 L/hr</strong> and so on. Set the actual rate on each asset for more accurate calculations.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── IDLE COST ANALYST ── -->
+  <div class="module-block">
+    <div class="module-left">
+      <div class="module-tag teal">Machinery</div>
+      <span class="module-emoji">⏱</span>
+      <div class="module-name">Idle Cost Analyst</div>
+      <div class="module-tagline">The full financial cost of machines running without working — across four components most operators never calculate.</div>
+    </div>
+    <div class="module-right">
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-label">Total Idle Hours</div><div class="kpi-value teal">21.0 hr</div></div>
+        <div class="kpi-card"><div class="kpi-label">Idle Fuel Cost</div><div class="kpi-value amber">$255</div></div>
+        <div class="kpi-card"><div class="kpi-label">Depreciation</div><div class="kpi-value amber">$1,039</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Idle Cost</div><div class="kpi-value amber">$1,629</div></div>
+      </div>
+      <div class="data-table cols-2">
+        <div class="data-table-head"><span>Cost Component</span><span>What It Represents</span></div>
+        <div class="data-row"><div class="data-cell bold">Idle Fuel Cost</div><div class="data-cell">Litres burned at idle × fuel price — fuel producing zero output</div></div>
+        <div class="data-row"><div class="data-cell bold">Depreciation Cost</div><div class="data-cell">Engine hours at idle × depreciation per hour — idle hours consume asset life just as working hours do</div></div>
+        <div class="data-row"><div class="data-cell bold">Servicing Cost</div><div class="data-cell">Hour-based service intervals triggered by idle hours — oil changes and scheduled services count idle time</div></div>
+        <div class="data-row"><div class="data-cell bold">Maintenance Cost</div><div class="data-cell">Engine wear during idle — repair budget consumed even when the machine isn't working</div></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-title"><span class="icon">📊</span> What it shows</div>
+        <ul class="feature-list">
+          <li class="feature-item"><span class="check teal">✓</span> Total idle hours for the selected asset and period</li>
+          <li class="feature-item"><span class="check teal">✓</span> All four idle cost components as individual dollar figures</li>
+          <li class="feature-item"><span class="check teal">✓</span> Daily idle cost chart — each component stacked per day</li>
+          <li class="feature-item"><span class="check teal">✓</span> Daily breakdown table — idle hours and cost per day</li>
+          <li class="feature-item"><span class="check teal">✓</span> PDF export for sharing with site managers and operators</li>
+        </ul>
+      </div>
+      <div class="callout amber">
+        <span class="callout-icon">⚠️</span>
+        <div class="callout-text"><strong>Reducing idle time by 20%</strong> on a typical construction fleet saves tens of thousands of dollars per year — without purchasing any new equipment. The Idle Cost Analyst makes this visible for the first time.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── EMISSIONS INTELLIGENCE ── -->
+  <div class="module-block">
+    <div class="module-left">
+      <div class="module-tag teal">Machinery</div>
+      <span class="module-emoji">🌍</span>
+      <div class="module-name">Emissions Intelligence</div>
+      <div class="module-tagline">CO₂-e emissions per asset, calculated to New Zealand Ministry for the Environment standards.</div>
+    </div>
+    <div class="module-right">
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-label">Emission Factor</div><div class="kpi-value teal">2.68</div></div>
+        <div class="kpi-card"><div class="kpi-label">Unit</div><div class="kpi-value white">kg CO₂-e/L</div></div>
+        <div class="kpi-card"><div class="kpi-label">Standard</div><div class="kpi-value teal">NZ MEG</div></div>
+        <div class="kpi-card"><div class="kpi-label">Year</div><div class="kpi-value white">2026</div></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-title"><span class="icon">📊</span> What it shows</div>
+        <ul class="feature-list">
+          <li class="feature-item"><span class="check teal">✓</span> Total CO₂-e emissions per asset for the selected period</li>
+          <li class="feature-item"><span class="check teal">✓</span> Daily emissions chart — track trends over time</li>
+          <li class="feature-item"><span class="check teal">✓</span> Fleet-wide emissions summary across all machinery assets</li>
+          <li class="feature-item"><span class="check teal">✓</span> PDF export ready for ESG and sustainability reporting</li>
+        </ul>
+      </div>
+      <div class="data-table cols-3">
+        <div class="data-table-head"><span>Fuel Type</span><span>Emission Factor</span><span>Source</span></div>
+        <div class="data-row"><div class="data-cell bold">Diesel</div><div class="data-cell teal">2.68 kg CO₂-e/L</div><div class="data-cell">NZ MEG 2026</div></div>
+        <div class="data-row"><div class="data-cell bold">Petrol</div><div class="data-cell teal">2.31 kg CO₂-e/L</div><div class="data-cell">NZ MEG 2026</div></div>
+        <div class="data-row"><div class="data-cell bold">Hybrid</div><div class="data-cell teal">1.50 kg CO₂-e/L</div><div class="data-cell">Blended estimate</div></div>
+        <div class="data-row"><div class="data-cell bold">Electric</div><div class="data-cell teal">0 kg CO₂-e/L</div><div class="data-cell">Direct emissions</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── UTILISATION ANALYST ── -->
+  <div class="module-block">
+    <div class="module-left">
+      <div class="module-tag teal">Machinery</div>
+      <span class="module-emoji">📊</span>
+      <div class="module-name">Utilisation Analyst</div>
+      <div class="module-tagline">Actual operating hours vs planned capacity — benchmarked against your target, scoped to your recorded-data window for accuracy.</div>
+    </div>
+    <div class="module-right">
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-label">Available Hours</div><div class="kpi-value white">45 hrs/wk</div></div>
+        <div class="kpi-card"><div class="kpi-label">Actual Hours</div><div class="kpi-value teal">from ECU</div></div>
+        <div class="kpi-card"><div class="kpi-label">Utilisation Rate</div><div class="kpi-value teal">actual ÷ avail</div></div>
+        <div class="kpi-card"><div class="kpi-label">Target</div><div class="kpi-value amber">75%</div></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-title"><span class="icon">📊</span> What it shows</div>
+        <ul class="feature-list">
+          <li class="feature-item"><span class="check teal">✓</span> Available hours for the period based on weekly capacity × weeks in the recorded-data window</li>
+          <li class="feature-item"><span class="check teal">✓</span> Actual operating hours from telematics for the same window</li>
+          <li class="feature-item"><span class="check teal">✓</span> Utilisation rate as a percentage, with variance vs your target benchmark</li>
+          <li class="feature-item"><span class="check teal">✓</span> Daily utilisation chart — on target, below target, or exceeds 100%</li>
+          <li class="feature-item"><span class="check teal">✓</span> Smart warning when your date filter is wider than your telematics data window</li>
+        </ul>
+      </div>
+      <div class="callout teal">
+        <span class="callout-icon">💡</span>
+        <div class="callout-text"><strong>Scoped to recorded data only.</strong> Utilisation rate uses the first-to-last telematics date in your selection — not empty calendar time. A wide date filter with sparse data won't produce misleadingly low utilisation figures.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── JOB COST ANALYST ── -->
+  <div class="module-block">
+    <div class="module-left">
+      <div class="module-tag teal">Machinery</div>
+      <span class="module-emoji">🏗</span>
+      <div class="module-name">Job Cost Analyst</div>
+      <div class="module-tagline">The true cost of every project — assign machines by work day and get five cost components combined into a single defensible job cost figure.</div>
+    </div>
+    <div class="module-right">
+      <div class="data-table cols-2">
+        <div class="data-table-head"><span>Cost Component</span><span>Example — Hornby Land Clearing</span></div>
+        <div class="data-row"><div class="data-cell bold">Total Fuel Cost</div><div class="data-cell teal">$5,508</div></div>
+        <div class="data-row"><div class="data-cell bold">True Idle Cost (Wasted)</div><div class="data-cell amber">$2,142</div></div>
+        <div class="data-row"><div class="data-cell bold">Depreciation (Operating Hours)</div><div class="data-cell teal">$4,813</div></div>
+        <div class="data-row"><div class="data-cell bold">Servicing (Operating Hours)</div><div class="data-cell teal">$1,049</div></div>
+        <div class="data-row"><div class="data-cell bold">Maintenance (Operating Hours)</div><div class="data-cell teal">$1,058</div></div>
+        <div class="data-row"><div class="data-cell bold">Grand Total Job Cost</div><div class="data-cell teal" style="font-size:15px; font-weight:800;">$14,570</div></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-title"><span class="icon">📊</span> What it shows</div>
+        <ul class="feature-list">
+          <li class="feature-item"><span class="check teal">✓</span> Create jobs and assign machines by work day using a calendar picker</li>
+          <li class="feature-item"><span class="check teal">✓</span> Five-component cost summary — fuel, idle waste, depreciation, servicing, maintenance</li>
+          <li class="feature-item"><span class="check teal">✓</span> Idle Cost Insight banner — total idle hours and true idle cost highlighted prominently</li>
+          <li class="feature-item"><span class="check teal">✓</span> Asset breakdown table — per-machine cost across all components</li>
+          <li class="feature-item"><span class="check teal">✓</span> Export Job Report PDF — professional, client-ready with idle cost insight on the first page</li>
+          <li class="feature-item"><span class="check teal">✓</span> Export CSV for accounting and further analysis</li>
+          <li class="feature-item"><span class="check teal">✓</span> Job status tracking — Active, Completed, Archived</li>
+        </ul>
+      </div>
+      <div class="callout amber">
+        <span class="callout-icon">★</span>
+        <div class="callout-text">The Idle Cost Insight banner shows <strong>36.6 idle hours = $2,142 wasted</strong> on a single job — prominently, in amber, with the line: "This is the cost of machines running without working." That number, on a real job report, changes conversations.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- TRUCK MODULES -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="features-wrap" id="trucks">
+  <div class="group-header">
+    <div>
+      <div class="group-eyebrow amber">🚛 Truck Modules</div>
+      <h2 class="group-title">Powered by eRoad and BP Fleet Card</h2>
+      <p class="group-desc">Daily odometer readings from eRoad and fill-to-fill fuel transactions from BP Fleet Card — combined to give you true cost per kilometre, per trip, per vehicle.</p>
+    </div>
+  </div>
+
+  <!-- ── TRUCK FUEL COST ── -->
+  <div class="module-block">
+    <div class="module-left">
+      <div class="module-tag amber">Trucks</div>
+      <span class="module-emoji">🚛</span>
+      <div class="module-name">Fuel Cost Analyst</div>
+      <div class="module-tagline">Fill-to-fill fuel analysis — the most accurate measure of real-world fuel consumption for on-road vehicles.</div>
+    </div>
+    <div class="module-right">
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-label">L / 100 km</div><div class="kpi-value teal">38.4</div></div>
+        <div class="kpi-card"><div class="kpi-label">Cost per km</div><div class="kpi-value amber">$0.86</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Fuel Cost</div><div class="kpi-value white">$4,210</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total KM</div><div class="kpi-value white">4,895</div></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-title"><span class="icon">🔢</span> How fill-to-fill works</div>
+        <ul class="feature-list">
+          <li class="feature-item"><span class="check amber">✓</span> Fill 1 establishes the starting odometer — excluded from calculations (no prior fill to compare)</li>
+          <li class="feature-item"><span class="check amber">✓</span> Fill 2 litres ÷ km driven since Fill 1 = L/100km for that specific period</li>
+          <li class="feature-item"><span class="check amber">✓</span> Each subsequent fill gives an accurate consumption rate for that driving period</li>
+          <li class="feature-item"><span class="check amber">✓</span> eRoad odometer readings closest to each fill date are used for maximum precision</li>
+          <li class="feature-item"><span class="check amber">✓</span> BP card number on each asset links every transaction to the right vehicle automatically</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── COST PER KM ── -->
+  <div class="module-block">
+    <div class="module-left">
+      <div class="module-tag amber">Trucks</div>
+      <span class="module-emoji">📏</span>
+      <div class="module-name">Cost Per KM Analyst</div>
+      <div class="module-tagline">True cost per kilometre including fuel, depreciation, servicing and maintenance — the number that should drive freight pricing decisions.</div>
+    </div>
+    <div class="module-right">
+      <div class="data-table cols-2">
+        <div class="data-table-head"><span>Component</span><span>Calculation</span></div>
+        <div class="data-row"><div class="data-cell bold">Fuel per km</div><div class="data-cell">Fill-to-fill litres × cost per litre ÷ km driven</div></div>
+        <div class="data-row"><div class="data-cell bold">Depreciation per km</div><div class="data-cell">(Current value − End of life value) ÷ remaining km</div></div>
+        <div class="data-row"><div class="data-cell bold">Servicing per km</div><div class="data-cell">Service cost per km from asset settings</div></div>
+        <div class="data-row"><div class="data-cell bold">Maintenance per km</div><div class="data-cell">Annual repair cost ÷ estimated annual km</div></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-title"><span class="icon">📊</span> What it shows</div>
+        <ul class="feature-list">
+          <li class="feature-item"><span class="check amber">✓</span> Total cost per km across all four components — not just fuel</li>
+          <li class="feature-item"><span class="check amber">✓</span> Each component as an individual per-km figure and dollar total</li>
+          <li class="feature-item"><span class="check amber">✓</span> Trend chart — track cost per km over time to identify aging assets</li>
+          <li class="feature-item"><span class="check amber">✓</span> Compare cost per km across similar vehicles in your fleet</li>
+        </ul>
+      </div>
+      <div class="callout amber">
+        <span class="callout-icon">💡</span>
+        <div class="callout-text">NZ industry benchmark for truck fuel cost is approximately <strong>$0.155/km</strong>. The Cost Per KM Analyst shows you where each vehicle sits against this — and what's driving the difference.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TRUCK EMISSIONS ── -->
+  <div class="module-block">
+    <div class="module-left">
+      <div class="module-tag amber">Trucks</div>
+      <span class="module-emoji">🌿</span>
+      <div class="module-name">Emissions Analyst</div>
+      <div class="module-tagline">Per-vehicle CO₂-e emissions from actual BP fill data — calculated to NZ government standards, ready for sustainability reporting.</div>
+    </div>
+    <div class="module-right">
+      <div class="feature-card">
+        <div class="feature-card-title"><span class="icon">📊</span> What it shows</div>
+        <ul class="feature-list">
+          <li class="feature-item"><span class="check amber">✓</span> CO₂-e emissions per vehicle for the selected period</li>
+          <li class="feature-item"><span class="check amber">✓</span> Daily emissions chart — identify high-emission periods</li>
+          <li class="feature-item"><span class="check amber">✓</span> Fleet-wide truck emissions summary</li>
+          <li class="feature-item"><span class="check amber">✓</span> Calculated from actual BP fuel transaction volumes — not estimates</li>
+          <li class="feature-item"><span class="check amber">✓</span> PDF export for ESG and corporate sustainability reporting</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TRIP REPORT ── -->
+  <div class="module-block">
+    <div class="module-left">
+      <div class="module-tag amber">Trucks</div>
+      <span class="module-emoji">🗺️</span>
+      <div class="module-name">Trip Report</div>
+      <div class="module-tagline">Select any vehicle and any time window — get the complete cost of that trip in seconds.</div>
+    </div>
+    <div class="module-right">
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-label">Trip Distance</div><div class="kpi-value teal">529 km</div></div>
+        <div class="kpi-card"><div class="kpi-label">Fuel Cost</div><div class="kpi-value white">$489</div></div>
+        <div class="kpi-card"><div class="kpi-label">Depreciation</div><div class="kpi-value white">$167</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Trip Cost</div><div class="kpi-value amber">$747</div></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-title"><span class="icon">🔢</span> How it calculates</div>
+        <ul class="feature-list">
+          <li class="feature-item"><span class="check amber">✓</span> Trip distance = eRoad odometer at trip end minus reading at trip start</li>
+          <li class="feature-item"><span class="check amber">✓</span> Fuel cost = trip km × vehicle's most recent fill-to-fill rate (not fuel bought during the trip)</li>
+          <li class="feature-item"><span class="check amber">✓</span> Depreciation, servicing and maintenance = trip km × per-km rates from asset settings</li>
+          <li class="feature-item"><span class="check amber">✓</span> Fuel rate reference shown — exact fill-to-fill period used and the L/km and $/L applied</li>
+        </ul>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-title"><span class="icon">📊</span> What it shows</div>
+        <ul class="feature-list">
+          <li class="feature-item"><span class="check amber">✓</span> Trip distance, four cost components, and total trip cost</li>
+          <li class="feature-item"><span class="check amber">✓</span> Visual cost breakdown bar — fuel, depreciation, servicing, maintenance proportions</li>
+          <li class="feature-item"><span class="check amber">✓</span> Total trip emissions in kg CO₂-e</li>
+          <li class="feature-item"><span class="check amber">✓</span> Fuel rate reference — transparency on exactly which fill-to-fill period was used</li>
+          <li class="feature-item"><span class="check amber">✓</span> PDF export — share with clients or cost to specific jobs</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- FLEET MANAGEMENT -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="features-wrap" id="fleet">
+  <div class="group-header">
+    <div>
+      <div class="group-eyebrow grey">🔧 Fleet Management</div>
+      <h2 class="group-title">Set up once. Runs itself.</h2>
+      <p class="group-desc">Add your assets, connect your APIs, set your diesel price. Every calculation across every module flows from these three steps.</p>
+    </div>
+  </div>
+
+  <!-- ── ASSETS ── -->
+  <div class="module-block">
+    <div class="module-left">
+      <div class="module-tag grey">Fleet Management</div>
+      <span class="module-emoji">🚧</span>
+      <div class="module-name">Assets</div>
+      <div class="module-tagline">Your central fleet register — the foundation of every cost calculation across the platform.</div>
+    </div>
+    <div class="module-right">
+      <div class="feature-card">
+        <div class="feature-card-title"><span class="icon">⚙️</span> Machinery asset settings</div>
+        <ul class="feature-list">
+          <li class="feature-item"><span class="check teal">✓</span> Asset name (must match OEM telematics platform exactly), type, make, model, year</li>
+          <li class="feature-item"><span class="check teal">✓</span> Current value and end of life value — used for depreciation per engine hour</li>
+          <li class="feature-item"><span class="check teal">✓</span> Expected life hours, service cost per hour, estimated annual repair cost</li>
+          <li class="feature-item"><span class="check teal">✓</span> Available hours per week and target utilisation percentage</li>
+          <li class="feature-item"><span class="check teal">✓</span> Idle burn rate in L/hr — defaults apply by machine type if not set</li>
+        </ul>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card-title"><span class="icon">🚛</span> Truck asset settings</div>
+        <ul class="feature-list">
+          <li class="feature-item"><span class="check amber">✓</span> Asset name (must match eRoad account exactly), type, make, model, registration</li>
+          <li class="feature-item"><span class="check amber">✓</span> Current value and end of life value — used for depreciation per km</li>
+          <li class="feature-item"><span class="check amber">✓</span> Expected life km, service cost per km, estimated annual repair cost</li>
+          <li class="feature-item"><span class="check amber">✓</span> Estimated annual km and current odometer reading</li>
+          <li class="feature-item"><span class="check amber">✓</span> BP card number — links every BP transaction to the right vehicle automatically</li>
+        </ul>
+      </div>
+      <div class="callout teal">
+        <span class="callout-icon">📥</span>
+        <div class="callout-text"><strong>Excel import available.</strong> Download the Asset Import Template from the Upload Data page, complete the Machinery and Trucks sheets, and upload to add your entire fleet at once.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── INTEGRATIONS ── -->
+  <div class="module-block">
+    <div class="module-left">
+      <div class="module-tag grey">Fleet Management</div>
+      <span class="module-emoji">🔌</span>
+      <div class="module-name">Integrations</div>
+      <div class="module-tagline">Connect your data sources once. Data flows automatically every night from that point on — no ongoing action required.</div>
+    </div>
+    <div class="module-right">
+      <div class="data-table cols-3">
+        <div class="data-table-head"><span>Integration</span><span>Provider</span><span>Data Provided</span></div>
+        <div class="data-row"><div class="data-cell bold">VisionLink</div><div class="data-cell">Caterpillar</div><div class="data-cell">Engine hours, fuel burn, idle hours</div></div>
+        <div class="data-row"><div class="data-cell bold">Komtrax</div><div class="data-cell">Komatsu</div><div class="data-cell">Engine hours, fuel burn, idle hours</div></div>
+        <div class="data-row"><div class="data-cell bold">ConSite</div><div class="data-cell">Hitachi</div><div class="data-cell">Engine hours, fuel burn, idle hours</div></div>
+        <div class="data-row"><div class="data-cell bold">ActiveCare</div><div class="data-cell">Volvo CE</div><div class="data-cell">Engine hours, fuel burn, idle hours</div></div>
+        <div class="data-row"><div class="data-cell bold">LiDAT</div><div class="data-cell">Liebherr</div><div class="data-cell">Engine hours, fuel burn, idle hours</div></div>
+        <div class="data-row"><div class="data-cell bold">eRoad</div><div class="data-cell">eRoad NZ</div><div class="data-cell">Daily odometer readings</div></div>
+        <div class="data-row"><div class="data-cell bold">BP Fleet Card</div><div class="data-cell">BP New Zealand</div><div class="data-cell">Fill transactions, litres, cost</div></div>
+      </div>
+      <div class="callout teal">
+        <span class="callout-icon">💡</span>
+        <div class="callout-text">All integrations are <strong>included in the base price</strong> — there are no per-integration fees. New OEM integrations are added continuously.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SETTINGS ── -->
+  <div class="module-block">
+    <div class="module-left">
+      <div class="module-tag grey">Fleet Management</div>
+      <span class="module-emoji">⚙️</span>
+      <div class="module-name">Settings</div>
+      <div class="module-tagline">One field. Applied across every machinery fuel calculation on the platform.</div>
+    </div>
+    <div class="module-right">
+      <div class="feature-card">
+        <div class="feature-card-title"><span class="icon">⛽</span> Machinery Fuel Cost per Litre</div>
+        <ul class="feature-list">
+          <li class="feature-item"><span class="check teal">✓</span> Enter your current bulk diesel price in NZD per litre (e.g. 1.520)</li>
+          <li class="feature-item"><span class="check teal">✓</span> Applied to all machinery fuel consumption figures from OEM telematics</li>
+          <li class="feature-item"><span class="check teal">✓</span> Update whenever your bulk tank delivery price changes</li>
+          <li class="feature-item"><span class="check teal">✓</span> Does not affect trucks — truck fuel cost uses actual BP card transaction prices</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CTA -->
+<div class="cta-section">
+  <h2 class="cta-title">Ready to see your fleet's true cost?</h2>
+  <p class="cta-sub">No setup fees. No fixed contracts. Cancel anytime.</p>
+  <div class="cta-buttons">
+    <a href="signup.html" class="btn-primary">Get Started →</a>
+    <a href="pricing.html" class="btn-outline">View Pricing</a>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-logo">Fleet<span>Magnify</span></div>
+  <div class="footer-text">Fleet Cost Intelligence Platform · New Zealand</div>
+</footer>
+
+</body>
+</html>

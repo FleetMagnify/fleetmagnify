@@ -48,11 +48,24 @@
   }
   .logo-name { font-size: 17px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
   .logo-name span { color: #0EA57A; }
-  .back-link {
-    font-size: 13.5px; font-weight: 500; color: #9BA4B0;
-    text-decoration: none; transition: color 0.2s;
+  .nav-links { display: flex; align-items: center; gap: 32px; }
+  .nav-links a { font-size: 13.5px; font-weight: 500; color: #9BA4B0; text-decoration: none; transition: color 0.2s; }
+  .nav-links a:hover { color: #F0F2F5; }
+  .nav-actions { display: flex; align-items: center; gap: 12px; }
+  .btn-ghost {
+    background: none; border: 1px solid #2D3748;
+    color: #C8D0DB; font-size: 13px; font-weight: 500;
+    padding: 8px 20px; border-radius: 8px; cursor: pointer;
+    transition: all 0.2s; font-family: inherit; text-decoration: none;
   }
-  .back-link:hover { color: #F0F2F5; }
+  .btn-ghost:hover { border-color: rgba(255,255,255,0.25); color: #F0F2F5; }
+  .btn-primary {
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 13px; font-weight: 700; padding: 9px 22px;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+    text-decoration: none; display: inline-block;
+  }
+  .btn-primary:hover { background: #0BC48E; }
 
   main {
     position: relative; z-index: 1; flex: 1;
@@ -158,7 +171,16 @@
       <div class="logo-mark">FM</div>
       <span class="logo-name">Fleet<span>Magnify</span></span>
     </a>
-    <a class="back-link" href="index.html">&larr; Back to home</a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="features.html">Features</a>
+      <a href="platform-guide.html">Platform Guide</a>
+      <a href="pricing.html">Pricing</a>
+    </div>
+    <div class="nav-actions">
+      <a class="btn-ghost" href="login.html">Sign in</a>
+      <a class="btn-primary" href="signup.html">Sign Up</a>
+    </div>
   </div>
 </header>
 

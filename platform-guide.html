@@ -68,6 +68,9 @@ body {
   text-decoration: none; transition: background 0.2s;
 }
 .nav-cta:hover { background: #0BC48E; }
+.nav-actions { display: flex; align-items: center; gap: 12px; }
+.nav-signin { font-size: 13px; font-weight: 500; color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
+.nav-signin:hover { color: var(--text); }
 
 /* ── HERO ── */
 .hero {
@@ -319,12 +322,14 @@ body {
   </a>
   <div class="nav-links">
     <a href="index.html">Home</a>
-    <a href="#modules">Modules</a>
-    <a href="#how-it-works">How It Works</a>
-    <a href="#get-started">Get Started</a>
+    <a href="features.html">Features</a>
     <a href="platform-guide.html" class="active">Platform Guide</a>
+    <a href="pricing.html">Pricing</a>
   </div>
-  <a href="signup.html" class="nav-cta">Get Started →</a>
+  <div class="nav-actions">
+    <a href="login.html" class="nav-signin">Sign in</a>
+    <a href="signup.html" class="nav-cta">Sign Up</a>
+  </div>
 </nav>
 
 <!-- HERO -->
