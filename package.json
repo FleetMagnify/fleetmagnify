@@ -2,6 +2,7 @@
   "name": "fleetmagnify",
   "private": true,
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.1"
+    "@supabase/supabase-js": "^2.49.1",
+    "busboy": "^1.6.0"
   }
 }
