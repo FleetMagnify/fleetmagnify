@@ -1,0 +1,5 @@
+asset_name,record_date,total_engine_hours,operating_hours,idle_hours,litres_consumed,odometer_km
+Excavator 01,2026-06-30,6992.4,7.2,1.8,172.3,
+Dump Truck 01,2026-06-30,9087.6,6.8,2.1,198.7,
+Wheel Loader 01,2026-06-30,5821.3,7.5,1.6,168.4,
+Bulldozer 01,2026-06-30,7583.9,6.9,1.9,185.2,
