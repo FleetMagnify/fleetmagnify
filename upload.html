@@ -316,40 +316,9 @@
           <div class="panel-sub">Import fuel delivery data from your fuel card or supplier invoices. One row per fuel delivery event.</div>
         </div>
         <div class="panel-body">
-          <div class="template-row">
-            <div class="template-info">
-              <div class="template-icon">📄</div>
-              <div>
-                <div class="template-label">Fuel Data Template</div>
-                <div class="template-desc">Excel with your assets pre-filled — one row per asset</div>
-              </div>
-            </div>
-            <button class="btn-download" id="fuel-template-btn">⬇ Download</button>
-          </div>
-
-          <div class="drop-zone" id="fuel-drop">
-            <input type="file" accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" id="fuel-file">
-            <div class="drop-icon">📂</div>
-            <div class="drop-text"><strong>Click to browse</strong> or drag and drop</div>
-            <div class="drop-formats">Accepts .xlsx and .csv files</div>
-            <div class="drop-filename" id="fuel-filename"></div>
-          </div>
-
-          <div class="preview-wrap" id="fuel-preview">
-            <div class="preview-head">
-              <span class="preview-head-label">Preview</span>
-              <span class="preview-head-count" id="fuel-count"></span>
-            </div>
-            <div class="preview-scroll">
-              <table class="preview-table" id="fuel-preview-table"></table>
-            </div>
-          </div>
-
-          <div class="result-box" id="fuel-result"></div>
-
-          <div class="panel-actions">
-            <button class="btn-clear" id="fuel-clear-btn">Clear</button>
-            <button class="btn-import" id="fuel-import-btn" disabled>Import Fuel Data</button>
+          <div class="info-strip" style="margin-bottom: 0;">
+            <div class="info-strip-icon">📧</div>
+            <p>Data is imported automatically via your upload email address. Go to <a href="integrations.html" style="color:#0EA57A;">Integrations</a> to view your address and setup instructions.</p>
           </div>
         </div>
       </div>
@@ -362,40 +331,9 @@
           <div class="panel-sub">Import engine hours and operating data from your telematics provider. One row per asset per day.</div>
         </div>
         <div class="panel-body">
-          <div class="template-row">
-            <div class="template-info">
-              <div class="template-icon">📄</div>
-              <div>
-                <div class="template-label">Telematics Data Template</div>
-                <div class="template-desc">Excel with your assets pre-filled — one row per asset</div>
-              </div>
-            </div>
-            <button class="btn-download" id="tel-template-btn">⬇ Download</button>
-          </div>
-
-          <div class="drop-zone" id="tel-drop">
-            <input type="file" accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" id="tel-file">
-            <div class="drop-icon">📂</div>
-            <div class="drop-text"><strong>Click to browse</strong> or drag and drop</div>
-            <div class="drop-formats">Accepts .xlsx and .csv files</div>
-            <div class="drop-filename" id="tel-filename"></div>
-          </div>
-
-          <div class="preview-wrap" id="tel-preview">
-            <div class="preview-head">
-              <span class="preview-head-label">Preview</span>
-              <span class="preview-head-count" id="tel-count"></span>
-            </div>
-            <div class="preview-scroll">
-              <table class="preview-table" id="tel-preview-table"></table>
-            </div>
-          </div>
-
-          <div class="result-box" id="tel-result"></div>
-
-          <div class="panel-actions">
-            <button class="btn-clear" id="tel-clear-btn">Clear</button>
-            <button class="btn-import" id="tel-import-btn" disabled>Import Telematics Data</button>
+          <div class="info-strip" style="margin-bottom: 0;">
+            <div class="info-strip-icon">📧</div>
+            <p>Data is imported automatically via your upload email address. Go to <a href="integrations.html" style="color:#0EA57A;">Integrations</a> to view your address and setup instructions.</p>
           </div>
         </div>
       </div>
@@ -408,6 +346,47 @@
           <div class="panel-sub">Import BP fuel purchase and eROAD mileage data for on-road vehicles. Excel file with <strong>Fuel Purchases</strong> and <strong>Eroad Mileage</strong> sheets.</div>
         </div>
         <div class="panel-body">
+          <!-- Tier 1 — Automatic (API) -->
+          <div class="info-strip" style="margin-bottom: 20px;">
+            <div class="info-strip-icon">🔌</div>
+            <p><strong>Tier 1 — Automatic (API):</strong> Truck data flows automatically once your BP Fleet Card and eRoad APIs are connected. <a href="integrations.html" style="color:#0EA57A;">Connect in Integrations →</a></p>
+          </div>
+          <div class="template-row">
+            <div class="template-info">
+              <div class="template-label">BP Fleet Card API</div>
+              <div class="template-desc">Fuel purchases sync automatically when connected.</div>
+            </div>
+            <span id="truck-bp-api-badge" class="template-desc">Checking...</span>
+          </div>
+          <div class="template-row">
+            <div class="template-info">
+              <div class="template-label">eRoad API</div>
+              <div class="template-desc">Mileage readings sync automatically when connected.</div>
+            </div>
+            <span id="truck-eroad-api-badge" class="template-desc">Checking...</span>
+          </div>
+
+          <!-- Tier 2 — Automatic (Email CSV) -->
+          <div class="help-card" style="margin-top: 20px; margin-bottom: 20px;">
+            <div class="help-card-icon">📧</div>
+            <h4>Tier 2 — Automatic (Email CSV)</h4>
+            <p>No API yet? Send your CSV reports to your upload email address instead.</p>
+            <p>BP Fleet Card transaction CSV → automatically imported to <strong>fuel_purchases</strong></p>
+            <p>eRoad mileage CSV → automatically imported to <strong>eroad_mileage</strong></p>
+            <div class="template-row" style="margin-top: 14px; margin-bottom: 0;">
+              <div class="template-info">
+                <div class="template-label">Upload email address</div>
+                <input type="text" id="truck-upload-email-address" readonly placeholder="Loading...">
+              </div>
+            </div>
+          </div>
+
+          <!-- Tier 3 — Manual upload (fallback) -->
+          <p class="panel-sub" style="margin-bottom: 12px;">
+            <a href="#" id="truck-manual-toggle" style="color:#0EA57A; font-weight: 600; text-decoration: none;">Or upload manually →</a>
+          </p>
+          <div id="truck-manual-upload" hidden>
+            <p class="template-desc" style="margin-bottom: 16px;">Use this for historical data loads before your automated connections are set up.</p>
           <div class="template-row">
             <div class="template-info">
               <div class="template-icon">📄</div>
@@ -451,6 +430,7 @@
           <div class="panel-actions">
             <button class="btn-clear" id="truck-clear-btn">Clear</button>
             <button class="btn-import" id="truck-import-btn" disabled>Import Truck Data</button>
+          </div>
           </div>
         </div>
       </div>
@@ -500,12 +480,11 @@
 (function() {
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
-  var fuelRows = [];
-  var telRows = [];
   var truckFuelRows = [];
   var truckMileageRows = [];
   var truckFuelHeaders = [];
   var truckMileageHeaders = [];
+  var UPLOAD_DOMAIN = 'uploads.fleetmagnify.com';
 
   // ── Auth ──
   async function init() {
@@ -518,7 +497,56 @@
     document.getElementById('user-name').textContent = name;
     document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
     await getAssets();
+    await loadTruckIngestionSettings();
   }
+
+  async function loadTruckIngestionSettings() {
+    var emailInput = document.getElementById('truck-upload-email-address');
+    var settingsResult = await supabase
+      .from('user_settings')
+      .select('upload_email')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+
+    if (settingsResult.data && settingsResult.data.upload_email) {
+      emailInput.value = settingsResult.data.upload_email + '@' + UPLOAD_DOMAIN;
+    } else {
+      emailInput.value = '';
+      emailInput.placeholder = 'No upload address assigned yet';
+    }
+
+    var intResult = await supabase
+      .from('company_integrations')
+      .select('fuel_provider, bp_api_key, telematics_provider, eroad_api_key')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+
+    var row = intResult.data;
+    var bpConnected = !!(row && row.fuel_provider === 'BP' && row.bp_api_key);
+    var eroadConnected = !!(row && row.telematics_provider === 'eRoad' && row.eroad_api_key);
+
+    setTruckApiBadge('truck-bp-api-badge', bpConnected);
+    setTruckApiBadge('truck-eroad-api-badge', eroadConnected);
+  }
+
+  function setTruckApiBadge(elementId, connected) {
+    var el = document.getElementById(elementId);
+    if (connected) {
+      el.className = 'panel-tag';
+      el.textContent = 'Connected';
+    } else {
+      el.className = 'template-desc';
+      el.innerHTML = '<span class="result-skipped">Not connected</span>';
+    }
+  }
+
+  document.getElementById('truck-manual-toggle').addEventListener('click', function(e) {
+    e.preventDefault();
+    var panel = document.getElementById('truck-manual-upload');
+    var expanded = panel.hidden;
+    panel.hidden = !expanded;
+    this.textContent = expanded ? 'Hide manual upload ←' : 'Or upload manually →';
+  });
 
   // ── Asset lookup cache ──
   var assetCache = null;
@@ -557,18 +585,11 @@
   }
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
-  var FUEL_NOTE = 'Each row is one asset on one date. Duplicate a row for each date you have data for. Do not change asset_id or asset_name.';
-  var TEL_NOTE = 'Each row is one asset on one date. Duplicate a row for each date you have data for. Do not change asset_id or asset_name.';
-  var FUEL_HEADERS = ['asset_id', 'asset_name', 'record_date', 'litres', 'cost_per_litre', 'total_cost', 'supplier'];
-  var TEL_HEADERS = ['asset_id', 'asset_name', 'record_date', 'total_engine_hours', 'operating_hours', 'idle_hours', 'litres_consumed', 'odometer_km'];
+  var FUEL_HEADER_KEYS = ['asset_name', 'record_date'];
   var TRUCK_FUEL_NOTE = 'Each row is one fuel purchase. vehicle_name must match an asset in your fleet. Do not change vehicle_name.';
   var TRUCK_MILEAGE_NOTE = 'Each row is one odometer reading. vehicle_name must match an asset in your fleet.';
   var TRUCK_FUEL_HEADERS = ['vehicle_name', 'purchase_date', 'litres', 'cost_nzd', 'source'];
   var TRUCK_MILEAGE_HEADERS = ['vehicle_name', 'reading_date', 'odometer_km', 'source'];
-  var FUEL_PREVIEW_COLS = ['asset_name', 'record_date', 'litres', 'cost_per_litre', 'total_cost', 'supplier'];
-  var TEL_PREVIEW_COLS = ['asset_name', 'record_date', 'total_engine_hours', 'operating_hours', 'idle_hours', 'litres_consumed', 'odometer_km'];
-  var FUEL_HEADER_KEYS = ['asset_name', 'record_date'];
-  var TEL_HEADER_KEYS = ['asset_name', 'record_date'];
   var TRUCK_FUEL_HEADER_KEYS = ['vehicle_name', 'purchase_date'];
   var TRUCK_MILEAGE_HEADER_KEYS = ['vehicle_name', 'reading_date'];
   var TRUCK_FUEL_HEADER_SIGNATURE = [
@@ -781,13 +802,6 @@
     return { fuel: fuel, mileage: mileage };
   }
 
-  function detectTruckFuelHeaders(headers) {
-    var normalized = (headers || []).map(normalizeHeaderCell);
-    return TRUCK_FUEL_HEADER_SIGNATURE.every(function(group) {
-      return group.aliases.some(function(alias) { return normalized.indexOf(alias) !== -1; });
-    });
-  }
-
   function readUploadFile(file, options, callback) {
     options = options || {};
     if (/\.xlsx$/i.test(file.name)) {
@@ -852,52 +866,6 @@
   }
 
   // ── Templates ──
-  async function buildFuelTemplate() {
-    if (typeof XLSX === 'undefined') {
-      showToast('Excel library failed to load. Please refresh the page.', 'error');
-      return;
-    }
-    var assets = await getAssets();
-    var rows = [[FUEL_NOTE], FUEL_HEADERS];
-    if (assets.length) {
-      assets.forEach(function(a) {
-        rows.push([a.id, a.asset_name, '', '', '', '', '']);
-      });
-    } else {
-      rows.push(['', 'CAT 390F Excavator #1', '', '', '', '', '']);
-    }
-    var wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Fuel Data');
-    XLSX.writeFile(wb, 'FleetMagnify_Fuel_Template.xlsx');
-  }
-
-  async function buildTelematicsTemplate() {
-    if (typeof XLSX === 'undefined') {
-      showToast('Excel library failed to load. Please refresh the page.', 'error');
-      return;
-    }
-    var assets = await getAssets();
-    var rows = [[TEL_NOTE], TEL_HEADERS];
-    if (assets.length) {
-      assets.forEach(function(a) {
-        rows.push([a.id, a.asset_name, '', '', '', '', '']);
-      });
-    } else {
-      rows.push(['', 'CAT 390F Excavator #1', '', '', '', '', '']);
-    }
-    var wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Telematics Data');
-    XLSX.writeFile(wb, 'FleetMagnify_Telematics_Template.xlsx');
-  }
-
-  document.getElementById('fuel-template-btn').addEventListener('click', function() {
-    buildFuelTemplate();
-  });
-
-  document.getElementById('tel-template-btn').addEventListener('click', function() {
-    buildTelematicsTemplate();
-  });
-
   async function buildTruckTemplate() {
     if (typeof XLSX === 'undefined') {
       showToast('Excel library failed to load. Please refresh the page.', 'error');
@@ -923,142 +891,6 @@
 
   document.getElementById('truck-template-btn').addEventListener('click', function() {
     buildTruckTemplate();
-  });
-
-  // ── FUEL FILE ──
-  setupDropZone('fuel-drop', 'fuel-file', function(file) {
-    document.getElementById('fuel-filename').style.display = 'block';
-    document.getElementById('fuel-filename').textContent = '📎 ' + file.name;
-    readUploadFile(file, { preferredSheet: 'Fuel Data', expectedHeaders: FUEL_HEADER_KEYS, nameColumn: 'asset_name' }, function(parsed, err) {
-      if (err) { showResult('fuel-result', err, 'error'); return; }
-      fuelRows = parsed.rows;
-      if (fuelRows.length === 0) {
-        if (parsed.wrongSectionHint === 'truck-fuel' || detectTruckFuelHeaders(parsed.headers)) {
-          showResult('fuel-result', 'This file looks like Truck Fuel Purchases data (vehicle_name, purchase_date). Use the "Truck Fuel Purchases & Mileage" section below instead of Fuel Supplier Records.', 'error');
-        } else {
-          showResult('fuel-result', 'No valid rows found. Check your file matches the template.', 'error');
-        }
-        return;
-      }
-      var cols = previewColumns(parsed.headers, FUEL_PREVIEW_COLS);
-      renderPreview(document.getElementById('fuel-preview-table'), cols, fuelRows);
-      document.getElementById('fuel-count').textContent = fuelRows.length + ' row' + (fuelRows.length !== 1 ? 's' : '') + ' found';
-      document.getElementById('fuel-preview').classList.add('visible');
-      document.getElementById('fuel-import-btn').disabled = false;
-      document.getElementById('fuel-result').className = 'result-box';
-    });
-  }, /\.(csv|xlsx)$/i);
-
-  document.getElementById('fuel-clear-btn').addEventListener('click', function() {
-    fuelRows = [];
-    document.getElementById('fuel-file').value = '';
-    document.getElementById('fuel-filename').style.display = 'none';
-    document.getElementById('fuel-preview').classList.remove('visible');
-    document.getElementById('fuel-import-btn').disabled = true;
-    document.getElementById('fuel-result').className = 'result-box';
-  });
-
-  document.getElementById('fuel-import-btn').addEventListener('click', async function() {
-    if (!fuelRows.length) return;
-    this.disabled = true; this.textContent = 'Importing...';
-    var assets = await getAssets();
-    var records = [];
-    var skippedDetails = [];
-    fuelRows.forEach(function(r) {
-      var assetId = findAssetIdByName(assets, r.asset_name);
-      if (!assetId) {
-        skippedDetails.push(skippedRowMessage(r, 'asset_name'));
-        return;
-      }
-      records.push({
-        user_id: currentUser.id,
-        asset_id: Number(assetId),
-        record_date: r.record_date || null,
-        litres: parseOptionalFloat(r.litres),
-        cost_per_litre: parseOptionalFloat(r.cost_per_litre),
-        total_cost: parseOptionalFloat(r.total_cost),
-        supplier: r.supplier || null
-      });
-    });
-    if (records.length === 0) {
-      showResultHtml('fuel-result', formatImportResult(0, skippedDetails, 'fuel record'), 'error');
-      this.disabled = false; this.textContent = 'Import Fuel Data'; return;
-    }
-    var { error } = await supabase.from('fuel_records').insert(records);
-    this.disabled = false; this.textContent = 'Import Fuel Data';
-    if (error) { showResult('fuel-result', 'Import failed: ' + error.message, 'error'); return; }
-    showResultHtml('fuel-result', formatImportResult(records.length, skippedDetails, 'fuel record' + (records.length !== 1 ? 's' : '')), 'success');
-    showToast(records.length + ' fuel records imported', 'success');
-    fuelRows = [];
-    document.getElementById('fuel-preview').classList.remove('visible');
-    document.getElementById('fuel-file').value = '';
-    document.getElementById('fuel-filename').style.display = 'none';
-    document.getElementById('fuel-import-btn').disabled = true;
-  });
-
-  // ── TELEMATICS FILE ──
-  setupDropZone('tel-drop', 'tel-file', function(file) {
-    document.getElementById('tel-filename').style.display = 'block';
-    document.getElementById('tel-filename').textContent = '📎 ' + file.name;
-    readUploadFile(file, { preferredSheet: 'Telematics Data', expectedHeaders: TEL_HEADER_KEYS, nameColumn: 'asset_name' }, function(parsed, err) {
-      if (err) { showResult('tel-result', err, 'error'); return; }
-      telRows = parsed.rows;
-      if (telRows.length === 0) { showResult('tel-result', 'No valid rows found. Check your file matches the template.', 'error'); return; }
-      var cols = previewColumns(parsed.headers, TEL_PREVIEW_COLS);
-      renderPreview(document.getElementById('tel-preview-table'), cols, telRows);
-      document.getElementById('tel-count').textContent = telRows.length + ' row' + (telRows.length !== 1 ? 's' : '') + ' found';
-      document.getElementById('tel-preview').classList.add('visible');
-      document.getElementById('tel-import-btn').disabled = false;
-      document.getElementById('tel-result').className = 'result-box';
-    });
-  }, /\.(csv|xlsx)$/i);
-
-  document.getElementById('tel-clear-btn').addEventListener('click', function() {
-    telRows = [];
-    document.getElementById('tel-file').value = '';
-    document.getElementById('tel-filename').style.display = 'none';
-    document.getElementById('tel-preview').classList.remove('visible');
-    document.getElementById('tel-import-btn').disabled = true;
-    document.getElementById('tel-result').className = 'result-box';
-  });
-
-  document.getElementById('tel-import-btn').addEventListener('click', async function() {
-    if (!telRows.length) return;
-    this.disabled = true; this.textContent = 'Importing...';
-    var assets = await getAssets();
-    var records = [];
-    var skippedDetails = [];
-    telRows.forEach(function(r) {
-      var assetId = findAssetIdByName(assets, r.asset_name);
-      if (!assetId) {
-        skippedDetails.push(skippedRowMessage(r, 'asset_name'));
-        return;
-      }
-      records.push({
-        user_id: currentUser.id,
-        asset_id: Number(assetId),
-        record_date: r.record_date || null,
-        total_engine_hours: parseOptionalFloat(r.total_engine_hours),
-        operating_hours: parseOptionalFloat(r.operating_hours),
-        idle_hours: parseOptionalFloat(r.idle_hours),
-        litres_consumed: parseOptionalFloat(r.litres_consumed),
-        odometer_km: parseOptionalFloat(r.odometer_km)
-      });
-    });
-    if (records.length === 0) {
-      showResultHtml('tel-result', formatImportResult(0, skippedDetails, 'telematics record'), 'error');
-      this.disabled = false; this.textContent = 'Import Telematics Data'; return;
-    }
-    var { error } = await supabase.from('telematics_records').insert(records);
-    this.disabled = false; this.textContent = 'Import Telematics Data';
-    if (error) { showResult('tel-result', 'Import failed: ' + error.message, 'error'); return; }
-    showResultHtml('tel-result', formatImportResult(records.length, skippedDetails, 'telematics record' + (records.length !== 1 ? 's' : '')), 'success');
-    showToast(records.length + ' telematics records imported', 'success');
-    telRows = [];
-    document.getElementById('tel-preview').classList.remove('visible');
-    document.getElementById('tel-file').value = '';
-    document.getElementById('tel-filename').style.display = 'none';
-    document.getElementById('tel-import-btn').disabled = true;
   });
 
   // ── TRUCK FILE ──

@@ -188,7 +188,7 @@
   <div class="signup-card">
     <div class="card-eyebrow"><div class="dash"></div> Get Started</div>
     <h1>Create your account</h1>
-    <p class="card-sub">Start analysing fleet costs with enterprise-grade intelligence.</p>
+    <p class="card-sub" id="card-sub">Start analysing fleet costs with enterprise-grade intelligence.</p>
 
     <div id="form-error" class="form-error" role="alert"></div>
 
@@ -222,7 +222,15 @@
       <button type="submit" class="btn-submit" id="submit-btn">Create Account</button>
     </form>
 
-    <p class="login-prompt">
+    <div id="signup-success" hidden>
+      <div class="form-group">
+        <label for="upload-email-display">Upload email</label>
+        <input type="text" id="upload-email-display" readonly>
+      </div>
+      <a href="home.html" class="btn-submit">Continue to dashboard</a>
+    </div>
+
+    <p class="login-prompt" id="login-prompt">
       Already have an account? <a href="login.html">Sign in</a>
     </p>
   </div>
@@ -235,6 +243,12 @@
     var errorEl = document.getElementById('form-error');
     var form = document.getElementById('signup-form');
     var submitBtn = document.getElementById('submit-btn');
+    var successEl = document.getElementById('signup-success');
+    var uploadEmailDisplay = document.getElementById('upload-email-display');
+    var cardSub = document.getElementById('card-sub');
+    var loginPrompt = document.getElementById('login-prompt');
+    var cardTitle = document.querySelector('.signup-card h1');
+    var UPLOAD_DOMAIN = 'uploads.fleetmagnify.com';
 
     if (!window.SUPABASE_URL || window.SUPABASE_URL === 'YOUR_SUPABASE_URL') {
       showError('Supabase is not configured. Add your project URL and anon key in js/supabase-config.js.');
@@ -274,6 +288,75 @@
       }
 
       return error.message || 'Something went wrong. Please try again.';
+    }
+
+    function slugifyCompanyName(name) {
+      return String(name || '')
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9-]/g, '')
+        .replace(/-+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    }
+
+    function randomAlphanumeric(length) {
+      var chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      var result = '';
+      for (var i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    }
+
+    function buildUploadEmailPrefix(companyName) {
+      var slug = slugifyCompanyName(companyName);
+      if (!slug) slug = 'fleet';
+      return slug + '-' + randomAlphanumeric(4);
+    }
+
+    function isUniqueViolation(error) {
+      if (!error) return false;
+      if (error.code === '23505') return true;
+      var msg = (error.message || '').toLowerCase();
+      return msg.indexOf('duplicate') !== -1 || msg.indexOf('unique') !== -1;
+    }
+
+    async function saveUploadEmail(userId, companyName) {
+      var maxAttempts = 8;
+
+      for (var attempt = 0; attempt < maxAttempts; attempt++) {
+        var uploadPrefix = buildUploadEmailPrefix(companyName);
+        var settingsResult = await supabase.from('user_settings').upsert(
+          {
+            user_id: userId,
+            upload_email: uploadPrefix
+          },
+          { onConflict: 'user_id' }
+        );
+
+        if (!settingsResult.error) {
+          return uploadPrefix;
+        }
+
+        if (isUniqueViolation(settingsResult.error)) {
+          continue;
+        }
+
+        throw settingsResult.error;
+      }
+
+      throw new Error('Could not generate a unique upload email address. Please contact support.');
+    }
+
+    function showSuccess(uploadEmail) {
+      hideError();
+      form.hidden = true;
+      loginPrompt.hidden = true;
+      cardTitle.textContent = 'Account created';
+      cardSub.textContent = 'Send OEM telematics CSV exports to this email address:';
+      uploadEmailDisplay.value = uploadEmail;
+      successEl.hidden = false;
     }
 
     form.addEventListener('submit', async function(e) {
@@ -328,7 +411,8 @@
           throw profileResult.error;
         }
 
-        window.location.href = 'home.html';
+        var uploadPrefix = await saveUploadEmail(user.id, companyName);
+        showSuccess(uploadPrefix + '@' + UPLOAD_DOMAIN);
       } catch (err) {
         showError(friendlyError(err));
         submitBtn.disabled = false;

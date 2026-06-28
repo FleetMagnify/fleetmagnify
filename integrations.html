@@ -166,6 +166,42 @@
     <h1 class="page-title">Fleet Integrations</h1>
     <p class="page-sub">Connect fuel providers and telematics systems to automatically sync data into FleetMagnify.</p>
 
+    <!-- SECTION: Upload Email -->
+    <div class="section-card">
+      <div class="section-header">
+        <div>
+          <div class="section-tag">📧 Email Import</div>
+          <div class="section-title">Your Upload Email Address</div>
+          <div class="section-desc">Send CSV reports from OEM telematics platforms, fuel suppliers, and BP Fleet Card to this address. FleetMagnify imports them automatically.</div>
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="form-group">
+          <label for="upload-email-address">Upload email address</label>
+          <input type="text" id="upload-email-address" readonly placeholder="Loading...">
+        </div>
+        <button type="button" class="btn-manage" id="copy-upload-email-btn">Copy to clipboard</button>
+
+        <div class="account-subsection">
+          <div class="subsection-title">📡 OEM Telematics (VisionLink, Komtrax, ConSite etc.)</div>
+          <div class="coming-soon-msg visible">Log in to your telematics platform and set up a scheduled daily Fleet Overview CSV report. Set the delivery email to your upload address above. FleetMagnify will automatically detect and import the data each night.</div>
+          <div class="form-hint">Data flows into: telematics_records</div>
+        </div>
+
+        <div class="account-subsection">
+          <div class="subsection-title">⛽ Fuel Invoices</div>
+          <div class="coming-soon-msg visible">If your fuel supplier provides CSV invoice reports, set up a scheduled delivery to your upload address. FleetMagnify will automatically detect fuel delivery data and import it.</div>
+          <div class="form-hint">Data flows into: fuel_records</div>
+        </div>
+
+        <div class="account-subsection">
+          <div class="subsection-title">🚛 BP Fleet Card (CSV backup)</div>
+          <div class="coming-soon-msg visible">BP Fleet Card transaction reports can be emailed to your upload address as a backup to the BP API connection.</div>
+          <div class="form-hint">Data flows into: fuel_purchases</div>
+        </div>
+      </div>
+    </div>
+
     <!-- SECTION 1: Account-Level Connections -->
     <div class="section-card">
       <div class="section-header">
@@ -297,6 +333,7 @@
   var storedHasBpKey = false;
   var storedHasEroadKey = false;
   var accountTelematicsProvider = '';
+  var UPLOAD_DOMAIN = 'uploads.fleetmagnify.com';
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var ON_ROAD_TYPE_SET = { 'Light Vehicle': true, 'Rigid Truck': true, 'Semi Trailer': true };
@@ -310,9 +347,69 @@
       : currentUser.email.split('@')[0];
     document.getElementById('user-name').textContent = name;
     document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+    await loadUploadEmail();
     await loadCompanyIntegration();
     await loadAssets();
   }
+
+  async function loadUploadEmail() {
+    var input = document.getElementById('upload-email-address');
+    var result = await supabase
+      .from('user_settings')
+      .select('upload_email')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+
+    if (result.error) {
+      input.value = '';
+      input.placeholder = 'Could not load upload address';
+      showToast('Could not load upload email address', 'error');
+      return;
+    }
+
+    var prefix = result.data && result.data.upload_email;
+    if (!prefix) {
+      input.value = '';
+      input.placeholder = 'No upload address assigned yet';
+      return;
+    }
+
+    input.value = prefix + '@' + UPLOAD_DOMAIN;
+  }
+
+  function copyUploadEmail() {
+    var input = document.getElementById('upload-email-address');
+    var email = (input.value || '').trim();
+    if (!email) {
+      showToast('No upload email address to copy', 'error');
+      return;
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(email).then(function() {
+        showToast('Upload email copied to clipboard', 'success');
+      }).catch(function() {
+        fallbackCopyUploadEmail(input);
+      });
+      return;
+    }
+
+    fallbackCopyUploadEmail(input);
+  }
+
+  function fallbackCopyUploadEmail(input) {
+    input.focus();
+    input.select();
+    input.setSelectionRange(0, input.value.length);
+    try {
+      document.execCommand('copy');
+      showToast('Upload email copied to clipboard', 'success');
+    } catch (err) {
+      showToast('Could not copy to clipboard', 'error');
+    }
+  }
+
+  document.getElementById('copy-upload-email-btn').addEventListener('click', copyUploadEmail);
 
   function isOnRoadType(assetType) {
     return !!ON_ROAD_TYPE_SET[(assetType || '').trim()];
