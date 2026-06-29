@@ -252,6 +252,7 @@
 
 <script src="js/supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/upload-email.js"></script>
 <script>
   (function() {
     var loginView = document.getElementById('login-view');
@@ -364,6 +365,14 @@
 
         if (result.error) {
           throw result.error;
+        }
+
+        var user = result.data.user;
+        if (user) {
+          var companyName = (user.user_metadata && user.user_metadata.company_name)
+            ? user.user_metadata.company_name
+            : '';
+          await window.FleetMagnifyUploadEmail.ensureUploadEmail(supabase, user.id, companyName);
         }
 
         window.location.href = 'home.html';

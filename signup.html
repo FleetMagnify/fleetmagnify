@@ -238,6 +238,7 @@
 
 <script src="js/supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/upload-email.js"></script>
 <script>
   (function() {
     var errorEl = document.getElementById('form-error');
@@ -248,7 +249,6 @@
     var cardSub = document.getElementById('card-sub');
     var loginPrompt = document.getElementById('login-prompt');
     var cardTitle = document.querySelector('.signup-card h1');
-    var UPLOAD_DOMAIN = 'uploads.fleetmagnify.com';
 
     if (!window.SUPABASE_URL || window.SUPABASE_URL === 'YOUR_SUPABASE_URL') {
       showError('Supabase is not configured. Add your project URL and anon key in js/supabase-config.js.');
@@ -290,72 +290,20 @@
       return error.message || 'Something went wrong. Please try again.';
     }
 
-    function slugifyCompanyName(name) {
-      return String(name || '')
-        .toLowerCase()
-        .trim()
-        .replace(/\s+/g, '-')
-        .replace(/[^a-z0-9-]/g, '')
-        .replace(/-+/g, '-')
-        .replace(/^-+|-+$/g, '');
-    }
-
-    function randomAlphanumeric(length) {
-      var chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-      var result = '';
-      for (var i = 0; i < length; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      return result;
-    }
-
-    function buildUploadEmailPrefix(companyName) {
-      var slug = slugifyCompanyName(companyName);
-      if (!slug) slug = 'fleet';
-      return slug + '-' + randomAlphanumeric(4);
-    }
-
-    function isUniqueViolation(error) {
-      if (!error) return false;
-      if (error.code === '23505') return true;
-      var msg = (error.message || '').toLowerCase();
-      return msg.indexOf('duplicate') !== -1 || msg.indexOf('unique') !== -1;
-    }
-
-    async function saveUploadEmail(userId, companyName) {
-      var maxAttempts = 8;
-
-      for (var attempt = 0; attempt < maxAttempts; attempt++) {
-        var uploadPrefix = buildUploadEmailPrefix(companyName);
-        var settingsResult = await supabase.from('user_settings').upsert(
-          {
-            user_id: userId,
-            upload_email: uploadPrefix
-          },
-          { onConflict: 'user_id' }
-        );
-
-        if (!settingsResult.error) {
-          return uploadPrefix;
-        }
-
-        if (isUniqueViolation(settingsResult.error)) {
-          continue;
-        }
-
-        throw settingsResult.error;
-      }
-
-      throw new Error('Could not generate a unique upload email address. Please contact support.');
-    }
-
     function showSuccess(uploadEmail) {
       hideError();
       form.hidden = true;
       loginPrompt.hidden = true;
       cardTitle.textContent = 'Account created';
-      cardSub.textContent = 'Send OEM telematics CSV exports to this email address:';
-      uploadEmailDisplay.value = uploadEmail;
+      if (uploadEmail) {
+        cardSub.textContent = 'Send OEM telematics CSV exports to this email address:';
+        uploadEmailDisplay.value = uploadEmail;
+        uploadEmailDisplay.placeholder = '';
+      } else {
+        cardSub.textContent = 'Your upload email address will be assigned when you sign in.';
+        uploadEmailDisplay.value = '';
+        uploadEmailDisplay.placeholder = 'Available after first sign in';
+      }
       successEl.hidden = false;
     }
 
@@ -411,8 +359,13 @@
           throw profileResult.error;
         }
 
-        var uploadPrefix = await saveUploadEmail(user.id, companyName);
-        showSuccess(uploadPrefix + '@' + UPLOAD_DOMAIN);
+        var uploadPrefix = await window.FleetMagnifyUploadEmail.trySaveUploadEmailAfterSignup(
+          supabase,
+          user.id,
+          companyName,
+          signUpResult.data.session
+        );
+        showSuccess(window.FleetMagnifyUploadEmail.formatFullEmail(uploadPrefix));
       } catch (err) {
         showError(friendlyError(err));
         submitBtn.disabled = false;
