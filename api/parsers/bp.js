@@ -203,13 +203,71 @@ function collectCardDetails(rows) {
       cards[cardNumber] = {
         cardNumber: cardNumber,
         driverName: rows[i]['Driver Name'] ? String(rows[i]['Driver Name']).trim() : '',
+        vehicleDescription: rows[i]['Vehicle Description'] ? String(rows[i]['Vehicle Description']).trim() : '',
       };
-    } else if (!cards[cardNumber].driverName && rows[i]['Driver Name']) {
-      cards[cardNumber].driverName = String(rows[i]['Driver Name']).trim();
+    } else {
+      if (!cards[cardNumber].driverName && rows[i]['Driver Name']) {
+        cards[cardNumber].driverName = String(rows[i]['Driver Name']).trim();
+      }
+      if (!cards[cardNumber].vehicleDescription && rows[i]['Vehicle Description']) {
+        cards[cardNumber].vehicleDescription = String(rows[i]['Vehicle Description']).trim();
+      }
     }
   }
 
   return cards;
+}
+
+function detectAssetType(vehicleName) {
+  var name = String(vehicleName || '').toLowerCase();
+
+  if (name.indexOf('excavator') !== -1) {
+    return 'Excavator';
+  }
+  if (name.indexOf('loader') !== -1) {
+    return 'Wheel Loader';
+  }
+  if (name.indexOf('grader') !== -1) {
+    return 'Motor Grader';
+  }
+  if (name.indexOf('bulldozer') !== -1 || name.indexOf('dozer') !== -1) {
+    return 'Bulldozer';
+  }
+  if (name.indexOf('crane') !== -1) {
+    return 'Crane';
+  }
+  if (name.indexOf('forklift') !== -1) {
+    return 'Forklift';
+  }
+
+  var lightVehicleKeywords = [
+    'ranger', 'hilux', 'navara', 'triton', 'colorado', 'd-max', 'bt-50', 'amarok',
+    'ute', 'suv', 'car', 'sedan', 'wagon', 'van', 'transit', 'sprinter', 'hiace',
+  ];
+  for (var i = 0; i < lightVehicleKeywords.length; i++) {
+    if (name.indexOf(lightVehicleKeywords[i]) !== -1) {
+      return 'Light Vehicle';
+    }
+  }
+
+  var semiTrailerKeywords = [
+    'semi', 'kenworth', 'freightliner', 'mack', 'volvo', 'scania', 'man ', 'daf',
+    'prime mover', 'b-train', 'a-train',
+  ];
+  for (var j = 0; j < semiTrailerKeywords.length; j++) {
+    if (name.indexOf(semiTrailerKeywords[j]) !== -1) {
+      return 'Semi Trailer';
+    }
+  }
+
+  var rigidTruckKeywords = ['hino', 'isuzu', 'fuso', 'ud ', 'rigid', 'truck'];
+  for (var k = 0; k < rigidTruckKeywords.length; k++) {
+    if (name.indexOf(rigidTruckKeywords[k]) !== -1) {
+      return 'Rigid Truck';
+    }
+  }
+
+  return 'Rigid Truck';
 }
 
 async function ensureStubAssets(supabase, userId, rows) {
@@ -224,13 +282,17 @@ async function ensureStubAssets(supabase, userId, rows) {
 
     var detail = cardDetails[cardNumber];
     var assetName = detail.driverName || detail.cardNumber;
+    var typeHint = detail.driverName;
+    if (detail.vehicleDescription) {
+      typeHint = typeHint ? (typeHint + ' ' + detail.vehicleDescription) : detail.vehicleDescription;
+    }
 
     var insertResult = await supabase
       .from('assets')
       .insert({
         user_id: userId,
         asset_name: assetName,
-        asset_type: 'Rigid Truck',
+        asset_type: detectAssetType(typeHint),
         fuel_type: 'Diesel',
         bp_card_number: cardNumber,
       })

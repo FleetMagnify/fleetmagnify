@@ -264,6 +264,35 @@
     max-width: 100%;
     cursor: help;
   }
+  .incomplete-profile-banner {
+    display: none;
+    align-items: flex-start;
+    gap: 12px;
+    background: rgba(239,159,39,0.06);
+    border: 1px solid rgba(239,159,39,0.22);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+    font-size: 13px;
+    color: #9BA4B0;
+    line-height: 1.55;
+  }
+  .incomplete-profile-banner.visible { display: flex; }
+  .incomplete-profile-banner a { color: #EF9F27; font-weight: 600; text-decoration: none; }
+  .incomplete-profile-banner a:hover { text-decoration: underline; }
+  .profile-incomplete-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 100px;
+    background: rgba(239,159,39,0.12);
+    border: 1px solid rgba(239,159,39,0.28);
+    color: #EF9F27;
+    white-space: nowrap;
+  }
 </style>
 </head>
 <body>
@@ -321,6 +350,11 @@
           <button class="btn-secondary" id="excel-toggle-btn"><span>📤</span> Import Excel</button>
           <button class="btn-teal" id="add-asset-btn"><span>+</span> Add Asset</button>
         </div>
+      </div>
+
+      <div class="incomplete-profile-banner" id="incomplete-profile-banner">
+        <div style="font-size:16px; flex-shrink:0;">⚠</div>
+        <p id="incomplete-profile-banner-text"></p>
       </div>
 
       <div class="stats-row">
@@ -629,6 +663,7 @@
   var importMachineryRows = [];
   var importTrucksRows = [];
   var pendingImportPlan = null;
+  var incompleteFilterActive = false;
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var ON_ROAD_TYPE_SET = { 'Light Vehicle': true, 'Rigid Truck': true, 'Semi Trailer': true };
@@ -676,6 +711,7 @@
       latestTelByAsset = {};
       renderAssets(allAssets);
       updateStats(allAssets);
+      updateIncompleteBanner();
       return;
     }
     allAssets = data || [];
@@ -695,8 +731,61 @@
       });
     }
 
-    renderAssets(allAssets);
+    renderAssets(getFilteredAssets());
     updateStats(allAssets);
+    updateIncompleteBanner();
+  }
+
+  function isStubAsset(asset) {
+    return asset.current_value == null;
+  }
+
+  function getStubAssets() {
+    return allAssets.filter(isStubAsset);
+  }
+
+  function getFilteredAssets() {
+    var q = document.getElementById('search-input').value.toLowerCase();
+    return allAssets.filter(function(a) {
+      if (incompleteFilterActive && !isStubAsset(a)) return false;
+      if (!q) return true;
+      return (a.asset_name || '').toLowerCase().includes(q) || (a.asset_type || '').toLowerCase().includes(q) ||
+             (a.make || '').toLowerCase().includes(q) || (a.model || '').toLowerCase().includes(q);
+    });
+  }
+
+  function applyAssetFilters() {
+    renderAssets(getFilteredAssets());
+  }
+
+  function updateIncompleteBanner() {
+    var stubs = getStubAssets();
+    var banner = document.getElementById('incomplete-profile-banner');
+    var text = document.getElementById('incomplete-profile-banner-text');
+    if (stubs.length === 0) {
+      banner.classList.remove('visible');
+      incompleteFilterActive = false;
+      return;
+    }
+    var count = stubs.length;
+    var assetWord = count === 1 ? 'asset' : 'assets';
+    if (incompleteFilterActive) {
+      text.innerHTML = 'Showing ' + count + ' ' + assetWord + ' with incomplete profiles. <a href="#" id="incomplete-filter-link">Show all assets</a>';
+    } else {
+      text.innerHTML = 'You have ' + count + ' ' + assetWord + ' with incomplete profiles. Complete their details to enable full cost calculations. <a href="#" id="incomplete-filter-link">Show incomplete only</a>';
+    }
+    banner.classList.add('visible');
+    document.getElementById('incomplete-filter-link').addEventListener('click', function(e) {
+      e.preventDefault();
+      incompleteFilterActive = !incompleteFilterActive;
+      applyAssetFilters();
+      updateIncompleteBanner();
+    });
+  }
+
+  function renderIncompleteProfileBadge(asset) {
+    if (!isStubAsset(asset)) return '';
+    return '<span class="profile-incomplete-badge" title="Add current value and cost details to enable full calculations">Profile incomplete</span>';
   }
 
   function renderApproachingLifeBadge(asset) {
@@ -735,7 +824,7 @@
     tbody.innerHTML = assets.map(function(a) {
       var row = '<tr>' +
         '<td class="asset-name-cell col-name"><div class="asset-name-wrap">' +
-          '<div class="asset-name-row">' + esc(a.asset_name || '—') + renderTelematicsBadge(a.telematics_provider) + '</div>' +
+          '<div class="asset-name-row">' + esc(a.asset_name || '—') + renderIncompleteProfileBadge(a) + renderTelematicsBadge(a.telematics_provider) + '</div>' +
           renderApproachingLifeBadge(a) +
         '</div></td>' +
         '<td class="col-type"><span class="asset-type-badge">' + esc(a.asset_type || '—') + '</span></td>' +
@@ -765,13 +854,7 @@
     document.getElementById('stat-newest').textContent = assets.length > 0 ? esc(assets[0].asset_name || '—') : '—';
   }
 
-  document.getElementById('search-input').addEventListener('input', function() {
-    var q = this.value.toLowerCase();
-    renderAssets(allAssets.filter(function(a) {
-      return (a.asset_name||'').toLowerCase().includes(q) || (a.asset_type||'').toLowerCase().includes(q) ||
-             (a.make||'').toLowerCase().includes(q) || (a.model||'').toLowerCase().includes(q);
-    }));
-  });
+  document.getElementById('search-input').addEventListener('input', applyAssetFilters);
 
   var ASSET_FIELD_IDS = ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-current-value','asset-eol-value','asset-annual-repair','asset-life-km','asset-service-cost-km','asset-current-odometer','asset-estimated-annual-km','asset-life-hours','asset-service-cost','asset-available-hours','asset-target-utilisation'];
 
