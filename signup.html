@@ -348,11 +348,12 @@
         }
 
         var profileResult = await supabase.from('Profiles').insert({
-          id: user.id,
+          user_id: user.id,
           full_name: fullName,
           company_name: companyName,
           email: email,
-          fleet_size: fleetSize
+          fleet_size: fleetSize,
+          plan: 'free'
         });
 
         if (profileResult.error) {
