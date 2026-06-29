@@ -324,7 +324,7 @@
 
       if (!companyName) {
         var profileResult = await supabase
-          .from('Profiles')
+          .from('profiles')
           .select('company_name')
           .eq('user_id', user.id)
           .maybeSingle();
