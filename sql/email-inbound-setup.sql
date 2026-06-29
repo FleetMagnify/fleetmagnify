@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS email_imports (
   filename text,
   raw_csv text NOT NULL,
   status text NOT NULL DEFAULT 'pending',
+  error_message text,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -33,3 +34,13 @@ CREATE POLICY "Users can read own email imports"
   FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
+
+-- Parser status / deduplication support
+ALTER TABLE email_imports
+  ADD COLUMN IF NOT EXISTS error_message text;
+
+CREATE UNIQUE INDEX IF NOT EXISTS telematics_records_asset_date_key
+  ON telematics_records (asset_id, record_date);
+
+CREATE UNIQUE INDEX IF NOT EXISTS fuel_purchases_vehicle_date_litres_key
+  ON fuel_purchases (vehicle_id, purchase_date, litres);

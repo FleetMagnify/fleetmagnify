@@ -4,6 +4,8 @@
  */
 const Busboy = require('busboy');
 const { createClient } = require('@supabase/supabase-js');
+const { isNavmanCsv, parseNavmanReport } = require('./parsers/navman');
+const { isBpCsv, parseBpReport } = require('./parsers/bp');
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL || 'https://pddsgvuzvuwueuvpoytw.supabase.co';
@@ -173,7 +175,7 @@ module.exports = async function handler(req, res) {
         filename: attachment.filename || null,
         raw_csv: rawCsv,
         status: 'pending',
-      });
+      }).select('id').single();
 
       if (insertResult.error) {
         console.error(
@@ -182,6 +184,52 @@ module.exports = async function handler(req, res) {
           insertResult.error.message
         );
         continue;
+      }
+
+      var importId = insertResult.data.id;
+
+      if (isNavmanCsv(rawCsv)) {
+        try {
+          var parseResult = await parseNavmanReport(supabase, {
+            userId: userResult.data.user_id,
+            importId: importId,
+            rawCsv: rawCsv,
+            filename: attachment.filename || null,
+            receivedAt: receivedAt,
+          });
+          console.log(
+            'email-inbound: Navman parse complete',
+            attachment.filename,
+            parseResult.recordsUpserted + ' records,',
+            parseResult.assetsCreated + ' assets created'
+          );
+        } catch (parseErr) {
+          console.error(
+            'email-inbound: Navman parse failed',
+            attachment.filename,
+            parseErr.message
+          );
+        }
+      } else if (isBpCsv(rawCsv)) {
+        try {
+          var bpResult = await parseBpReport(supabase, {
+            userId: userResult.data.user_id,
+            importId: importId,
+            rawCsv: rawCsv,
+          });
+          console.log(
+            'email-inbound: BP parse complete',
+            attachment.filename,
+            bpResult.recordsUpserted + ' purchases,',
+            bpResult.assetsCreated + ' assets created'
+          );
+        } catch (bpErr) {
+          console.error(
+            'email-inbound: BP parse failed',
+            attachment.filename,
+            bpErr.message
+          );
+        }
       }
 
       saved.push(attachment.filename || ('attachment-' + (i + 1)));
