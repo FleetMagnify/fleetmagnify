@@ -94,7 +94,7 @@ body {
 .cards-section { padding: 60px 40px 0; max-width: 1160px; margin: 0 auto; }
 .cards-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 20px; align-items: start;
 }
 
@@ -250,6 +250,9 @@ body {
 .footer-text { font-size: 12.5px; color: var(--text-muted); }
 
 /* ── RESPONSIVE ── */
+@media (max-width: 1200px) {
+  .cards-grid { grid-template-columns: repeat(3, 1fr); }
+}
 @media (max-width: 1000px) {
   .cards-grid { grid-template-columns: repeat(2, 1fr); }
 }
@@ -298,15 +301,37 @@ body {
 <div class="cards-section">
   <div class="cards-grid">
 
+    <!-- Platform -->
+    <div class="card">
+      <div class="card-badge spacer"></div>
+      <div class="card-icon">⚙️</div>
+      <div class="card-name">Platform</div>
+      <div class="card-desc">Required for all accounts — platform access, integrations, email pipeline, and support.</div>
+      <div class="card-price">
+        <div class="price-amount"><span class="currency">$</span><span class="accent">49</span></div>
+        <div class="price-unit">platform fee / per month</div>
+      </div>
+      <hr class="card-divider">
+      <ul class="feature-list">
+        <li class="feature-item"><span class="feature-check">✓</span> Full platform access</li>
+        <li class="feature-item"><span class="feature-check">✓</span> All data integrations included</li>
+        <li class="feature-item"><span class="feature-check">✓</span> Upload email pipeline</li>
+        <li class="feature-item"><span class="feature-check">✓</span> Asset management &amp; reporting</li>
+        <li class="feature-item"><span class="feature-check">✓</span> Email &amp; support</li>
+      </ul>
+      <a href="signup.html" class="card-cta outline">Get Started →</a>
+    </div>
+
     <!-- Trucks Only -->
     <div class="card">
       <div class="card-badge spacer"></div>
       <div class="card-icon">🚛</div>
       <div class="card-name">Trucks</div>
-      <div class="card-desc">For on-road fleets running BP Fleet Card and eRoad.</div>
+      <div class="card-desc">For on-road fleets with connected fuel and mileage data sources.</div>
       <div class="card-price">
         <div class="price-amount"><span class="currency">$</span><span class="accent">8</span></div>
         <div class="price-unit">per truck / per month</div>
+        <div class="price-unit">+ $49/month platform fee</div>
       </div>
       <hr class="card-divider">
       <ul class="feature-list">
@@ -330,6 +355,7 @@ body {
       <div class="card-price">
         <div class="price-amount"><span class="currency">$</span><span class="accent">15</span></div>
         <div class="price-unit">per machine / per month</div>
+        <div class="price-unit">+ $49/month platform fee</div>
       </div>
       <hr class="card-divider">
       <ul class="feature-list">
@@ -353,6 +379,11 @@ body {
       <div class="card-price">
         <div class="price-both">
           <div class="price-row">
+            <span class="amount">$49</span>
+            <span class="per">platform fee / month</span>
+          </div>
+          <div class="price-row">
+            <span class="plus">+</span>
             <span class="amount">$8</span>
             <span class="per">/ truck / month</span>
           </div>
@@ -446,7 +477,7 @@ body {
 
   <div class="faq-item">
     <div class="faq-q">How does billing work?</div>
-    <div class="faq-a">You are billed monthly based on the number of active assets in your account. Add or remove assets at any time — billing adjusts the following month.</div>
+    <div class="faq-a">You are billed monthly based on the $49 platform fee plus the number of active trucks and machines in your account. Add or remove assets at any time — billing adjusts the following month.</div>
   </div>
   <div class="faq-item">
     <div class="faq-q">Is there a minimum commitment?</div>
@@ -454,11 +485,11 @@ body {
   </div>
   <div class="faq-item">
     <div class="faq-q">What counts as a machine vs a truck?</div>
-    <div class="faq-a">Machinery includes excavators, dump trucks, wheel loaders, motor graders, bulldozers, cranes, forklifts, water trucks, and other plant assets that use OEM telematics. Trucks covers light vehicles, rigid trucks, and semi trailers operating on public roads using eRoad and BP Fleet Card.</div>
+    <div class="faq-a">Machinery includes excavators, dump trucks, wheel loaders, motor graders, bulldozers, cranes, forklifts, water trucks, and other plant assets with OEM telematics connections. Trucks covers light vehicles, rigid trucks, and semi trailers operating on public roads with connected fuel and mileage data sources.</div>
   </div>
   <div class="faq-item">
     <div class="faq-q">Do I need to pay for integrations?</div>
-    <div class="faq-a">No. All integrations — eRoad, BP Fleet Card, VisionLink, Komtrax, ConSite, and all other OEM telematics platforms — are included in the base price. There are no per-integration fees.</div>
+    <div class="faq-a">No. All data integrations are included in the $49 platform fee — there are no per-integration charges.</div>
   </div>
   <div class="faq-item">
     <div class="faq-q">Can I start with just trucks or just machinery?</div>
@@ -489,29 +520,33 @@ body {
   function update() {
     const trucks = Math.max(0, parseInt(truckInput.value) || 0);
     const machines = Math.max(0, parseInt(machineInput.value) || 0);
+    const platformFee = 49;
     const truckCost = trucks * 8;
     const machineCost = machines * 15;
-    const total = truckCost + machineCost;
+    const hasAssets = trucks > 0 || machines > 0;
 
-    if (total === 0) {
+    if (!hasAssets) {
       resultEl.innerHTML = '<div class="result-zero">Enter your fleet size above</div>';
       return;
     }
 
+    const total = platformFee + truckCost + machineCost;
+
     let breakdownHTML = '<div class="result-breakdown">';
+    breakdownHTML += `<div class="result-line"><div class="dot teal"></div>Platform fee<span class="result-amount">${fmt(platformFee)}/mo</span></div>`;
     if (trucks > 0) {
-      breakdownHTML += `<div class="result-line"><div class="dot teal"></div>${trucks} truck${trucks !== 1 ? 's' : ''} × $8<span class="result-amount">${fmt(truckCost)}/mo</span></div>`;
+      breakdownHTML += `<div class="result-line"><div class="dot teal"></div>Trucks: ${trucks} × $8<span class="result-amount">${fmt(truckCost)}/mo</span></div>`;
     }
     if (machines > 0) {
-      breakdownHTML += `<div class="result-line"><div class="dot amber"></div>${machines} machine${machines !== 1 ? 's' : ''} × $15<span class="result-amount">${fmt(machineCost)}/mo</span></div>`;
+      breakdownHTML += `<div class="result-line"><div class="dot amber"></div>Machines: ${machines} × $15<span class="result-amount">${fmt(machineCost)}/mo</span></div>`;
     }
     breakdownHTML += '</div>';
 
     const totalHTML = `
       <div class="result-total">
-        <div class="result-total-label">Monthly total</div>
+        <div class="result-total-label">Total</div>
         <div class="result-total-amount">${fmt(total)}</div>
-        <div class="result-total-per">${fmt(total * 12)} per year</div>
+        <div class="result-total-per">${fmt(total)}/month · ${fmt(total * 12)}/year</div>
       </div>`;
 
     resultEl.innerHTML = breakdownHTML + totalHTML;
