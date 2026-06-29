@@ -196,7 +196,7 @@
 
         <div class="account-subsection">
           <div class="subsection-title">🚛 BP Fleet Card (CSV backup)</div>
-          <div class="coming-soon-msg visible">BP Fleet Card transaction reports can be emailed to your upload address as a backup to the BP API connection.</div>
+          <div class="coming-soon-msg visible">BP Fleet Card transaction reports can be emailed to your upload address as a backup to the BP Fleet Card integration.</div>
           <div class="form-hint">Data flows into: fuel_purchases</div>
         </div>
       </div>
@@ -230,8 +230,8 @@
             </div>
             <div id="bp-fields" class="provider-fields">
               <div class="form-group">
-                <label for="bp-api-key">BP API Key</label>
-                <input type="password" id="bp-api-key" placeholder="Paste your BP API key" autocomplete="off">
+                <label for="bp-api-key">BP Fleet Card Integration Key</label>
+                <input type="password" id="bp-api-key" placeholder="Paste your BP Fleet Card integration key" autocomplete="off">
                 <div class="form-hint">This is a single account-level connection covering all fuel cards on your BP account.</div>
               </div>
             </div>
@@ -251,8 +251,8 @@
             </div>
             <div id="account-eroad-fields" class="provider-fields">
               <div class="form-group">
-                <label for="account-eroad-api-key">eRoad API Key</label>
-                <input type="password" id="account-eroad-api-key" placeholder="Paste your eRoad API key" autocomplete="off">
+                <label for="account-eroad-api-key">eRoad Integration Key</label>
+                <input type="password" id="account-eroad-api-key" placeholder="Paste your eRoad integration key" autocomplete="off">
                 <div class="form-hint">Generate this in MyEROAD under Administration &gt; My Organization &gt; Partner Gateway. A Client Administrator role is required.</div>
               </div>
             </div>
@@ -302,7 +302,7 @@
       <div class="form-group" id="field-eroad-machine-id" hidden>
         <label for="modal-eroad-machine-id">eRoad Machine ID</label>
         <input type="text" id="modal-eroad-machine-id" placeholder="e.g. machine ID from MyEROAD">
-        <div class="form-hint">Find this under the vehicle's details in MyEROAD. This identifies which vehicle this asset corresponds to when querying eRoad's API.</div>
+        <div class="form-hint">Find this under the vehicle's details in MyEROAD. This identifies which vehicle this asset corresponds to when syncing eRoad data.</div>
       </div>
       <div class="form-group" id="field-bp-card" hidden>
         <label for="modal-bp-card-number">BP Fuel Card Number</label>
@@ -474,13 +474,13 @@
     document.getElementById('bp-api-key').value = '';
     document.getElementById('bp-api-key').placeholder = storedHasBpKey
       ? '••••••••  (leave blank to keep current key)'
-      : 'Paste your BP API key';
+      : 'Paste your BP Fleet Card integration key';
 
     document.getElementById('telematics-provider').value = accountTelematicsProvider;
     document.getElementById('account-eroad-api-key').value = '';
     document.getElementById('account-eroad-api-key').placeholder = storedHasEroadKey
       ? '••••••••  (leave blank to keep current key)'
-      : 'Paste your eRoad API key';
+      : 'Paste your eRoad integration key';
 
     updateFuelProviderFields();
     updateAccountTelematicsFields();
@@ -499,11 +499,11 @@
     var eroadApiKey = document.getElementById('account-eroad-api-key').value.trim();
 
     if (fuelProvider === 'BP' && !bpApiKey && !storedHasBpKey) {
-      showToast('Please enter your BP API key', 'error');
+      showToast('Please enter your BP Fleet Card integration key', 'error');
       return;
     }
     if (telProvider === 'eRoad' && !eroadApiKey && !storedHasEroadKey) {
-      showToast('Please enter your eRoad API key', 'error');
+      showToast('Please enter your eRoad integration key', 'error');
       return;
     }
 
@@ -566,11 +566,11 @@
     document.getElementById('bp-api-key').value = '';
     document.getElementById('bp-api-key').placeholder = storedHasBpKey
       ? '••••••••  (leave blank to keep current key)'
-      : 'Paste your BP API key';
+      : 'Paste your BP Fleet Card integration key';
     document.getElementById('account-eroad-api-key').value = '';
     document.getElementById('account-eroad-api-key').placeholder = storedHasEroadKey
       ? '••••••••  (leave blank to keep current key)'
-      : 'Paste your eRoad API key';
+      : 'Paste your eRoad integration key';
 
     updateAccountStatusBadges();
     renderAssetsTable();
