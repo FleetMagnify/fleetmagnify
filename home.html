@@ -194,21 +194,25 @@
         <div class="chart-card">
           <div class="chart-title">Fuel Cost by Asset (Month to Date)</div>
           <div class="chart-wrap"><canvas id="chart-fuel"></canvas></div>
+          <p class="chart-excluded" id="chart-fuel-top-note" hidden></p>
           <p class="chart-excluded" id="chart-fuel-excluded" hidden></p>
         </div>
         <div class="chart-card">
           <div class="chart-title">Idle Cost by Asset (Month to Date)</div>
           <div class="chart-wrap"><canvas id="chart-idle"></canvas></div>
+          <p class="chart-excluded" id="chart-idle-top-note" hidden></p>
           <p class="chart-excluded" id="chart-idle-excluded" hidden></p>
         </div>
         <div class="chart-card">
           <div class="chart-title">Emissions by Asset (Month to Date)</div>
           <div class="chart-wrap"><canvas id="chart-emissions"></canvas></div>
+          <p class="chart-excluded" id="chart-emissions-top-note" hidden></p>
           <p class="chart-excluded" id="chart-emissions-excluded" hidden></p>
         </div>
         <div class="chart-card">
           <div class="chart-title">Utilisation by Asset (Month to Date)</div>
           <div class="chart-wrap"><canvas id="chart-util"></canvas></div>
+          <p class="chart-excluded" id="chart-util-top-note" hidden></p>
           <p class="chart-excluded" id="chart-util-excluded" hidden></p>
         </div>
       </div>
@@ -537,17 +541,97 @@
     Object.keys(charts).forEach(function(k) { if (charts[k]) { charts[k].destroy(); charts[k] = null; } });
   }
 
-  function chartTickOptions() {
+  function chartTickOptions(labelCount) {
+    var rotate = labelCount > 6;
     return {
       color: '#CBD5E1',
       font: { size: 12 },
-      maxRotation: 45,
+      maxRotation: rotate ? 45 : 0,
+      minRotation: rotate ? 45 : 0,
       autoSkip: false,
       callback: function(value) {
         var label = this.getLabelForValue(value);
         return typeof label === 'string' ? label : String(label);
       }
     };
+  }
+
+  function renderTopChartNote(elementId, show) {
+    var el = document.getElementById(elementId);
+    if (!el) return;
+    if (!show) {
+      el.textContent = '';
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    el.textContent = 'Showing top 10 assets. View full breakdown in the module.';
+  }
+
+  function limitTopChartRows(rows, valueFn) {
+    var sorted = rows.slice().sort(function(a, b) { return valueFn(b) - valueFn(a); });
+    if (sorted.length <= 10) {
+      return { rows: sorted, rest: null, showTopNote: false };
+    }
+    return {
+      rows: sorted.slice(0, 10),
+      rest: sorted.slice(10),
+      showTopNote: true
+    };
+  }
+
+  function buildFuelChartRows(assets) {
+    var limited = limitTopChartRows(assets, function(a) { return a.fuelCost; });
+    var rows = limited.rows.slice();
+    if (limited.rest) {
+      rows.push({
+        name: 'Other',
+        fuelCost: limited.rest.reduce(function(s, a) { return s + a.fuelCost; }, 0)
+      });
+    }
+    return { rows: rows, showTopNote: limited.showTopNote };
+  }
+
+  function buildIdleChartRows(assets) {
+    var limited = limitTopChartRows(assets, function(a) { return a.idleTotal; });
+    var rows = limited.rows.slice();
+    if (limited.rest) {
+      rows.push({
+        name: 'Other',
+        idleFuelCost: limited.rest.reduce(function(s, a) { return s + (a.idleFuelCost || 0); }, 0),
+        deprCost: limited.rest.reduce(function(s, a) { return s + (a.deprCost || 0); }, 0),
+        serviceCost: limited.rest.reduce(function(s, a) { return s + (a.serviceCost || 0); }, 0),
+        maintCost: limited.rest.reduce(function(s, a) { return s + (a.maintCost || 0); }, 0)
+      });
+    }
+    return { rows: rows, showTopNote: limited.showTopNote };
+  }
+
+  function buildEmissionsChartRows(assets) {
+    var limited = limitTopChartRows(assets, function(a) { return a.emissionsKg; });
+    var rows = limited.rows.slice();
+    if (limited.rest) {
+      rows.push({
+        name: 'Other',
+        emissionsKg: limited.rest.reduce(function(s, a) { return s + a.emissionsKg; }, 0)
+      });
+    }
+    return { rows: rows, showTopNote: limited.showTopNote };
+  }
+
+  function buildUtilChartRows(assets) {
+    var limited = limitTopChartRows(assets, function(a) { return a.utilRate; });
+    var rows = limited.rows.slice();
+    if (limited.rest) {
+      var totalOp = limited.rest.reduce(function(s, a) { return s + a.opHours; }, 0);
+      var totalAvail = limited.rest.reduce(function(s, a) { return s + a.available; }, 0);
+      rows.push({
+        name: 'Other',
+        utilRate: totalAvail > 0 ? (totalOp / totalAvail) * 100 : 0,
+        target: null
+      });
+    }
+    return { rows: rows, showTopNote: limited.showTopNote };
   }
 
   function renderCharts(allAssets) {
@@ -563,20 +647,30 @@
     renderExclusionNote('chart-emissions-excluded', totalCount - emissionsAssets.length);
     renderExclusionNote('chart-util-excluded', totalCount - utilAssets.length);
 
+    var fuelChart = buildFuelChartRows(fuelAssets);
+    var idleChart = buildIdleChartRows(idleAssets);
+    var emissionsChart = buildEmissionsChartRows(emissionsAssets);
+    var utilChart = buildUtilChartRows(utilAssets);
+
+    renderTopChartNote('chart-fuel-top-note', fuelChart.showTopNote);
+    renderTopChartNote('chart-idle-top-note', idleChart.showTopNote);
+    renderTopChartNote('chart-emissions-top-note', emissionsChart.showTopNote);
+    renderTopChartNote('chart-util-top-note', utilChart.showTopNote);
+
     var gridColor = 'rgba(255,255,255,0.04)';
     var tickColor = '#CBD5E1';
 
     charts.fuel = new Chart(document.getElementById('chart-fuel'), {
       type: 'bar',
       data: {
-        labels: fuelAssets.map(function(a) { return a.name; }),
-        datasets: [{ data: fuelAssets.map(function(a) { return Math.round(a.fuelCost); }), backgroundColor: '#0EA57A', borderRadius: 4 }]
+        labels: fuelChart.rows.map(function(a) { return a.name; }),
+        datasets: [{ data: fuelChart.rows.map(function(a) { return Math.round(a.fuelCost); }), backgroundColor: '#0EA57A', borderRadius: 4 }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-          x: { grid: { display: false }, ticks: chartTickOptions() },
+          x: { grid: { display: false }, ticks: chartTickOptions(fuelChart.rows.length) },
           y: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 12 }, callback: function(v) { return '$' + v; } } }
         }
       }
@@ -585,19 +679,19 @@
     charts.idle = new Chart(document.getElementById('chart-idle'), {
       type: 'bar',
       data: {
-        labels: idleAssets.map(function(a) { return a.name; }),
+        labels: idleChart.rows.map(function(a) { return a.name; }),
         datasets: [
-          { label: 'Idle Fuel', data: idleAssets.map(function(a) { return Math.round(a.idleFuelCost); }), backgroundColor: '#0EA57A' },
-          { label: 'Depreciation', data: idleAssets.map(function(a) { return Math.round(a.deprCost); }), backgroundColor: '#EF9F27' },
-          { label: 'Servicing', data: idleAssets.map(function(a) { return Math.round(a.serviceCost); }), backgroundColor: '#E2554A' },
-          { label: 'Maintenance', data: idleAssets.map(function(a) { return Math.round(a.maintCost); }), backgroundColor: '#7C6BF0' }
+          { label: 'Idle Fuel', data: idleChart.rows.map(function(a) { return Math.round(a.idleFuelCost); }), backgroundColor: '#0EA57A' },
+          { label: 'Depreciation', data: idleChart.rows.map(function(a) { return Math.round(a.deprCost); }), backgroundColor: '#EF9F27' },
+          { label: 'Servicing', data: idleChart.rows.map(function(a) { return Math.round(a.serviceCost); }), backgroundColor: '#E2554A' },
+          { label: 'Maintenance', data: idleChart.rows.map(function(a) { return Math.round(a.maintCost); }), backgroundColor: '#7C6BF0' }
         ]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { labels: { color: '#5A6474', font: { size: 10 } } } },
         scales: {
-          x: { stacked: true, grid: { display: false }, ticks: chartTickOptions() },
+          x: { stacked: true, grid: { display: false }, ticks: chartTickOptions(idleChart.rows.length) },
           y: { stacked: true, grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 12 }, callback: function(v) { return '$' + v; } } }
         }
       }
@@ -606,15 +700,15 @@
     charts.emissions = new Chart(document.getElementById('chart-emissions'), {
       type: 'bar',
       data: {
-        labels: emissionsAssets.map(function(a) { return a.name; }),
-        datasets: [{ data: emissionsAssets.map(function(a) { return Math.round(a.emissionsKg); }), backgroundColor: '#0EA57A', borderRadius: 4 }]
+        labels: emissionsChart.rows.map(function(a) { return a.name; }),
+        datasets: [{ data: emissionsChart.rows.map(function(a) { return Math.round(a.emissionsKg); }), backgroundColor: '#0EA57A', borderRadius: 4 }]
       },
       options: {
         indexAxis: 'y', responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
           x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 12 }, callback: function(v) { return v + ' kg'; } } },
-          y: { grid: { display: false }, ticks: chartTickOptions() }
+          y: { grid: { display: false }, ticks: chartTickOptions(emissionsChart.rows.length) }
         }
       }
     });
@@ -622,10 +716,10 @@
     charts.util = new Chart(document.getElementById('chart-util'), {
       type: 'bar',
       data: {
-        labels: utilAssets.map(function(a) { return a.name; }),
+        labels: utilChart.rows.map(function(a) { return a.name; }),
         datasets: [{
-          data: utilAssets.map(function(a) { return Math.round(a.utilRate * 10) / 10; }),
-          backgroundColor: utilAssets.map(function(a) {
+          data: utilChart.rows.map(function(a) { return Math.round(a.utilRate * 10) / 10; }),
+          backgroundColor: utilChart.rows.map(function(a) {
             if (a.target == null || isNaN(a.target)) return '#0EA57A';
             return a.utilRate >= a.target ? '#0EA57A' : '#EF9F27';
           }),
@@ -637,7 +731,7 @@
         plugins: { legend: { display: false } },
         scales: {
           x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 12 }, callback: function(v) { return v + '%'; } }, max: 100 },
-          y: { grid: { display: false }, ticks: chartTickOptions() }
+          y: { grid: { display: false }, ticks: chartTickOptions(utilChart.rows.length) }
         }
       }
     });
