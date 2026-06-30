@@ -854,7 +854,24 @@
         .gte('record_date', dateFrom)
         .lte('record_date', dateTo)
         .order('record_date');
-      fuelRows = fuelResult.data || [];
+      var fuelPurchasesResult = await supabase
+        .from('fuel_purchases')
+        .select('vehicle_id, litres, cost_nzd, purchase_date')
+        .eq('vehicle_id', selectedAsset.id)
+        .eq('user_id', currentUser.id)
+        .gte('purchase_date', dateFrom)
+        .lte('purchase_date', dateTo);
+      var normalizedPurchases = (fuelPurchasesResult.data || []).map(function(r) {
+        return {
+          record_date: r.purchase_date,
+          litres: r.litres,
+          total_cost: r.cost_nzd
+        };
+      });
+      fuelRows = (fuelResult.data || []).concat(normalizedPurchases);
+      fuelRows.sort(function(a, b) {
+        return String(a.record_date).localeCompare(String(b.record_date));
+      });
     }
 
     btn.disabled = false; btn.textContent = 'Apply Filters';

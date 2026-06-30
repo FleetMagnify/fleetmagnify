@@ -478,14 +478,26 @@
 
     var fuelResult = await supabase.from('fuel_records').select('asset_id, litres, total_cost, record_date')
       .eq('user_id', currentUser.id).gte('record_date', dateFrom).lte('record_date', dateTo);
+    var fuelPurchasesResult = await supabase.from('fuel_purchases').select('vehicle_id, litres, cost_nzd, purchase_date')
+      .eq('user_id', currentUser.id).gte('purchase_date', dateFrom).lte('purchase_date', dateTo);
     var telResult = await supabase.from('telematics_records').select('asset_id, idle_hours, operating_hours, total_engine_hours, record_date')
       .eq('user_id', currentUser.id).gte('record_date', dateFrom).lte('record_date', dateTo);
     var latestTelResult = await supabase.from('telematics_records').select('asset_id, total_engine_hours, record_date')
       .eq('user_id', currentUser.id).order('record_date', { ascending: false });
 
+    var normalizedPurchases = (fuelPurchasesResult.data || []).map(function(r) {
+      return {
+        asset_id: r.vehicle_id,
+        litres: r.litres,
+        total_cost: r.cost_nzd,
+        record_date: r.purchase_date
+      };
+    });
+    var fuel = (fuelResult.data || []).concat(normalizedPurchases);
+
     return {
       assets: assets,
-      fuel: fuelResult.data || [],
+      fuel: fuel,
       tel: telResult.data || [],
       latestTel: latestTelResult.data || []
     };
