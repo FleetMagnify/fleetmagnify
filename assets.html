@@ -293,6 +293,30 @@
     color: #EF9F27;
     white-space: nowrap;
   }
+  .card-match-section { background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 22px; margin-bottom: 24px; }
+  .card-match-header { margin-bottom: 18px; }
+  .card-match-title { font-size: 14px; font-weight: 700; color: #C8D0DB; letter-spacing: -0.2px; margin-bottom: 6px; }
+  .card-match-sub { font-size: 12.5px; color: #5A6474; line-height: 1.55; }
+  .card-match-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .card-match-col { display: flex; flex-direction: column; min-width: 0; }
+  .card-match-col-title { font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #3A4A5C; margin-bottom: 12px; }
+  .card-match-search { margin-bottom: 12px; }
+  .card-match-search input { width: 100%; }
+  .card-match-list { display: flex; flex-direction: column; gap: 10px; min-height: 80px; }
+  .fuel-card-item { background: rgba(239,159,39,0.05); border: 1px solid rgba(239,159,39,0.22); border-radius: 10px; padding: 12px 14px; cursor: grab; transition: border-color 0.2s, background 0.2s, opacity 0.15s; }
+  .fuel-card-item:hover { border-color: rgba(239,159,39,0.45); background: rgba(239,159,39,0.08); }
+  .fuel-card-item.dragging { opacity: 0.45; cursor: grabbing; }
+  .fuel-card-name { font-size: 13.5px; font-weight: 700; color: #D8DFE8; margin-bottom: 3px; }
+  .fuel-card-meta { font-size: 11px; color: #5A6474; margin-bottom: 4px; }
+  .fuel-card-context { font-size: 11.5px; color: #8B94A0; }
+  .vehicle-drop-item { background: rgba(255,255,255,0.03); border: 1px solid #2D3748; border-radius: 10px; padding: 12px 14px; transition: border-color 0.2s, background 0.2s; }
+  .vehicle-drop-item.drag-over { border-color: #0EA57A; background: rgba(14,165,122,0.08); }
+  .vehicle-drop-name { font-size: 13.5px; font-weight: 600; color: #D8DFE8; margin-bottom: 6px; }
+  .vehicle-drop-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .vehicle-drop-rego { font-size: 11px; color: #5A6474; }
+  .card-match-empty { font-size: 12.5px; color: #3A4A5C; line-height: 1.6; padding: 14px 16px; background: rgba(255,255,255,0.02); border: 1px solid #2D3748; border-radius: 10px; }
+  .merge-confirm-warn { margin-top: 14px; background: rgba(239,159,39,0.08); border: 1px solid rgba(239,159,39,0.26); color: #EF9F27; font-size: 12.5px; line-height: 1.5; padding: 11px 14px; border-radius: 9px; }
+  @media (max-width: 900px) { .card-match-grid { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -424,6 +448,32 @@
           <h4>Import complete</h4>
           <p id="import-results-summary"></p>
           <ul id="import-results-skipped"></ul>
+        </div>
+      </div>
+
+      <div class="card-match-section" id="card-match-section" style="display:none;">
+        <div class="card-match-header">
+          <div class="card-match-title">Match Fuel Cards to Assets</div>
+          <div class="card-match-sub">Drag an unmatched fuel card on the left onto the matching vehicle on the right to merge its fuel history into that vehicle.</div>
+        </div>
+        <div class="card-match-empty" id="card-match-no-vehicles" style="display:none;">Complete at least one vehicle profile in the table below before matching fuel cards.</div>
+        <div class="card-match-grid" id="card-match-grid">
+          <div class="card-match-col">
+            <div class="card-match-col-title">Unmatched Fuel Cards</div>
+            <div class="search-box card-match-search">
+              <span style="color:#2E3A4A; font-size:13px;">🔍</span>
+              <input type="text" id="card-match-cards-search" placeholder="Filter cards...">
+            </div>
+            <div class="card-match-list" id="card-match-cards-list"></div>
+          </div>
+          <div class="card-match-col">
+            <div class="card-match-col-title">Your Vehicles</div>
+            <div class="search-box card-match-search">
+              <span style="color:#2E3A4A; font-size:13px;">🔍</span>
+              <input type="text" id="card-match-vehicles-search" placeholder="Filter vehicles...">
+            </div>
+            <div class="card-match-list" id="card-match-vehicles-list"></div>
+          </div>
         </div>
       </div>
 
@@ -628,6 +678,19 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="merge-confirm-modal">
+  <div class="modal confirm-modal">
+    <div class="confirm-icon">🔗</div>
+    <h2>Link Fuel Card?</h2>
+    <p class="modal-sub" id="merge-confirm-text"></p>
+    <div id="merge-confirm-warn-wrap"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="merge-confirm-cancel">Cancel</button>
+      <button class="btn-save" id="merge-confirm-proceed">Yes, Merge</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="import-confirm-modal">
   <div class="modal import-confirm-modal">
     <div class="modal-eyebrow">Bulk Import</div>
@@ -664,6 +727,11 @@
   var importTrucksRows = [];
   var pendingImportPlan = null;
   var incompleteFilterActive = false;
+  var unmatchedCards = [];
+  var realVehicles = [];
+  var fuelTotalsByAsset = {};
+  var pendingMerge = null;
+  var draggedCardId = null;
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var ON_ROAD_TYPE_SET = { 'Light Vehicle': true, 'Rigid Truck': true, 'Semi Trailer': true };
@@ -712,6 +780,7 @@
       renderAssets(allAssets);
       updateStats(allAssets);
       updateIncompleteBanner();
+      document.getElementById('card-match-section').style.display = 'none';
       return;
     }
     allAssets = data || [];
@@ -734,6 +803,296 @@
     renderAssets(getFilteredAssets());
     updateStats(allAssets);
     updateIncompleteBanner();
+    await loadCardMatching();
+  }
+
+  async function loadCardMatching() {
+    var section = document.getElementById('card-match-section');
+    unmatchedCards = allAssets.filter(function(a) {
+      return a.current_value == null && a.bp_card_number != null && String(a.bp_card_number).trim() !== '';
+    });
+    if (unmatchedCards.length === 0) {
+      section.style.display = 'none';
+      return;
+    }
+    realVehicles = allAssets.filter(function(a) { return a.current_value != null; });
+
+    fuelTotalsByAsset = {};
+    var stubIds = unmatchedCards.map(function(a) { return Number(a.id); });
+    var fpResult = await supabase
+      .from('fuel_purchases')
+      .select('vehicle_id, litres, cost_nzd')
+      .eq('user_id', currentUser.id)
+      .in('vehicle_id', stubIds);
+    if (!fpResult.error) {
+      (fpResult.data || []).forEach(function(r) {
+        var id = Number(r.vehicle_id);
+        if (!fuelTotalsByAsset[id]) fuelTotalsByAsset[id] = { litres: 0, cost: 0, count: 0 };
+        fuelTotalsByAsset[id].litres += parseFloat(r.litres) || 0;
+        fuelTotalsByAsset[id].cost += parseFloat(r.cost_nzd) || 0;
+        fuelTotalsByAsset[id].count += 1;
+      });
+    }
+
+    section.style.display = 'block';
+    renderCardMatching();
+  }
+
+  function renderCardMatching() {
+    var grid = document.getElementById('card-match-grid');
+    var noVeh = document.getElementById('card-match-no-vehicles');
+    if (realVehicles.length === 0) {
+      grid.style.display = 'none';
+      noVeh.style.display = 'block';
+      return;
+    }
+    noVeh.style.display = 'none';
+    grid.style.display = 'grid';
+    renderCardMatchCards();
+    renderCardMatchVehicles();
+  }
+
+  function renderCardMatchCards() {
+    var list = document.getElementById('card-match-cards-list');
+    if (unmatchedCards.length === 0) {
+      list.innerHTML = '<div class="card-match-empty">All fuel cards have been matched.</div>';
+      return;
+    }
+    var q = document.getElementById('card-match-cards-search').value.toLowerCase();
+    var filtered = unmatchedCards.filter(function(a) {
+      return (a.asset_name || '').toLowerCase().includes(q);
+    });
+    if (filtered.length === 0) {
+      list.innerHTML = '<div class="card-match-empty">No cards match your filter.</div>';
+      return;
+    }
+    list.innerHTML = filtered.map(function(a) {
+      var totals = fuelTotalsByAsset[Number(a.id)];
+      var context;
+      if (totals && totals.count > 0) {
+        context = Math.round(totals.litres) + 'L · ' + fmtMoney(totals.cost) + ' across ' +
+          totals.count + ' fill' + (totals.count !== 1 ? 's' : '');
+      } else {
+        context = 'No fuel records yet';
+      }
+      return '<div class="fuel-card-item" draggable="true" data-id="' + a.id + '">' +
+        '<div class="fuel-card-name">' + esc(a.asset_name || '—') + '</div>' +
+        '<div class="fuel-card-meta">Card ' + esc(a.bp_card_number || '—') + '</div>' +
+        '<div class="fuel-card-context">' + esc(context) + '</div>' +
+      '</div>';
+    }).join('');
+    list.querySelectorAll('.fuel-card-item').forEach(function(el) {
+      el.addEventListener('dragstart', onCardDragStart);
+      el.addEventListener('dragend', onCardDragEnd);
+    });
+  }
+
+  function renderCardMatchVehicles() {
+    var list = document.getElementById('card-match-vehicles-list');
+    var q = document.getElementById('card-match-vehicles-search').value.toLowerCase();
+    var filtered = realVehicles.filter(function(a) {
+      return (a.asset_name || '').toLowerCase().includes(q);
+    });
+    if (filtered.length === 0) {
+      list.innerHTML = '<div class="card-match-empty">No vehicles match your filter.</div>';
+      return;
+    }
+    list.innerHTML = filtered.map(function(a) {
+      var rego = (a.registration || '').trim();
+      return '<div class="vehicle-drop-item" data-id="' + a.id + '">' +
+        '<div class="vehicle-drop-name">' + esc(a.asset_name || '—') + '</div>' +
+        '<div class="vehicle-drop-meta">' +
+          '<span class="asset-type-badge">' + esc(a.asset_type || '—') + '</span>' +
+          (rego ? '<span class="vehicle-drop-rego">' + esc(rego) + '</span>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+    list.querySelectorAll('.vehicle-drop-item').forEach(function(el) {
+      el.addEventListener('dragover', onVehicleDragOver);
+      el.addEventListener('dragleave', onVehicleDragLeave);
+      el.addEventListener('drop', onVehicleDrop);
+    });
+  }
+
+  function onCardDragStart(e) {
+    draggedCardId = this.dataset.id;
+    this.classList.add('dragging');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', this.dataset.id); } catch (err) {}
+    }
+  }
+
+  function onCardDragEnd() {
+    this.classList.remove('dragging');
+    draggedCardId = null;
+  }
+
+  function onVehicleDragOver(e) {
+    if (draggedCardId == null) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    this.classList.add('drag-over');
+  }
+
+  function onVehicleDragLeave() {
+    this.classList.remove('drag-over');
+  }
+
+  var MERGE_TABLES = [
+    { table: 'fuel_purchases', column: 'vehicle_id', singular: 'fuel record', plural: 'fuel records' },
+    { table: 'telematics_records', column: 'asset_id', singular: 'telematics record', plural: 'telematics records' },
+    { table: 'eroad_mileage', column: 'vehicle_id', singular: 'mileage record', plural: 'mileage records' },
+    { table: 'fuel_records', column: 'asset_id', singular: 'manual fuel record', plural: 'manual fuel records' }
+  ];
+
+  function joinWithAnd(parts) {
+    if (parts.length === 0) return '';
+    if (parts.length === 1) return parts[0];
+    return parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
+  }
+
+  function lastFour(card) {
+    var s = String(card || '').trim();
+    return s.length > 4 ? s.slice(-4) : s;
+  }
+
+  function describeCount(cfg, count) {
+    return count + ' ' + (count === 1 ? cfg.singular : cfg.plural);
+  }
+
+  async function getStubRecordCounts(stubId) {
+    var counts = [];
+    for (var i = 0; i < MERGE_TABLES.length; i++) {
+      var cfg = MERGE_TABLES[i];
+      var res = await supabase
+        .from(cfg.table)
+        .select('*', { count: 'exact', head: true })
+        .eq(cfg.column, Number(stubId))
+        .eq('user_id', currentUser.id);
+      counts.push({ cfg: cfg, count: res.error ? 0 : (res.count || 0) });
+    }
+    return counts;
+  }
+
+  function onVehicleDrop(e) {
+    e.preventDefault();
+    this.classList.remove('drag-over');
+    var targetId = this.dataset.id;
+    var cardId = draggedCardId;
+    if (cardId == null && e.dataTransfer) cardId = e.dataTransfer.getData('text/plain');
+    if (cardId == null || cardId === '') return;
+    var stub = unmatchedCards.find(function(a) { return String(a.id) === String(cardId); });
+    var target = realVehicles.find(function(a) { return String(a.id) === String(targetId); });
+    if (!stub || !target) return;
+    openMergeConfirm(stub, target);
+  }
+
+  async function openMergeConfirm(stub, target) {
+    pendingMerge = { stub: stub, target: target, counts: null };
+    var counts = await getStubRecordCounts(stub.id);
+    if (!pendingMerge || pendingMerge.stub !== stub) return;
+    pendingMerge.counts = counts;
+
+    var nonZero = counts.filter(function(c) { return c.count > 0; });
+    var moveText = nonZero.length
+      ? 'This will move ' + joinWithAnd(nonZero.map(function(c) { return describeCount(c.cfg, c.count); }))
+      : 'This will not move any records';
+    document.getElementById('merge-confirm-text').innerHTML =
+      'Link <strong>' + esc(stub.asset_name || '—') + '</strong> to <strong>' + esc(target.asset_name || '—') + '</strong>? ' +
+      moveText + ' and cannot be undone.';
+
+    var warnWrap = document.getElementById('merge-confirm-warn-wrap');
+    var stubHasCard = stub.bp_card_number != null && String(stub.bp_card_number).trim() !== '';
+    var targetHasCard = target.bp_card_number != null && String(target.bp_card_number).trim() !== '';
+    if (targetHasCard && stubHasCard) {
+      warnWrap.innerHTML = '<div class="merge-confirm-warn">⚠ This vehicle already has a fuel card linked (ending ' +
+        esc(lastFour(target.bp_card_number)) + '). Merging will replace it with card ending ' +
+        esc(lastFour(stub.bp_card_number)) + '.</div>';
+    } else {
+      warnWrap.innerHTML = '';
+    }
+    document.getElementById('merge-confirm-modal').classList.add('open');
+  }
+
+  function closeMergeConfirm() {
+    document.getElementById('merge-confirm-modal').classList.remove('open');
+    pendingMerge = null;
+  }
+
+  async function executeMerge() {
+    if (!pendingMerge || !pendingMerge.counts) return;
+    var stub = pendingMerge.stub;
+    var target = pendingMerge.target;
+    var counts = pendingMerge.counts;
+    var btn = document.getElementById('merge-confirm-proceed');
+
+    btn.disabled = true;
+    btn.textContent = 'Merging...';
+
+    var movedParts = [];
+    var errors = [];
+    for (var i = 0; i < counts.length; i++) {
+      var entry = counts[i];
+      if (entry.count <= 0) continue;
+      var ref = {};
+      ref[entry.cfg.column] = Number(target.id);
+      var moveResult = await supabase
+        .from(entry.cfg.table)
+        .update(ref)
+        .eq(entry.cfg.column, Number(stub.id))
+        .eq('user_id', currentUser.id);
+      if (moveResult.error) {
+        errors.push(entry.cfg.plural + ' (' + moveResult.error.message + ')');
+      } else {
+        movedParts.push(describeCount(entry.cfg, entry.count));
+      }
+    }
+
+    if (errors.length) {
+      btn.disabled = false;
+      btn.textContent = 'Yes, Merge';
+      closeMergeConfirm();
+      showToast('Failed to move ' + joinWithAnd(errors) + '. No records were removed.', 'error');
+      loadAssets();
+      return;
+    }
+
+    var deleteResult = await supabase
+      .from('assets')
+      .delete()
+      .eq('id', Number(stub.id))
+      .eq('user_id', currentUser.id);
+    if (deleteResult.error) {
+      btn.disabled = false;
+      btn.textContent = 'Yes, Merge';
+      closeMergeConfirm();
+      showToast('Records moved, but failed to remove the stub asset: ' + deleteResult.error.message, 'error');
+      loadAssets();
+      return;
+    }
+
+    var updateResult = await supabase
+      .from('assets')
+      .update({ bp_card_number: stub.bp_card_number })
+      .eq('id', Number(target.id))
+      .eq('user_id', currentUser.id);
+
+    btn.disabled = false;
+    btn.textContent = 'Yes, Merge';
+    closeMergeConfirm();
+
+    var cardEl = document.querySelector('.fuel-card-item[data-id="' + stub.id + '"]');
+    if (cardEl && cardEl.parentNode) cardEl.parentNode.removeChild(cardEl);
+
+    var summary = movedParts.length ? joinWithAnd(movedParts) + ' moved' : 'no records to move';
+    if (updateResult.error) {
+      showToast('Merged (' + summary + '), but failed to update the vehicle\'s card number: ' +
+        updateResult.error.message, 'error');
+    } else {
+      showToast('Merged successfully — ' + summary + '.', 'success');
+    }
+    loadAssets();
   }
 
   function isStubAsset(asset) {
@@ -855,6 +1214,13 @@
   }
 
   document.getElementById('search-input').addEventListener('input', applyAssetFilters);
+  document.getElementById('card-match-cards-search').addEventListener('input', renderCardMatchCards);
+  document.getElementById('card-match-vehicles-search').addEventListener('input', renderCardMatchVehicles);
+  document.getElementById('merge-confirm-cancel').addEventListener('click', closeMergeConfirm);
+  document.getElementById('merge-confirm-proceed').addEventListener('click', executeMerge);
+  document.getElementById('merge-confirm-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeMergeConfirm();
+  });
 
   var ASSET_FIELD_IDS = ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-current-value','asset-eol-value','asset-annual-repair','asset-life-km','asset-service-cost-km','asset-current-odometer','asset-estimated-annual-km','asset-life-hours','asset-service-cost','asset-available-hours','asset-target-utilisation'];
 
@@ -1883,6 +2249,10 @@
     clearTimeout(toastTimer);
     setTimeout(function() { toast.classList.add('show'); }, 10);
     toastTimer = setTimeout(function() { toast.classList.remove('show'); }, 3500);
+  }
+
+  function fmtMoney(n) {
+    return '$' + (Math.round(Number(n)) || 0).toLocaleString();
   }
 
   function esc(str) {
