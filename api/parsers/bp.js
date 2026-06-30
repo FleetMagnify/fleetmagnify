@@ -334,7 +334,19 @@ async function ensureStubAssets(supabase, userId, rows) {
   var created = 0;
 
   for (var cardNumber in cardDetails) {
-    if (cardMap[cardNumber]) {
+    var existingByCardResult = await supabase
+      .from('assets')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('bp_card_number', cardNumber)
+      .maybeSingle();
+
+    if (existingByCardResult.error) {
+      throw new Error('Failed to look up asset for card ' + cardNumber + ': ' + existingByCardResult.error.message);
+    }
+
+    if (existingByCardResult.data) {
+      cardMap[cardNumber] = existingByCardResult.data.id;
       continue;
     }
 
