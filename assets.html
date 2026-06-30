@@ -971,8 +971,7 @@
       var res = await supabase
         .from(cfg.table)
         .select('*', { count: 'exact', head: true })
-        .eq(cfg.column, Number(stubId))
-        .eq('user_id', currentUser.id);
+        .eq(cfg.column, Number(stubId));
       counts.push({ cfg: cfg, count: res.error ? 0 : (res.count || 0) });
     }
     return counts;
@@ -1043,8 +1042,7 @@
       var moveResult = await supabase
         .from(entry.cfg.table)
         .update(ref)
-        .eq(entry.cfg.column, Number(stub.id))
-        .eq('user_id', currentUser.id);
+        .eq(entry.cfg.column, Number(stub.id));
       if (moveResult.error) {
         errors.push(entry.cfg.plural + ' (' + moveResult.error.message + ')');
       } else {
