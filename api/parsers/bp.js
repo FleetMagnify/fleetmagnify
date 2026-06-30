@@ -172,7 +172,7 @@ async function updateImportStatus(supabase, importId, status, errorMessage) {
 async function loadCardMap(supabase, userId) {
   var result = await supabase
     .from('assets')
-    .select('id, bp_card_number')
+    .select('id, bp_card_number, asset_name')
     .eq('user_id', userId);
 
   if (result.error) {
@@ -180,14 +180,68 @@ async function loadCardMap(supabase, userId) {
   }
 
   var map = {};
+  var nameMap = {};
   (result.data || []).forEach(function(asset) {
     var card = normalizeCardNumber(asset.bp_card_number);
     if (card) {
       map[card] = asset.id;
     }
+    var name = String(asset.asset_name || '').trim();
+    if (name) {
+      nameMap[name.toLowerCase()] = asset.id;
+    }
   });
 
-  return map;
+  return { cardMap: map, nameMap: nameMap };
+}
+
+function trimBpField(row, column) {
+  var value = row[column];
+  if (value == null || value === '') {
+    return '';
+  }
+  return String(value).trim();
+}
+
+function resolveBpAssetName(row, cardNumber) {
+  var vehicleDescription = trimBpField(row, 'Vehicle Description');
+  if (vehicleDescription) {
+    return vehicleDescription;
+  }
+  var registration = trimBpField(row, 'Vehicle Registration Number');
+  if (registration) {
+    return registration;
+  }
+  var driverName = trimBpField(row, 'Driver Name');
+  if (driverName) {
+    return driverName;
+  }
+  return normalizeCardNumber(cardNumber);
+}
+
+function resolveBpTypeHint(row) {
+  var vehicleDescription = trimBpField(row, 'Vehicle Description');
+  if (vehicleDescription) {
+    return vehicleDescription;
+  }
+  var registration = trimBpField(row, 'Vehicle Registration Number');
+  if (registration) {
+    return registration;
+  }
+  return trimBpField(row, 'Driver Name');
+}
+
+function bpNameResolutionRank(row) {
+  if (trimBpField(row, 'Vehicle Description')) {
+    return 4;
+  }
+  if (trimBpField(row, 'Vehicle Registration Number')) {
+    return 3;
+  }
+  if (trimBpField(row, 'Driver Name')) {
+    return 2;
+  }
+  return 1;
 }
 
 function collectCardDetails(rows) {
@@ -199,19 +253,21 @@ function collectCardDetails(rows) {
       continue;
     }
 
+    var rank = bpNameResolutionRank(rows[i]);
+    var assetName = resolveBpAssetName(rows[i], cardNumber);
+    var typeHint = resolveBpTypeHint(rows[i]) || assetName;
+
     if (!cards[cardNumber]) {
       cards[cardNumber] = {
         cardNumber: cardNumber,
-        driverName: rows[i]['Driver Name'] ? String(rows[i]['Driver Name']).trim() : '',
-        vehicleDescription: rows[i]['Vehicle Description'] ? String(rows[i]['Vehicle Description']).trim() : '',
+        assetName: assetName,
+        typeHint: typeHint,
+        rank: rank,
       };
-    } else {
-      if (!cards[cardNumber].driverName && rows[i]['Driver Name']) {
-        cards[cardNumber].driverName = String(rows[i]['Driver Name']).trim();
-      }
-      if (!cards[cardNumber].vehicleDescription && rows[i]['Vehicle Description']) {
-        cards[cardNumber].vehicleDescription = String(rows[i]['Vehicle Description']).trim();
-      }
+    } else if (rank > cards[cardNumber].rank) {
+      cards[cardNumber].assetName = assetName;
+      cards[cardNumber].typeHint = typeHint;
+      cards[cardNumber].rank = rank;
     }
   }
 
@@ -271,7 +327,9 @@ function detectAssetType(vehicleName) {
 }
 
 async function ensureStubAssets(supabase, userId, rows) {
-  var cardMap = await loadCardMap(supabase, userId);
+  var maps = await loadCardMap(supabase, userId);
+  var cardMap = maps.cardMap;
+  var nameMap = maps.nameMap;
   var cardDetails = collectCardDetails(rows);
   var created = 0;
 
@@ -281,10 +339,11 @@ async function ensureStubAssets(supabase, userId, rows) {
     }
 
     var detail = cardDetails[cardNumber];
-    var assetName = detail.driverName || detail.cardNumber;
-    var typeHint = detail.driverName;
-    if (detail.vehicleDescription) {
-      typeHint = typeHint ? (typeHint + ' ' + detail.vehicleDescription) : detail.vehicleDescription;
+    var assetName = detail.assetName;
+    var existingId = nameMap[assetName.toLowerCase()];
+    if (existingId) {
+      cardMap[cardNumber] = existingId;
+      continue;
     }
 
     var insertResult = await supabase
@@ -292,7 +351,7 @@ async function ensureStubAssets(supabase, userId, rows) {
       .insert({
         user_id: userId,
         asset_name: assetName,
-        asset_type: detectAssetType(typeHint),
+        asset_type: detectAssetType(detail.typeHint),
         fuel_type: 'Diesel',
         bp_card_number: cardNumber,
       })
@@ -304,13 +363,14 @@ async function ensureStubAssets(supabase, userId, rows) {
     }
 
     cardMap[normalizeCardNumber(insertResult.data.bp_card_number)] = insertResult.data.id;
+    nameMap[assetName.toLowerCase()] = insertResult.data.id;
     created++;
   }
 
-  return { cardMap: cardMap, assetsCreated: created };
+  return { cardMap: cardMap, nameMap: nameMap, assetsCreated: created };
 }
 
-function buildFuelPurchases(userId, cardMap, rows) {
+function buildFuelPurchases(userId, cardMap, nameMap, rows) {
   var records = [];
   var skipped = 0;
 
@@ -324,6 +384,12 @@ function buildFuelPurchases(userId, cardMap, rows) {
     }
 
     var vehicleId = cardMap[cardNumber];
+    if (!vehicleId) {
+      var resolvedName = resolveBpAssetName(row, cardNumber);
+      if (resolvedName) {
+        vehicleId = nameMap[resolvedName.toLowerCase()];
+      }
+    }
     if (!vehicleId) {
       console.warn('bp: no asset match for card number', cardNumber);
       skipped++;
@@ -364,7 +430,7 @@ async function parseBpReport(supabase, options) {
     }
 
     var assetResult = await ensureStubAssets(supabase, userId, rows);
-    var purchases = buildFuelPurchases(userId, assetResult.cardMap, rows);
+    var purchases = buildFuelPurchases(userId, assetResult.cardMap, assetResult.nameMap, rows);
 
     if (purchases.records.length === 0) {
       throw new Error('No valid BP fuel purchase rows to import');
