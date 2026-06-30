@@ -425,9 +425,30 @@
       .lte('reading_date', bufferTo)
       .order('reading_date');
 
+    var telOdoResult = await supabase
+      .from('telematics_records')
+      .select('asset_id, record_date, odometer_km')
+      .eq('asset_id', Number(vehicleId))
+      .eq('user_id', currentUser.id)
+      .gte('record_date', bufferFrom)
+      .lte('record_date', bufferTo)
+      .not('odometer_km', 'is', null)
+      .order('record_date');
+
+    var normalizedTel = (telOdoResult.data || []).map(function(r) {
+      return {
+        reading_date: r.record_date,
+        odometer_km: r.odometer_km
+      };
+    });
+    var mileage = (mileageResult.data || []).concat(normalizedTel);
+    mileage.sort(function(a, b) {
+      return String(a.reading_date).localeCompare(String(b.reading_date));
+    });
+
     return {
       fuel: fuelResult.data || [],
-      mileage: mileageResult.data || [],
+      mileage: mileage,
       fuelError: fuelResult.error,
       mileageError: mileageResult.error
     };
