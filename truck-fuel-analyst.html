@@ -231,12 +231,13 @@
                 <th>Litres Used</th>
                 <th>KM Driven</th>
                 <th>Total Cost</th>
+                <th>Idle Fuel Cost</th>
                 <th>Cost Per KM</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody id="periods-tbody">
-              <tr><td colspan="7" style="text-align:center;padding:24px;color:#3A4A5C;">Select a vehicle and apply filters.</td></tr>
+              <tr><td colspan="8" style="text-align:center;padding:24px;color:#3A4A5C;">Select a vehicle and apply filters.</td></tr>
             </tbody>
           </table>
         </div>
@@ -272,6 +273,9 @@
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var BENCHMARK = 0.155;
   var DATE_BUFFER_DAYS = 21;
+  var DEFAULT_IDLE_RATES = {
+    'Light Vehicle': 1.2, 'Rigid Truck': 2.5, 'Truck and Trailer / B-Train': 3.0
+  };
 
   function fmtDate(d) {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -310,7 +314,7 @@
     return best;
   }
 
-  function computePeriods(fuelRows, mileageRows) {
+  function computePeriods(fuelRows, mileageRows, idleRows, idleBurnRateLph) {
     if (fuelRows.length < 2) {
       return { periods: [], error: 'insufficient_fuel' };
     }
@@ -318,6 +322,7 @@
       return { periods: [], error: 'no_mileage' };
     }
 
+    var safeIdleRows = idleRows || [];
     var periods = [];
     for (var i = 1; i < fuelRows.length; i++) {
       var first = fuelRows[i - 1];
@@ -331,9 +336,21 @@
       }
       if (km <= 0) continue;
 
+      var idleHours = 0;
+      for (var k = 0; k < safeIdleRows.length; k++) {
+        var ir = safeIdleRows[k];
+        if (ir.record_date > first.purchase_date && ir.record_date <= second.purchase_date) {
+          idleHours += parseFloat(ir.idle_hours) || 0;
+        }
+      }
+
       var totalCost = parseFloat(second.cost_nzd) || 0;
       var litres = parseFloat(second.litres) || 0;
-      var costPerKm = totalCost / km;
+      var pricePerLitre = litres > 0 ? totalCost / litres : 0;
+      var idleLitres = idleHours * (idleBurnRateLph || 0);
+      var idleFuelCost = idleLitres * pricePerLitre;
+      var travelCost = Math.max(0, totalCost - idleFuelCost);
+      var costPerKm = travelCost / km;
 
       periods.push({
         periodStart: first.purchase_date,
@@ -341,6 +358,8 @@
         litresUsed: litres,
         kmDriven: km,
         totalCost: totalCost,
+        idleHours: idleHours,
+        idleFuelCost: idleFuelCost,
         costPerKm: costPerKm,
         anomaly: costPerKm > BENCHMARK
       });
@@ -448,11 +467,22 @@
       return String(a.reading_date).localeCompare(String(b.reading_date));
     });
 
+    var idleResult = await supabase
+      .from('telematics_records')
+      .select('record_date, idle_hours')
+      .eq('asset_id', Number(vehicleId))
+      .eq('user_id', currentUser.id)
+      .gte('record_date', bufferFrom)
+      .lte('record_date', bufferTo)
+      .order('record_date');
+
     return {
       fuel: fuelResult.data || [],
       mileage: mileage,
+      idle: idleResult.data || [],
       fuelError: fuelResult.error,
-      mileageError: mileageResult.error
+      mileageError: mileageResult.error,
+      idleError: idleResult.error
     };
   }
 
@@ -475,7 +505,8 @@
       return;
     }
 
-    var computed = computePeriods(data.fuel, data.mileage);
+    var computed = computePeriods(data.fuel, data.mileage, data.idle,
+      selectedVehicle.idle_burn_rate_lph || DEFAULT_IDLE_RATES[selectedVehicle.asset_type] || 3.0);
     if (computed.error === 'insufficient_fuel' || computed.error === 'no_mileage' || computed.error === 'no_periods') {
       showEmpty();
       return;
@@ -601,6 +632,7 @@
         '<td>' + p.litresUsed.toFixed(1) + ' L</td>' +
         '<td>' + p.kmDriven.toFixed(1) + ' km</td>' +
         '<td>' + fmtMoney(p.totalCost) + '</td>' +
+        '<td class="cell-amber">' + fmtMoney(p.idleFuelCost) + '</td>' +
         '<td class="' + (p.anomaly ? 'cell-amber' : 'cell-teal') + '">' + fmtMoney(p.costPerKm) + '</td>' +
         '<td><span class="status-badge ' + (p.anomaly ? 'anomaly' : 'normal') + '">' +
           (p.anomaly ? 'Above Benchmark' : 'Normal') + '</span></td>' +
@@ -621,7 +653,8 @@
       var wideTo = fmtDate(new Date());
       var data = await fetchVehicleData(v.id, wideFrom, wideTo);
       if (data.fuel.length < 2 || !data.mileage.length) continue;
-      var computed = computePeriods(data.fuel, data.mileage);
+      var computed = computePeriods(data.fuel, data.mileage, data.idle,
+        v.idle_burn_rate_lph || DEFAULT_IDLE_RATES[v.asset_type] || 3.0);
       if (!computed.periods.length) continue;
       var latest = computed.periods[computed.periods.length - 1];
       fleetData.push({ name: v.asset_name, costPerKm: latest.costPerKm, anomaly: latest.anomaly });
