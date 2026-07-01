@@ -309,12 +309,23 @@
   .fuel-card-name { font-size: 13.5px; font-weight: 700; color: #D8DFE8; margin-bottom: 3px; }
   .fuel-card-meta { font-size: 11px; color: #5A6474; margin-bottom: 4px; }
   .fuel-card-context { font-size: 11.5px; color: #8B94A0; }
-  .vehicle-drop-item { background: rgba(255,255,255,0.03); border: 1px solid #2D3748; border-radius: 10px; padding: 12px 14px; transition: border-color 0.2s, background 0.2s; }
+  .vehicle-drop-item { background: rgba(255,255,255,0.03); border: 1px solid #2D3748; border-radius: 10px; padding: 12px 14px; transition: border-color 0.2s, background 0.2s, opacity 0.15s; }
+  .vehicle-drop-item[draggable="true"] { cursor: grab; }
+  .vehicle-drop-item.dragging { opacity: 0.45; cursor: grabbing; }
   .vehicle-drop-item.drag-over { border-color: #0EA57A; background: rgba(14,165,122,0.08); }
   .vehicle-drop-name { font-size: 13.5px; font-weight: 600; color: #D8DFE8; margin-bottom: 6px; }
   .vehicle-drop-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .vehicle-drop-rego { font-size: 11px; color: #5A6474; }
   .card-match-empty { font-size: 12.5px; color: #3A4A5C; line-height: 1.6; padding: 14px 16px; background: rgba(255,255,255,0.02); border: 1px solid #2D3748; border-radius: 10px; }
+  .card-discard-zone { margin-top: 18px; border: 1.5px dashed #3A4A5C; border-radius: 12px; padding: 20px; text-align: center; transition: all 0.2s; }
+  .card-discard-zone.drag-over { border-color: #E24B4A; background: rgba(226,75,74,0.08); }
+  .card-discard-label { font-size: 13px; color: #6B7785; font-weight: 500; }
+  .card-match-ignored-toggle { margin-top: 14px; }
+  .card-ignored-btn { background: none; border: 1px solid #2D3748; color: #6B7785; font-size: 12px; padding: 6px 12px; border-radius: 7px; cursor: pointer; font-family: inherit; }
+  .card-ignored-btn:hover { color: #C8D0DB; border-color: rgba(255,255,255,0.2); }
+  .card-ignored-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .card-ignored-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(255,255,255,0.02); border: 1px solid #2D3748; border-radius: 8px; font-size: 12.5px; color: #9BA4B0; }
+  .card-ignored-restore { background: none; border: 1px solid #2D3748; color: #0EA57A; font-size: 11px; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-family: inherit; }
   .merge-confirm-warn { margin-top: 14px; background: rgba(239,159,39,0.08); border: 1px solid rgba(239,159,39,0.26); color: #EF9F27; font-size: 12.5px; line-height: 1.5; padding: 11px 14px; border-radius: 9px; }
   @media (max-width: 900px) { .card-match-grid { grid-template-columns: 1fr; } }
 </style>
@@ -474,6 +485,13 @@
             </div>
             <div class="card-match-list" id="card-match-vehicles-list"></div>
           </div>
+        </div>
+        <div class="card-discard-zone" id="card-discard-zone">
+          <div class="card-discard-label">🗑 Not a Fleet Asset — drag a card or vehicle here to stop tracking &amp; billing it</div>
+        </div>
+        <div class="card-match-ignored-toggle">
+          <button type="button" id="show-ignored-btn" class="card-ignored-btn">Show ignored assets</button>
+          <div class="card-ignored-list" id="card-ignored-list" style="display:none;"></div>
         </div>
       </div>
 
@@ -732,6 +750,8 @@
   var fuelTotalsByAsset = {};
   var pendingMerge = null;
   var draggedCardId = null;
+  var draggedDiscardId = null;
+  var ignoredListVisible = false;
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var ON_ROAD_TYPE_SET = { 'Light Vehicle': true, 'Rigid Truck': true, 'Semi Trailer': true };
@@ -772,7 +792,7 @@
     var colCount = getTableColCount();
     var tbody = document.getElementById('assets-tbody');
     tbody.innerHTML = '<tr class="loading-row"><td colspan="' + colCount + '">Loading assets...</td></tr>';
-    var { data, error } = await supabase.from('assets').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
+    var { data, error } = await supabase.from('assets').select('*').eq('user_id', currentUser.id).eq('is_ignored', false).order('created_at', { ascending: false });
     if (error) {
       showToast('Failed to load assets', 'error');
       allAssets = [];
@@ -839,6 +859,68 @@
 
     section.style.display = 'block';
     renderCardMatching();
+    await refreshIgnoredAssetsUi();
+  }
+
+  async function refreshIgnoredAssetsUi() {
+    var result = await supabase
+      .from('assets')
+      .select('id, asset_name, bp_card_number')
+      .eq('user_id', currentUser.id)
+      .eq('is_ignored', true)
+      .order('asset_name');
+    var ignored = result.data || [];
+    var btn = document.getElementById('show-ignored-btn');
+    if (btn) {
+      btn.textContent = ignored.length
+        ? 'Show ignored assets (' + ignored.length + ')'
+        : 'Show ignored assets';
+    }
+    if (ignoredListVisible) {
+      renderIgnoredList(ignored);
+    }
+    return ignored;
+  }
+
+  function renderIgnoredList(ignored) {
+    var list = document.getElementById('card-ignored-list');
+    if (!list) return;
+    if (!ignored.length) {
+      list.innerHTML = '<div class="card-match-empty">No ignored assets.</div>';
+      return;
+    }
+    list.innerHTML = ignored.map(function(a) {
+      return '<div class="card-ignored-item">' +
+        '<span>' + esc(a.asset_name || '—') + '</span>' +
+        '<button type="button" class="card-ignored-restore" data-id="' + a.id + '">Restore</button>' +
+      '</div>';
+    }).join('');
+    list.querySelectorAll('.card-ignored-restore').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        restoreIgnoredAsset(btn.dataset.id);
+      });
+    });
+  }
+
+  async function restoreIgnoredAsset(id) {
+    var result = await supabase
+      .from('assets')
+      .update({ is_ignored: false })
+      .eq('id', Number(id))
+      .eq('user_id', currentUser.id);
+    if (result.error) {
+      showToast('Failed to restore asset: ' + result.error.message, 'error');
+      return;
+    }
+    showToast('Asset restored', 'success');
+    await loadAssets();
+    if (ignoredListVisible) {
+      var ignored = await refreshIgnoredAssetsUi();
+      if (!ignored.length) {
+        document.getElementById('card-ignored-list').style.display = 'none';
+        ignoredListVisible = false;
+      }
+    }
   }
 
   function renderCardMatching() {
@@ -902,7 +984,7 @@
     }
     list.innerHTML = filtered.map(function(a) {
       var rego = (a.registration || '').trim();
-      return '<div class="vehicle-drop-item" data-id="' + a.id + '">' +
+      return '<div class="vehicle-drop-item" draggable="true" data-id="' + a.id + '">' +
         '<div class="vehicle-drop-name">' + esc(a.asset_name || '—') + '</div>' +
         '<div class="vehicle-drop-meta">' +
           '<span class="asset-type-badge">' + esc(a.asset_type || '—') + '</span>' +
@@ -911,14 +993,31 @@
       '</div>';
     }).join('');
     list.querySelectorAll('.vehicle-drop-item').forEach(function(el) {
+      el.addEventListener('dragstart', onDiscardItemDragStart);
+      el.addEventListener('dragend', onDiscardItemDragEnd);
       el.addEventListener('dragover', onVehicleDragOver);
       el.addEventListener('dragleave', onVehicleDragLeave);
       el.addEventListener('drop', onVehicleDrop);
     });
   }
 
+  function onDiscardItemDragStart(e) {
+    draggedDiscardId = this.dataset.id;
+    this.classList.add('dragging');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', this.dataset.id); } catch (err) {}
+    }
+  }
+
+  function onDiscardItemDragEnd() {
+    this.classList.remove('dragging');
+    draggedDiscardId = null;
+  }
+
   function onCardDragStart(e) {
     draggedCardId = this.dataset.id;
+    draggedDiscardId = this.dataset.id;
     this.classList.add('dragging');
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = 'move';
@@ -929,6 +1028,44 @@
   function onCardDragEnd() {
     this.classList.remove('dragging');
     draggedCardId = null;
+    draggedDiscardId = null;
+  }
+
+  function onDiscardZoneDragOver(e) {
+    if (draggedDiscardId == null) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    this.classList.add('drag-over');
+  }
+
+  function onDiscardZoneDragLeave() {
+    this.classList.remove('drag-over');
+  }
+
+  async function onDiscardZoneDrop(e) {
+    e.preventDefault();
+    this.classList.remove('drag-over');
+    var id = draggedDiscardId;
+    if (id == null && e.dataTransfer) id = e.dataTransfer.getData('text/plain');
+    if (id == null || id === '') return;
+
+    var result = await supabase
+      .from('assets')
+      .update({ is_ignored: true })
+      .eq('id', Number(id))
+      .eq('user_id', currentUser.id);
+
+    draggedDiscardId = null;
+    draggedCardId = null;
+
+    if (result.error) {
+      showToast('Failed to discard asset: ' + result.error.message, 'error');
+      return;
+    }
+    showToast('Asset marked as not tracked', 'success');
+    ignoredListVisible = false;
+    document.getElementById('card-ignored-list').style.display = 'none';
+    await loadAssets();
   }
 
   function onVehicleDragOver(e) {
@@ -1217,6 +1354,31 @@
   document.getElementById('search-input').addEventListener('input', applyAssetFilters);
   document.getElementById('card-match-cards-search').addEventListener('input', renderCardMatchCards);
   document.getElementById('card-match-vehicles-search').addEventListener('input', renderCardMatchVehicles);
+  var discardZone = document.getElementById('card-discard-zone');
+  discardZone.addEventListener('dragover', onDiscardZoneDragOver);
+  discardZone.addEventListener('dragleave', onDiscardZoneDragLeave);
+  discardZone.addEventListener('drop', onDiscardZoneDrop);
+  document.getElementById('show-ignored-btn').addEventListener('click', async function() {
+    ignoredListVisible = !ignoredListVisible;
+    var list = document.getElementById('card-ignored-list');
+    if (!ignoredListVisible) {
+      list.style.display = 'none';
+      return;
+    }
+    list.style.display = 'flex';
+    var result = await supabase
+      .from('assets')
+      .select('id, asset_name, bp_card_number')
+      .eq('user_id', currentUser.id)
+      .eq('is_ignored', true)
+      .order('asset_name');
+    if (result.error) {
+      showToast('Failed to load ignored assets', 'error');
+      return;
+    }
+    renderIgnoredList(result.data || []);
+    refreshIgnoredAssetsUi();
+  });
   document.getElementById('merge-confirm-cancel').addEventListener('click', closeMergeConfirm);
   document.getElementById('merge-confirm-proceed').addEventListener('click', executeMerge);
   document.getElementById('merge-confirm-modal').addEventListener('click', function(e) {
