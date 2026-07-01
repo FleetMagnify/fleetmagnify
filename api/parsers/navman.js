@@ -301,7 +301,7 @@ function buildTelematicsRecords(userId, assetMap, rows, recordDate) {
       operating_hours: (totalHours - idleMinutes) / 60,
       idle_hours: idleMinutes / 60,
       total_engine_hours: totalHours / 60,
-      odometer_km: null,
+      odometer_km: parseNumeric(row.DistanceUnits) || null,
       litres_consumed: null,
     });
   }
