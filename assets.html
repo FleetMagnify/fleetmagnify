@@ -593,6 +593,11 @@
       </div>
     </div>
     <div class="form-group">
+      <label for="asset-bp-card">Fuel Card Number</label>
+      <input type="text" id="asset-bp-card" placeholder="e.g. 7824339271724028">
+      <div class="form-hint" style="font-size:11px; color:#3A4A5C; margin-top:5px;">Enter the BP fuel card number for this vehicle so future fuel imports attach automatically. Leave blank if none.</div>
+    </div>
+    <div class="form-group">
       <label for="asset-idle-rate">Idle Burn Rate (litres per hour)</label>
       <input type="number" id="asset-idle-rate" placeholder="e.g. 4.0" step="0.1" min="0">
       <div class="form-hint" id="hint-idle-rate">Leave blank to use a default estimate based on asset type. You can update this anytime once you know your actual idle fuel usage.</div>
@@ -1385,7 +1390,7 @@
     if (e.target === this) closeMergeConfirm();
   });
 
-  var ASSET_FIELD_IDS = ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-current-value','asset-eol-value','asset-annual-repair','asset-life-km','asset-service-cost-km','asset-current-odometer','asset-estimated-annual-km','asset-life-hours','asset-service-cost','asset-available-hours','asset-target-utilisation'];
+  var ASSET_FIELD_IDS = ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-current-value','asset-eol-value','asset-annual-repair','asset-life-km','asset-service-cost-km','asset-current-odometer','asset-estimated-annual-km','asset-life-hours','asset-service-cost','asset-available-hours','asset-target-utilisation','asset-bp-card'];
 
   function parseOptionalFloat(raw) {
     if (raw === '' || raw == null) return null;
@@ -1611,6 +1616,7 @@
       model: document.getElementById('asset-model').value.trim() || null,
       year: parseOptionalInt(document.getElementById('asset-year').value),
       registration: document.getElementById('asset-rego').value.trim() || null,
+      bp_card_number: (function(){ var v = document.getElementById('asset-bp-card').value.trim(); return v === '' ? null : v; })(),
       idle_burn_rate_lph: parseOptionalFloat(idleRateRaw),
       current_value: parseOptionalFloat(document.getElementById('asset-current-value').value),
       estimated_end_of_life_value: parseOptionalFloat(document.getElementById('asset-eol-value').value),
@@ -1705,6 +1711,7 @@
     document.getElementById('asset-model').value = asset.model || '';
     document.getElementById('asset-year').value = asset.year != null ? asset.year : '';
     document.getElementById('asset-rego').value = asset.registration || '';
+    document.getElementById('asset-bp-card').value = asset.bp_card_number || '';
     document.getElementById('asset-idle-rate').value = asset.idle_burn_rate_lph != null ? asset.idle_burn_rate_lph : '';
     document.getElementById('asset-current-value').value = asset.current_value != null ? asset.current_value : '';
     document.getElementById('asset-eol-value').value = asset.estimated_end_of_life_value != null ? asset.estimated_end_of_life_value : '';
@@ -1797,7 +1804,12 @@
     saveBtn.textContent = isEditing ? 'Save Changes' : 'Add Asset';
 
     if (result.error) {
-      errEl.textContent = result.error.message || 'Failed to save asset.';
+      var errMsg = result.error.message || '';
+      if (result.error.code === '23505' || /duplicate|unique|assets_bp_card_number_unique/i.test(errMsg)) {
+        errEl.textContent = 'That fuel card number is already assigned to another asset. To move its fuel history onto this vehicle, use the drag-and-drop merge in the Match Fuel Cards section instead.';
+      } else {
+        errEl.textContent = errMsg || 'Failed to save asset.';
+      }
       errEl.classList.add('visible');
       return;
     }
