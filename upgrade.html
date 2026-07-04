@@ -83,6 +83,30 @@
   .btn-subscribe:hover:not(:disabled) { background: #0BC48E; transform: translateY(-1px); }
   .btn-subscribe:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
+  .billing-choice { display: flex; flex-direction: column; gap: 10px; }
+  .btn-invoice-toggle {
+    width: 100%;
+    background: none; border: 1px solid #2D3748; color: #C8D0DB;
+    font-size: 13.5px; font-weight: 600; padding: 13px 24px;
+    border-radius: 10px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-invoice-toggle:hover { border-color: rgba(14,165,122,0.4); color: #F0F2F5; }
+
+  .invoice-form { text-align: left; }
+  .invoice-form .form-group { margin-bottom: 14px; }
+  .invoice-form label { display: block; font-size: 12px; font-weight: 600; color: #9BA4B0; margin-bottom: 6px; }
+  .invoice-form input {
+    width: 100%; padding: 11px 14px; background: rgba(255,255,255,0.04);
+    border: 1px solid #2D3748; border-radius: 9px; color: #F0F2F5;
+    font-size: 13.5px; font-family: inherit; outline: none;
+  }
+  .invoice-form input:focus { border-color: rgba(14,165,122,0.45); }
+  .btn-back-link {
+    width: 100%; background: none; border: none; color: #6B7785;
+    font-size: 12.5px; padding: 10px; cursor: pointer; font-family: inherit; text-decoration: underline;
+  }
+  .btn-back-link:hover { color: #C8D0DB; }
+
   .fine-print { font-size: 12px; color: #3A4A5C; margin-top: 16px; line-height: 1.5; }
   .fine-print a { color: #0EA57A; text-decoration: none; }
 
@@ -127,7 +151,20 @@
       <div class="feature-item"><span class="feature-check">✓</span> No lock-in contracts — cancel any time</div>
     </div>
 
-    <button type="button" class="btn-subscribe" id="subscribe-btn">Subscribe Now</button>
+    <div class="billing-choice" id="billing-choice">
+      <button type="button" class="btn-subscribe" id="subscribe-card-btn">Pay by Card</button>
+      <button type="button" class="btn-invoice-toggle" id="show-invoice-btn">Pay by Invoice (10+ assets)</button>
+    </div>
+
+    <div class="invoice-form" id="invoice-form" style="display:none;">
+      <div class="form-group">
+        <label for="po-number">Purchase Order Number (optional)</label>
+        <input type="text" id="po-number" placeholder="e.g. PO-4471">
+      </div>
+      <button type="button" class="btn-subscribe" id="subscribe-invoice-btn">Request Invoice</button>
+      <button type="button" class="btn-back-link" id="back-to-card-btn">← Back to card payment</button>
+      <p class="fine-print" style="margin-top:14px;">Invoices are due within 7 days of issue and are generated automatically each month from your first invoice date. Available for accounts with 10 or more active assets.</p>
+    </div>
 
     <p class="fine-print">By subscribing you agree to our <a href="terms-of-service.html">Terms of Service</a> and <a href="privacy-policy.html">Privacy Policy</a>. Billed monthly via Stripe.</p>
   </div>
@@ -177,8 +214,8 @@
       window.location.href = 'login.html';
     });
 
-    document.getElementById('subscribe-btn').addEventListener('click', async function() {
-      var btn = document.getElementById('subscribe-btn');
+    document.getElementById('subscribe-card-btn').addEventListener('click', async function() {
+      var btn = document.getElementById('subscribe-card-btn');
       btn.disabled = true;
       btn.textContent = 'Redirecting to checkout…';
 
@@ -204,7 +241,48 @@
       } catch (err) {
         showError('Could not start checkout: ' + err.message + '. Please try again or contact support@fleetmagnify.com.');
         btn.disabled = false;
-        btn.textContent = 'Subscribe Now';
+        btn.textContent = 'Pay by Card';
+      }
+    });
+
+    document.getElementById('show-invoice-btn').addEventListener('click', function() {
+      document.getElementById('billing-choice').style.display = 'none';
+      document.getElementById('invoice-form').style.display = 'block';
+    });
+
+    document.getElementById('back-to-card-btn').addEventListener('click', function() {
+      document.getElementById('invoice-form').style.display = 'none';
+      document.getElementById('billing-choice').style.display = 'flex';
+    });
+
+    document.getElementById('subscribe-invoice-btn').addEventListener('click', async function() {
+      var btn = document.getElementById('subscribe-invoice-btn');
+      var poNumber = document.getElementById('po-number').value.trim();
+      btn.disabled = true;
+      btn.textContent = 'Setting up invoicing…';
+
+      try {
+        var response = await fetch('/api/create-invoice-subscription', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: currentUser.id,
+            email: currentUser.email,
+            poNumber: poNumber
+          })
+        });
+
+        var data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Could not set up invoice billing');
+        }
+
+        window.location.href = 'home.html?upgraded=1';
+      } catch (err) {
+        showError(err.message);
+        btn.disabled = false;
+        btn.textContent = 'Request Invoice';
       }
     });
   }
