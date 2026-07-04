@@ -733,6 +733,7 @@
 </div>
 
 <script src="js/supabase-config.js"></script>
+<script src="js/subscription-guard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script src="js/fleet-cost-model.js"></script>
@@ -775,6 +776,8 @@
     var { data: { session } } = await supabase.auth.getSession();
     if (!session) { window.location.href = 'login.html'; return; }
     currentUser = session.user;
+    var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, currentUser.id);
+    if (!hasAccess) return;
     var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
       ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
     document.getElementById('user-name').textContent = name;
