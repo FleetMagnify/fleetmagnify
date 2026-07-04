@@ -277,32 +277,12 @@ function collectCardDetails(rows) {
 function detectAssetType(vehicleName) {
   var name = String(vehicleName || '').toLowerCase();
 
-  if (name.indexOf('excavator') !== -1) {
-    return 'Excavator';
-  }
-  if (name.indexOf('loader') !== -1) {
-    return 'Wheel Loader';
-  }
-  if (name.indexOf('grader') !== -1) {
-    return 'Motor Grader';
-  }
-  if (name.indexOf('bulldozer') !== -1 || name.indexOf('dozer') !== -1) {
-    return 'Bulldozer';
-  }
-  if (name.indexOf('crane') !== -1) {
-    return 'Crane';
-  }
-  if (name.indexOf('forklift') !== -1) {
-    return 'Forklift';
-  }
-
-  var lightVehicleKeywords = [
-    'ranger', 'hilux', 'navara', 'triton', 'colorado', 'd-max', 'bt-50', 'amarok',
-    'ute', 'suv', 'car', 'sedan', 'wagon', 'van', 'transit', 'sprinter', 'hiace',
-  ];
-  for (var i = 0; i < lightVehicleKeywords.length; i++) {
-    if (name.indexOf(lightVehicleKeywords[i]) !== -1) {
-      return 'Light Vehicle';
+  var rigidTruckKeywords = ['hino', 'isuzu', 'fuso', 'ud ', 'rigid', 'truck'];
+  var hasTruckKeyword = false;
+  for (var t = 0; t < rigidTruckKeywords.length; t++) {
+    if (name.indexOf(rigidTruckKeywords[t]) !== -1) {
+      hasTruckKeyword = true;
+      break;
     }
   }
 
@@ -316,11 +296,40 @@ function detectAssetType(vehicleName) {
     }
   }
 
-  var rigidTruckKeywords = ['hino', 'isuzu', 'fuso', 'ud ', 'rigid', 'truck'];
-  for (var k = 0; k < rigidTruckKeywords.length; k++) {
-    if (name.indexOf(rigidTruckKeywords[k]) !== -1) {
-      return 'Rigid Truck';
+  if (hasTruckKeyword) {
+    return 'Rigid Truck';
+  }
+
+  var lightVehicleKeywords = [
+    'ranger', 'hilux', 'navara', 'triton', 'colorado', 'd-max', 'bt-50', 'amarok',
+    'ute', 'suv', 'car', 'sedan', 'wagon', 'van', 'transit', 'sprinter', 'hiace',
+  ];
+  for (var i = 0; i < lightVehicleKeywords.length; i++) {
+    if (name.indexOf(lightVehicleKeywords[i]) !== -1) {
+      return 'Light Vehicle';
     }
+  }
+
+  if (name.indexOf('bulldozer') !== -1 || name.indexOf('dozer') !== -1) {
+    return 'Bulldozer';
+  }
+  if (name.indexOf('excavator') !== -1 || name.indexOf('digger') !== -1) {
+    return 'Excavator';
+  }
+  if (name.indexOf('grader') !== -1) {
+    return 'Motor Grader';
+  }
+  if (name.indexOf('forklift') !== -1) {
+    return 'Forklift';
+  }
+  if (name.indexOf('crane') !== -1) {
+    return 'Crane';
+  }
+  if (name.indexOf('loader') !== -1) {
+    return 'Wheel Loader';
+  }
+  if (name.indexOf('roller') !== -1 || name.indexOf('scraper') !== -1) {
+    return 'Other';
   }
 
   return 'Rigid Truck';

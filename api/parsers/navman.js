@@ -178,6 +178,39 @@ async function loadAssetMap(supabase, userId) {
 function detectAssetType(vehicleName) {
   var name = String(vehicleName || '').toLowerCase();
 
+  var rigidTruckKeywords = ['hino', 'isuzu', 'fuso', 'ud ', 'rigid', 'truck'];
+  var hasTruckKeyword = false;
+  for (var t = 0; t < rigidTruckKeywords.length; t++) {
+    if (name.indexOf(rigidTruckKeywords[t]) !== -1) {
+      hasTruckKeyword = true;
+      break;
+    }
+  }
+
+  var semiTrailerKeywords = [
+    'semi', 'kenworth', 'freightliner', 'mack', 'volvo', 'scania', 'man ', 'daf',
+    'prime mover', 'b-train', 'a-train',
+  ];
+  for (var j = 0; j < semiTrailerKeywords.length; j++) {
+    if (name.indexOf(semiTrailerKeywords[j]) !== -1) {
+      return 'Semi Trailer';
+    }
+  }
+
+  if (hasTruckKeyword) {
+    return 'Rigid Truck';
+  }
+
+  var lightVehicleKeywords = [
+    'ranger', 'hilux', 'navara', 'triton', 'colorado', 'd-max', 'bt-50', 'amarok',
+    'ute', 'suv', 'car', 'sedan', 'wagon', 'van', 'transit', 'sprinter', 'hiace',
+  ];
+  for (var i = 0; i < lightVehicleKeywords.length; i++) {
+    if (name.indexOf(lightVehicleKeywords[i]) !== -1) {
+      return 'Light Vehicle';
+    }
+  }
+
   if (name.indexOf('bulldozer') !== -1 || name.indexOf('dozer') !== -1) {
     return 'Bulldozer';
   }
@@ -198,33 +231,6 @@ function detectAssetType(vehicleName) {
   }
   if (name.indexOf('roller') !== -1 || name.indexOf('scraper') !== -1) {
     return 'Other';
-  }
-
-  var lightVehicleKeywords = [
-    'ranger', 'hilux', 'navara', 'triton', 'colorado', 'd-max', 'bt-50', 'amarok',
-    'ute', 'suv', 'car', 'sedan', 'wagon', 'van', 'transit', 'sprinter', 'hiace',
-  ];
-  for (var i = 0; i < lightVehicleKeywords.length; i++) {
-    if (name.indexOf(lightVehicleKeywords[i]) !== -1) {
-      return 'Light Vehicle';
-    }
-  }
-
-  var semiTrailerKeywords = [
-    'semi', 'kenworth', 'freightliner', 'mack', 'volvo', 'scania', 'man ', 'daf',
-    'prime mover', 'b-train', 'a-train',
-  ];
-  for (var j = 0; j < semiTrailerKeywords.length; j++) {
-    if (name.indexOf(semiTrailerKeywords[j]) !== -1) {
-      return 'Semi Trailer';
-    }
-  }
-
-  var rigidTruckKeywords = ['hino', 'isuzu', 'fuso', 'ud ', 'rigid', 'truck'];
-  for (var k = 0; k < rigidTruckKeywords.length; k++) {
-    if (name.indexOf(rigidTruckKeywords[k]) !== -1) {
-      return 'Rigid Truck';
-    }
   }
 
   return 'Rigid Truck';
