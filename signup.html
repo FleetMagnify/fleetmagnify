@@ -219,6 +219,12 @@
           <option value="Over 200">Over 200</option>
         </select>
       </div>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="terms-accept" name="termsAccept" required>
+          I agree to the <a href="terms-of-service.html">Terms of Service</a> and <a href="privacy-policy.html">Privacy Policy</a>.
+        </label>
+      </div>
       <button type="submit" class="btn-submit" id="submit-btn">Create Account</button>
     </form>
 
@@ -353,7 +359,8 @@
           company_name: companyName,
           email: email,
           fleet_size: fleetSize,
-          plan: 'free'
+          plan: 'free',
+          terms_accepted_at: new Date().toISOString()
         });
 
         if (profileResult.error) {
