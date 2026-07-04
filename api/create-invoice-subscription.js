@@ -47,7 +47,6 @@ module.exports = async function handler(req, res) {
     var supabase = createSupabaseClient();
     var stripe = createStripeClient();
 
-    // Eligibility check: 10+ active, non-ignored assets required for invoice billing.
     var countResult = await supabase
       .from('assets')
       .select('id', { count: 'exact', head: true })
@@ -93,8 +92,6 @@ module.exports = async function handler(req, res) {
       await supabase.from('profiles').update({ stripe_customer_id: stripeCustomerId }).eq('id', userId);
     }
 
-    // Attach PO number to the customer's invoice settings so it appears on
-    // every invoice generated for this subscription, not just the first.
     if (poNumber) {
       await stripe.customers.update(stripeCustomerId, {
         invoice_settings: { custom_fields: [{ name: 'PO Number', value: poNumber.slice(0, 30) }] },
