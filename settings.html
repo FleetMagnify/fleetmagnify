@@ -146,6 +146,7 @@
 </div>
 
 <script src="js/supabase-config.js"></script>
+<script src="js/subscription-guard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 (function() {
@@ -238,6 +239,8 @@
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
+    var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, currentUser.id);
+    if (!hasAccess) return;
     var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
       ? currentUser.user_metadata.company_name
       : currentUser.email.split('@')[0];

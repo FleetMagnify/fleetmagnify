@@ -376,6 +376,7 @@
 <div class="toast" id="toast"><span id="toast-msg"></span></div>
 
 <script src="js/supabase-config.js"></script>
+<script src="js/subscription-guard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
@@ -420,6 +421,8 @@
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
+    var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, currentUser.id);
+    if (!hasAccess) return;
     companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name)
       ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
     document.getElementById('user-name').textContent = companyName;
