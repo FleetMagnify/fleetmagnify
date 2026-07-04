@@ -3,6 +3,7 @@
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
-    "busboy": "^1.6.0"
+    "busboy": "^1.6.0",
+    "stripe": "^22.3.0"
   }
 }
