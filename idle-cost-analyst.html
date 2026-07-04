@@ -370,6 +370,7 @@
 </div>
 
 <script src="js/supabase-config.js"></script>
+<script src="js/subscription-guard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -409,6 +410,8 @@
     var { data: { session } } = await supabase.auth.getSession();
     if (!session) { window.location.href = 'login.html'; return; }
     currentUser = session.user;
+    var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, currentUser.id);
+    if (!hasAccess) return;
     var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
       ? currentUser.user_metadata.company_name
       : currentUser.email.split('@')[0];
