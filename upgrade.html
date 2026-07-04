@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upgrade | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/mobile-responsive.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #080C12; color: #E2E8F0;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  .page-glow {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background: radial-gradient(ellipse 55% 45% at 50% 0%, rgba(14,165,122,0.08) 0%, transparent 70%);
+  }
+  header {
+    position: relative; z-index: 1;
+    padding: 24px 3rem;
+    border-bottom: 1px solid #2D3748;
+    background: rgba(8,12,18,0.90);
+  }
+  .header-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+  .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .logo-mark { width: 36px; height: 36px; border-radius: 10px; background: #0EA57A; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: #080C12; }
+  .logo-name { font-size: 17px; font-weight: 700; color: #F0F2F5; }
+  .logo-name span { color: #0EA57A; }
+  .btn-signout { background: none; border: 1px solid #2D3748; color: #C8D0DB; font-size: 13px; font-weight: 500; padding: 8px 18px; border-radius: 8px; cursor: pointer; font-family: inherit; }
+  .btn-signout:hover { border-color: rgba(255,255,255,0.25); color: #F0F2F5; }
+
+  main {
+    position: relative; z-index: 1; flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    padding: 48px 1.5rem 64px;
+  }
+
+  .upgrade-card {
+    width: 100%; max-width: 560px;
+    background: rgba(10,16,26,0.96);
+    border: 1px solid #2D3748;
+    border-radius: 20px; padding: 44px 40px 40px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.45);
+    text-align: center;
+  }
+
+  .card-eyebrow {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #E2A33A; margin-bottom: 14px;
+    justify-content: center; width: 100%;
+  }
+  .upgrade-card h1 {
+    font-size: 26px; font-weight: 800; letter-spacing: -1px;
+    color: #F0F2F5; margin-bottom: 10px;
+  }
+  .card-sub {
+    font-size: 14.5px; color: #9BA4B0; line-height: 1.6; margin-bottom: 32px;
+  }
+
+  .price-block {
+    background: rgba(14,165,122,0.06);
+    border: 1px solid rgba(14,165,122,0.18);
+    border-radius: 14px; padding: 24px; margin-bottom: 28px;
+  }
+  .price-amount { font-size: 40px; font-weight: 800; color: #F0F2F5; letter-spacing: -1.5px; }
+  .price-amount span { font-size: 15px; font-weight: 500; color: #6B7785; }
+  .price-desc { font-size: 12.5px; color: #5A6474; margin-top: 8px; }
+
+  .features-list { text-align: left; margin-bottom: 32px; }
+  .feature-item { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; font-size: 13.5px; color: #C8D0DB; }
+  .feature-check { color: #0EA57A; flex-shrink: 0; margin-top: 1px; }
+
+  .btn-subscribe {
+    width: 100%;
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 15px; font-weight: 700; padding: 15px 24px;
+    border-radius: 10px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-subscribe:hover:not(:disabled) { background: #0BC48E; transform: translateY(-1px); }
+  .btn-subscribe:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  .fine-print { font-size: 12px; color: #3A4A5C; margin-top: 16px; line-height: 1.5; }
+  .fine-print a { color: #0EA57A; text-decoration: none; }
+
+  .error-box {
+    display: none;
+    background: rgba(226,75,74,0.10); border: 1px solid rgba(226,75,74,0.28);
+    color: #F0A8A7; font-size: 13px; padding: 12px 14px; border-radius: 10px; margin-bottom: 20px;
+  }
+  .error-box.is-visible { display: block; }
+</style>
+</head>
+<body>
+
+<div class="page-glow"></div>
+
+<header>
+  <div class="header-inner">
+    <a class="logo" href="home.html">
+      <div class="logo-mark">FM</div>
+      <span class="logo-name">Fleet<span>Magnify</span></span>
+    </a>
+    <button type="button" class="btn-signout" id="signout-btn">Sign Out</button>
+  </div>
+</header>
+
+<main>
+  <div class="upgrade-card">
+    <div class="card-eyebrow" id="status-eyebrow">Trial Ended</div>
+    <h1 id="status-heading">Your trial has ended</h1>
+    <p class="card-sub" id="status-sub">Subscribe to keep your fleet data flowing and stay on top of your costs.</p>
+
+    <div id="error-box" class="error-box"></div>
+
+    <div class="price-block">
+      <div class="price-amount">$49<span>/month platform fee</span></div>
+      <div class="price-desc">Plus $8/truck and $15/machine, billed monthly based on your active fleet</div>
+    </div>
+
+    <div class="features-list">
+      <div class="feature-item"><span class="feature-check">✓</span> Automatic data ingestion from your fuel and telematics providers</div>
+      <div class="feature-item"><span class="feature-check">✓</span> Fuel, idle cost, emissions, and utilisation analytics</div>
+      <div class="feature-item"><span class="feature-check">✓</span> No lock-in contracts — cancel any time</div>
+    </div>
+
+    <button type="button" class="btn-subscribe" id="subscribe-btn">Subscribe Now</button>
+
+    <p class="fine-print">By subscribing you agree to our <a href="terms-of-service.html">Terms of Service</a> and <a href="privacy-policy.html">Privacy Policy</a>. Billed monthly via Stripe.</p>
+  </div>
+</main>
+
+<script src="js/supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function() {
+  var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var currentUser = null;
+
+  function showError(msg) {
+    var box = document.getElementById('error-box');
+    box.textContent = msg;
+    box.classList.add('is-visible');
+  }
+
+  async function init() {
+    var sessionResult = await supabase.auth.getSession();
+    if (!sessionResult.data.session) {
+      window.location.href = 'login.html';
+      return;
+    }
+    currentUser = sessionResult.data.session.user;
+
+    // If already active, don't show the paywall — send them back to the app.
+    var profileResult = await supabase
+      .from('profiles')
+      .select('subscription_status')
+      .eq('id', currentUser.id)
+      .maybeSingle();
+
+    if (profileResult.data && profileResult.data.subscription_status === 'active') {
+      window.location.href = 'home.html';
+      return;
+    }
+
+    if (profileResult.data && profileResult.data.subscription_status === 'past_due') {
+      document.getElementById('status-eyebrow').textContent = 'Payment Issue';
+      document.getElementById('status-heading').textContent = 'There was a problem with your payment';
+      document.getElementById('status-sub').textContent = 'Update your payment details to keep your fleet data flowing.';
+    }
+
+    document.getElementById('signout-btn').addEventListener('click', async function() {
+      await supabase.auth.signOut();
+      window.location.href = 'login.html';
+    });
+
+    document.getElementById('subscribe-btn').addEventListener('click', async function() {
+      var btn = document.getElementById('subscribe-btn');
+      btn.disabled = true;
+      btn.textContent = 'Redirecting to checkout…';
+
+      try {
+        var response = await fetch('/api/create-checkout-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: currentUser.id,
+            email: currentUser.email,
+            successUrl: window.location.origin + '/home.html?upgraded=1',
+            cancelUrl: window.location.origin + '/upgrade.html'
+          })
+        });
+
+        var data = await response.json();
+
+        if (!response.ok || !data.url) {
+          throw new Error(data.error || 'Could not start checkout');
+        }
+
+        window.location.href = data.url;
+      } catch (err) {
+        showError('Could not start checkout: ' + err.message + '. Please try again or contact support@fleetmagnify.com.');
+        btn.disabled = false;
+        btn.textContent = 'Subscribe Now';
+      }
+    });
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
