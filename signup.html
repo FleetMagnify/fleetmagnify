@@ -348,7 +348,7 @@
         }
 
         var profileResult = await supabase.from('profiles').insert({
-          user_id: user.id,
+          id: user.id,
           full_name: fullName,
           company_name: companyName,
           email: email,
