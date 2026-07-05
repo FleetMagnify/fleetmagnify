@@ -92,6 +92,7 @@ module.exports = async function handler(req, res) {
       ],
       success_url: successUrl || 'https://fleetmagnify.com/home.html?upgraded=1',
       cancel_url: cancelUrl || 'https://fleetmagnify.com/upgrade.html',
+      allow_promotion_codes: true,
       metadata: { supabase_user_id: userId },
       subscription_data: {
         metadata: { supabase_user_id: userId },
