@@ -296,6 +296,10 @@ body {
 .footer-logo { font-size: 15px; font-weight: 700; color: var(--text-mid); margin-bottom: 8px; }
 .footer-logo span { color: var(--teal); }
 .footer-text { font-size: 12.5px; color: var(--text-muted); }
+.footer-legal-links { margin-top: 10px; font-size: 12px; }
+.footer-legal-links a { color: var(--text-muted); text-decoration: none; }
+.footer-legal-links a:hover { color: var(--teal); }
+.footer-dot { color: var(--text-muted); margin: 0 6px; }
 
 /* ── RESPONSIVE ── */
 @media (max-width: 768px) {
@@ -656,6 +660,11 @@ body {
 <footer class="footer">
   <div class="footer-logo">Fleet<span>Magnify</span></div>
   <div class="footer-text">Fleet Cost Intelligence Platform · New Zealand</div>
+  <div class="footer-legal-links">
+    <a href="terms-of-service.html">Terms</a>
+    <span class="footer-dot">·</span>
+    <a href="privacy-policy.html">Privacy</a>
+  </div>
 </footer>
 
 <script defer src="/_vercel/insights/script.js"></script>
