@@ -7,6 +7,45 @@ const { createClient } = require('@supabase/supabase-js');
 const { isNavmanCsv, parseNavmanReport } = require('./parsers/navman');
 const { isBpCsv, parseBpReport } = require('./parsers/bp');
 
+function classifyUnknownCsv(rawCsv) {
+  var lines = String(rawCsv).split(/\r?\n/);
+  var headerLine = '';
+  for (var i = 0; i < Math.min(lines.length, 30); i++) {
+    if (lines[i] && lines[i].trim()) {
+      headerLine = lines[i];
+      break;
+    }
+  }
+  var headerLower = headerLine.toLowerCase();
+
+  var categories = {
+    on_road_telematics: ['mileage', 'odometer', 'distance', 'trip', 'idle'],
+    fuel_provider: ['litres', 'card number', 'fuel', 'customer value', 'transaction'],
+    oem_machinery_telematics: ['productive', 'idle fuel', 'operating fuel', 'engine hours', 'machine'],
+  };
+
+  var bestCategory = 'unknown';
+  var bestScore = 0;
+
+  for (var cat in categories) {
+    var score = 0;
+    var keywords = categories[cat];
+    for (var k = 0; k < keywords.length; k++) {
+      if (headerLower.indexOf(keywords[k]) !== -1) {
+        score++;
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestCategory = cat;
+    }
+  }
+
+  var detectedCategory = bestScore >= 2 ? bestCategory : 'unknown';
+
+  return { detectedCategory: detectedCategory, headerLine: headerLine };
+}
+
 const SUPABASE_URL =
   process.env.SUPABASE_URL || 'https://pddsgvuzvuwueuvpoytw.supabase.co';
 
@@ -230,6 +269,29 @@ module.exports = async function handler(req, res) {
             bpErr.message
           );
         }
+      } else {
+        var classification = classifyUnknownCsv(rawCsv);
+        var updateResult = await supabase
+          .from('email_imports')
+          .update({
+            status: 'unrecognized',
+            detected_category: classification.detectedCategory,
+            detected_headers: classification.headerLine,
+          })
+          .eq('id', importId);
+        if (updateResult.error) {
+          console.error(
+            'email-inbound: failed to mark import as unrecognized',
+            attachment.filename,
+            updateResult.error.message
+          );
+        }
+        console.log(
+          'email-inbound: unrecognized CSV format',
+          attachment.filename,
+          'classified as',
+          classification.detectedCategory
+        );
       }
 
       saved.push(attachment.filename || ('attachment-' + (i + 1)));
