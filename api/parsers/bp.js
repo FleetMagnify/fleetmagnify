@@ -341,21 +341,13 @@ async function ensureStubAssets(supabase, userId, rows) {
   var nameMap = maps.nameMap;
   var cardDetails = collectCardDetails(rows);
   var created = 0;
+  var toInsert = [];
 
   for (var cardNumber in cardDetails) {
-    var existingByCardResult = await supabase
-      .from('assets')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('bp_card_number', cardNumber)
-      .maybeSingle();
-
-    if (existingByCardResult.error) {
-      throw new Error('Failed to look up asset for card ' + cardNumber + ': ' + existingByCardResult.error.message);
-    }
-
-    if (existingByCardResult.data) {
-      cardMap[cardNumber] = existingByCardResult.data.id;
+    // cardMap already contains every card this user has ever assigned,
+    // fetched in one bulk query via loadCardMap above — no need to
+    // re-check the database per card.
+    if (cardMap[cardNumber]) {
       continue;
     }
 
@@ -367,25 +359,31 @@ async function ensureStubAssets(supabase, userId, rows) {
       continue;
     }
 
+    toInsert.push({
+      user_id: userId,
+      asset_name: assetName,
+      asset_type: detectAssetType(detail.typeHint),
+      fuel_type: 'Diesel',
+      bp_card_number: cardNumber,
+    });
+  }
+
+  if (toInsert.length > 0) {
     var insertResult = await supabase
       .from('assets')
-      .insert({
-        user_id: userId,
-        asset_name: assetName,
-        asset_type: detectAssetType(detail.typeHint),
-        fuel_type: 'Diesel',
-        bp_card_number: cardNumber,
-      })
-      .select('id, bp_card_number')
-      .single();
+      .insert(toInsert)
+      .select('id, bp_card_number, asset_name');
 
     if (insertResult.error) {
-      throw new Error('Failed to create stub asset for card ' + cardNumber + ': ' + insertResult.error.message);
+      throw new Error('Failed to create stub assets: ' + insertResult.error.message);
     }
 
-    cardMap[normalizeCardNumber(insertResult.data.bp_card_number)] = insertResult.data.id;
-    nameMap[assetName.toLowerCase()] = insertResult.data.id;
-    created++;
+    insertResult.data.forEach(function(row) {
+      var normalizedCard = normalizeCardNumber(row.bp_card_number);
+      cardMap[normalizedCard] = row.id;
+      nameMap[row.asset_name.toLowerCase()] = row.id;
+      created++;
+    });
   }
 
   return { cardMap: cardMap, nameMap: nameMap, assetsCreated: created };
