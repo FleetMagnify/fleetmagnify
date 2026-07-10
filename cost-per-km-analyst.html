@@ -75,6 +75,19 @@
   .hero-breakdown-item { font-size: 12px; color: #6B7785; }
   .hero-breakdown-item strong { display: block; font-size: 15px; color: #C8D0DB; font-weight: 700; margin-top: 2px; }
 
+  .tonnekm-card { background: rgba(239,159,39,0.05); border: 1px solid rgba(239,159,39,0.22); border-radius: 16px; padding: 24px 32px; margin-bottom: 28px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 24px; }
+  .tonnekm-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #EF9F27; margin-bottom: 10px; }
+  .tonnekm-value { font-size: 36px; font-weight: 800; letter-spacing: -1px; color: #F0F2F5; }
+  .tonnekm-value.missing { font-size: 14px; color: #5A6474; font-style: italic; font-weight: 400; letter-spacing: 0; }
+  .tonnekm-sub { font-size: 12px; color: #5A6474; margin-top: 6px; }
+  .tonnekm-input-block { display: flex; flex-direction: column; gap: 8px; min-width: 220px; }
+  .tonnekm-input-block label { font-size: 11px; font-weight: 600; color: #4A5568; }
+  .tonnekm-input-row { display: flex; gap: 10px; align-items: center; }
+  .tonnekm-input-row input { background: rgba(255,255,255,0.04); border: 1px solid #2D3748; border-radius: 8px; padding: 9px 13px; color: #F0F2F5; font-size: 14px; font-family: inherit; outline: none; width: 140px; }
+  .tonnekm-input-row input:focus { border-color: rgba(239,159,39,0.4); }
+  .tonnekm-save-status { font-size: 11px; color: #0EA57A; opacity: 0; transition: opacity 0.3s; }
+  .tonnekm-save-status.visible { opacity: 1; }
+
   .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 28px; }
   .kpi-card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 20px 22px; }
   .kpi-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3A4A5C; margin-bottom: 10px; }
@@ -234,6 +247,21 @@
         <div class="kpi-label">Total Cost Per KM</div>
         <div class="hero-value" id="hero-total">—</div>
         <div class="hero-breakdown" id="hero-breakdown"></div>
+      </div>
+
+      <div class="tonnekm-card" id="tonnekm-card">
+        <div class="tonnekm-value-block">
+          <div class="tonnekm-label">Cost Per Tonne-KM</div>
+          <div class="tonnekm-value" id="tonnekm-value">—</div>
+          <div class="tonnekm-sub">most recent period</div>
+        </div>
+        <div class="tonnekm-input-block">
+          <label for="tonnekm-payload-input">Average Payload Weight Over Period (tonnes)</label>
+          <div class="tonnekm-input-row">
+            <input type="number" step="0.1" min="0" id="tonnekm-payload-input" placeholder="e.g. 12.5">
+            <span class="tonnekm-save-status" id="tonnekm-save-status">Saved ✓</span>
+          </div>
+        </div>
       </div>
 
       <div class="kpi-row">
@@ -669,6 +697,36 @@
 
     await loadVehicles();
     await loadFleetComparison();
+
+    document.getElementById('tonnekm-payload-input').addEventListener('change', async function() {
+      var val = this.value.trim();
+      if (val === '') return;
+      var num = parseFloat(val);
+      if (isNaN(num) || num <= 0) return;
+
+      var latestPeriod = enrichedPeriods[enrichedPeriods.length - 1];
+      var existing = findPayload(currentPayloads, latestPeriod.periodStart, latestPeriod.periodEnd);
+
+      if (existing) {
+        await supabase.from('truck_payloads').update({ payload_tonnes: num }).eq('id', existing.id);
+      } else {
+        await supabase.from('truck_payloads').insert({
+          user_id: currentUser.id,
+          vehicle_id: Number(selectedVehicle.id),
+          period_start: latestPeriod.periodStart,
+          period_end: latestPeriod.periodEnd,
+          payload_tonnes: num
+        });
+      }
+
+      currentPayloads = await fetchPayloads(selectedVehicle.id);
+      enrichedPeriods = enrichPeriods(selectedVehicle, basePeriods, currentOverrides);
+      showDashboard(enrichedPeriods);
+
+      var status = document.getElementById('tonnekm-save-status');
+      status.classList.add('visible');
+      setTimeout(function() { status.classList.remove('visible'); }, 1500);
+    });
   }
 
   async function loadVehicles() {
@@ -803,6 +861,17 @@
     document.getElementById('dashboard-content').hidden = false;
 
     var latest = periods[periods.length - 1];
+
+    var tonneEl = document.getElementById('tonnekm-value');
+    if (latest.costPerTonneKm !== null && !isNaN(latest.costPerTonneKm)) {
+      tonneEl.className = 'tonnekm-value';
+      tonneEl.textContent = fmtMoney(latest.costPerTonneKm);
+    } else {
+      tonneEl.className = 'tonnekm-value missing';
+      tonneEl.textContent = 'Enter payload weight to calculate';
+    }
+    var payloadInput = document.getElementById('tonnekm-payload-input');
+    payloadInput.value = latest.payloadTonnes !== null ? latest.payloadTonnes : '';
 
     var heroEl = document.getElementById('hero-total');
     if (latest.totalPerKm !== null && !isNaN(latest.totalPerKm)) {
