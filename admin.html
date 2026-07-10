@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FleetMagnify Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #080C12; color: #E2E8F0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .card { background: #111827; border: 1px solid #2D3748; border-radius: 18px; padding: 40px; width: 100%; max-width: 560px; }
+  h1 { font-size: 22px; font-weight: 800; color: #F0F2F5; margin-bottom: 6px; letter-spacing: -0.5px; }
+  .sub { font-size: 13px; color: #5A6474; margin-bottom: 28px; }
+  .form-group { margin-bottom: 16px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: #9BA4B0; margin-bottom: 6px; }
+  input, select { width: 100%; padding: 11px 14px; background: rgba(255,255,255,0.04); border: 1px solid #2D3748; border-radius: 9px; color: #F0F2F5; font-size: 13.5px; font-family: inherit; outline: none; }
+  select { cursor: pointer; }
+  select option { background: #0A101A; }
+  .btn { width: 100%; padding: 13px; background: #0EA57A; border: none; color: #080C12; font-size: 14px; font-weight: 700; border-radius: 9px; cursor: pointer; font-family: inherit; margin-top: 8px; }
+  .btn:hover { background: #0BC48E; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary { background: rgba(255,255,255,0.04); border: 1px solid #2D3748; color: #C8D0DB; margin-top: 10px; }
+  .btn-secondary:hover { background: rgba(255,255,255,0.08); }
+  .error { background: rgba(226,75,74,0.10); border: 1px solid rgba(226,75,74,0.28); color: #F0A8A7; font-size: 13px; padding: 11px 14px; border-radius: 9px; margin-bottom: 14px; display: none; }
+  .error.visible { display: block; }
+  .success { background: rgba(14,165,122,0.10); border: 1px solid rgba(14,165,122,0.28); color: #0EA57A; font-size: 13px; padding: 11px 14px; border-radius: 9px; margin-top: 14px; display: none; word-break: break-all; }
+  .success.visible { display: block; }
+  .user-count { font-size: 12px; color: #3A4A5C; margin-top: 6px; }
+  .divider { border: none; border-top: 1px solid #2D3748; margin: 24px 0; }
+  #gate-view, #admin-view { display: none; }
+  #gate-view.visible, #admin-view.visible { display: block; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔒 FleetMagnify Admin</h1>
+  <p class="sub">Internal tool — not for customer use.</p>
+
+  <!-- Password gate -->
+  <div id="gate-view" class="visible">
+    <div class="form-group">
+      <label for="gate-password">Admin Password</label>
+      <input type="password" id="gate-password" placeholder="Enter admin password">
+    </div>
+    <div class="error" id="gate-error">Incorrect password.</div>
+    <button type="button" class="btn" id="gate-btn">Unlock</button>
+  </div>
+
+  <!-- Admin panel -->
+  <div id="admin-view">
+    <div class="form-group">
+      <label for="user-select">Select Customer</label>
+      <select id="user-select"><option value="">Loading users...</option></select>
+      <div class="user-count" id="user-count"></div>
+    </div>
+    <div class="error" id="admin-error"></div>
+    <button type="button" class="btn" id="login-as-btn" disabled>Login As This User →</button>
+    <div class="success" id="link-result"></div>
+    <hr class="divider">
+    <button type="button" class="btn btn-secondary" id="signout-admin-btn">← Lock Admin</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  var adminSecret = null;
+
+  function showGate() {
+    document.getElementById('gate-view').classList.add('visible');
+    document.getElementById('admin-view').classList.remove('visible');
+  }
+
+  function showAdmin() {
+    document.getElementById('gate-view').classList.remove('visible');
+    document.getElementById('admin-view').classList.add('visible');
+  }
+
+  async function fetchUsers(secret) {
+    var res = await fetch('/api/admin-users', {
+      headers: { 'x-admin-secret': secret }
+    });
+    if (!res.ok) throw new Error('Unauthorized or server error');
+    var data = await res.json();
+    return data.users || [];
+  }
+
+  async function generateLink(secret, email) {
+    var res = await fetch('/api/admin-users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-secret': secret },
+      body: JSON.stringify({ email: email })
+    });
+    if (!res.ok) {
+      var err = await res.json();
+      throw new Error(err.error || 'Failed to generate link');
+    }
+    var data = await res.json();
+    return data.link;
+  }
+
+  // Gate
+  document.getElementById('gate-btn').addEventListener('click', async function() {
+    var pwd = document.getElementById('gate-password').value.trim();
+    var errEl = document.getElementById('gate-error');
+    errEl.classList.remove('visible');
+    if (!pwd) return;
+    this.disabled = true;
+    this.textContent = 'Checking...';
+    try {
+      var users = await fetchUsers(pwd);
+      adminSecret = pwd;
+      sessionStorage.setItem('fm_admin_secret', pwd);
+      showAdmin();
+      populateUsers(users);
+    } catch(e) {
+      errEl.classList.add('visible');
+    }
+    this.disabled = false;
+    this.textContent = 'Unlock';
+  });
+
+  document.getElementById('gate-password').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') document.getElementById('gate-btn').click();
+  });
+
+  function populateUsers(users) {
+    users.sort(function(a, b) {
+      var aName = a.company_name || a.email;
+      var bName = b.company_name || b.email;
+      return aName.localeCompare(bName);
+    });
+    var sel = document.getElementById('user-select');
+    sel.innerHTML = '<option value="">Select a user...</option>' +
+      users.map(function(u) {
+        var label = u.company_name ? u.company_name + ' (' + u.email + ')' : u.email;
+        return '<option value="' + u.email + '">' + label + '</option>';
+      }).join('');
+    document.getElementById('user-count').textContent = users.length + ' registered users';
+    document.getElementById('login-as-btn').disabled = false;
+  }
+
+  document.getElementById('user-select').addEventListener('change', function() {
+    document.getElementById('link-result').classList.remove('visible');
+    document.getElementById('admin-error').classList.remove('visible');
+  });
+
+  document.getElementById('login-as-btn').addEventListener('click', async function() {
+    var email = document.getElementById('user-select').value;
+    var errEl = document.getElementById('admin-error');
+    var resultEl = document.getElementById('link-result');
+    errEl.classList.remove('visible');
+    resultEl.classList.remove('visible');
+    if (!email) { errEl.textContent = 'Please select a user.'; errEl.classList.add('visible'); return; }
+    this.disabled = true;
+    this.textContent = 'Generating link...';
+    try {
+      var link = await generateLink(adminSecret, email);
+      resultEl.innerHTML = '✓ Magic link generated. <a href="' + link + '" target="_blank" style="color:#0EA57A;">Open in new tab →</a><br><br><small style="color:#3A4A5C; font-size:11px;">Link expires in 60 minutes. Open in an incognito window to avoid signing out of your own account.</small>';
+      resultEl.classList.add('visible');
+    } catch(e) {
+      errEl.textContent = e.message;
+      errEl.classList.add('visible');
+    }
+    this.disabled = false;
+    this.textContent = 'Login As This User →';
+  });
+
+  document.getElementById('signout-admin-btn').addEventListener('click', function() {
+    adminSecret = null;
+    sessionStorage.removeItem('fm_admin_secret');
+    document.getElementById('gate-password').value = '';
+    document.getElementById('link-result').classList.remove('visible');
+    document.getElementById('admin-error').classList.remove('visible');
+    showGate();
+  });
+
+  // Auto-unlock if secret still in sessionStorage
+  var saved = sessionStorage.getItem('fm_admin_secret');
+  if (saved) {
+    fetchUsers(saved).then(function(users) {
+      adminSecret = saved;
+      showAdmin();
+      populateUsers(users);
+    }).catch(function() {
+      sessionStorage.removeItem('fm_admin_secret');
+    });
+  }
+})();
+</script>
+</body>
+</html>
