@@ -158,7 +158,7 @@ async function updateImportStatus(supabase, importId, status, errorMessage) {
 async function loadAssetMap(supabase, userId) {
   var result = await supabase
     .from('assets')
-    .select('id, asset_name')
+    .select('id, asset_name, current_odometer')
     .eq('user_id', userId);
 
   if (result.error) {
@@ -168,11 +168,31 @@ async function loadAssetMap(supabase, userId) {
   var map = {};
   (result.data || []).forEach(function(asset) {
     if (asset.asset_name) {
-      map[asset.asset_name] = asset.id;
+      map[asset.asset_name] = {
+        id: asset.id,
+        current_odometer: asset.current_odometer != null ? parseFloat(asset.current_odometer) : null
+      };
     }
   });
 
   return map;
+}
+
+async function getRunningOdometer(supabase, userId, assetId) {
+  var result = await supabase
+    .from('telematics_records')
+    .select('odometer_km')
+    .eq('user_id', userId)
+    .eq('asset_id', Number(assetId))
+    .not('odometer_km', 'is', null)
+    .order('record_date', { ascending: false })
+    .limit(1);
+
+  if (result.error || !result.data || !result.data.length) {
+    return null;
+  }
+  var val = parseFloat(result.data[0].odometer_km);
+  return isNaN(val) ? null : val;
 }
 
 function detectAssetType(vehicleName) {
@@ -263,21 +283,25 @@ async function ensureAssets(supabase, userId, rows) {
         registration: registration || null,
         fuel_type: 'Diesel',
       })
-      .select('id, asset_name')
+      .select('id, asset_name, current_odometer')
       .single();
 
     if (insertResult.error) {
       throw new Error('Failed to create asset "' + vehicleName + '": ' + insertResult.error.message);
     }
 
-    assetMap[insertResult.data.asset_name] = insertResult.data.id;
+    assetMap[insertResult.data.asset_name] = {
+      id: insertResult.data.id,
+      current_odometer: insertResult.data.current_odometer != null 
+        ? parseFloat(insertResult.data.current_odometer) : null
+    };
     created++;
   }
 
   return { assetMap: assetMap, assetsCreated: created };
 }
 
-function buildTelematicsRecords(userId, assetMap, rows, recordDate) {
+async function buildTelematicsRecords(supabase, userId, assetMap, rows, recordDate) {
   var records = [];
   var skipped = 0;
 
@@ -286,19 +310,33 @@ function buildTelematicsRecords(userId, assetMap, rows, recordDate) {
     var vehicleName = row.VehicleName ? String(row.VehicleName).trim() : '';
     var totalHours = parseNumeric(row.TotalHours);
     var idleTime = parseNumeric(row.IdleTime);
+    var dailyDistanceKm = parseNumeric(row.AverageDailyIgnitionTime);
 
     if (!vehicleName || totalHours === null || totalHours === 0) {
       skipped++;
       continue;
     }
 
-    var assetId = assetMap[vehicleName];
-    if (!assetId) {
+    var assetEntry = assetMap[vehicleName];
+    if (!assetEntry) {
       skipped++;
       continue;
     }
 
+    var assetId = assetEntry.id;
     var idleMinutes = idleTime != null ? idleTime : 0;
+
+    var cumulativeOdometer = null;
+    if (dailyDistanceKm !== null && dailyDistanceKm > 0) {
+      var runningOdo = await getRunningOdometer(supabase, userId, assetId);
+      if (runningOdo !== null) {
+        cumulativeOdometer = runningOdo + dailyDistanceKm;
+      } else if (assetEntry.current_odometer !== null) {
+        cumulativeOdometer = assetEntry.current_odometer + dailyDistanceKm;
+      }
+      // If neither is available, leave cumulativeOdometer as null
+      // rather than storing a meaningless daily distance value
+    }
 
     records.push({
       user_id: userId,
@@ -307,7 +345,7 @@ function buildTelematicsRecords(userId, assetMap, rows, recordDate) {
       operating_hours: (totalHours - idleMinutes) / 60,
       idle_hours: idleMinutes / 60,
       total_engine_hours: totalHours / 60,
-      odometer_km: parseNumeric(row.AverageDailyIgnitionTime) || null,
+      odometer_km: cumulativeOdometer,
       litres_consumed: null,
     });
   }
@@ -330,7 +368,8 @@ async function parseNavmanReport(supabase, options) {
 
     var recordDate = extractRecordDate(filename, receivedAt);
     var assetResult = await ensureAssets(supabase, userId, rows);
-    var telematics = buildTelematicsRecords(
+    var telematics = await buildTelematicsRecords(
+      supabase,
       userId,
       assetResult.assetMap,
       rows,
