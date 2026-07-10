@@ -297,6 +297,7 @@
                 <th>Maintenance / KM</th>
                 <th>Servicing</th>
                 <th>Total / KM</th>
+                <th>Total Cost per Tonne-KM</th>
                 <th></th>
               </tr>
             </thead>
@@ -334,6 +335,7 @@
   var vehiclesList = [];
   var selectedVehicle = null;
   var currentOverrides = [];
+  var currentPayloads = [];
   var basePeriods = [];
   var enrichedPeriods = [];
   var pendingOverrideIndex = null;
@@ -429,6 +431,12 @@
     return (overrides || []).find(function(o) {
       return o.component_type === componentType &&
         periodsOverlap(o.period_start, o.period_end, periodStart, periodEnd);
+    }) || null;
+  }
+
+  function findPayload(payloads, periodStart, periodEnd) {
+    return (payloads || []).find(function(p) {
+      return periodsOverlap(p.period_start, p.period_end, periodStart, periodEnd);
     }) || null;
   }
 
@@ -558,6 +566,18 @@
         servPerKm: servPerKm,
         totalPerKm: totalPerKm,
         totalMissing: totalMissing,
+        payloadTonnes: (function() {
+          var pl = findPayload(currentPayloads, p.periodStart, p.periodEnd);
+          return pl ? parseFloat(pl.payload_tonnes) : null;
+        })(),
+        costPerTonneKm: (function() {
+          var pl = findPayload(currentPayloads, p.periodStart, p.periodEnd);
+          if (!pl) return null;
+          var payload = parseFloat(pl.payload_tonnes);
+          if (!payload || payload <= 0) return null;
+          var total = calcPartialTotalPerKm(fuelPerKm, deprPerKm, deprMissing, deprLifeExceeded, maintPerKm, maintMissing, servPerKm, servMissing);
+          return total / payload;
+        })(),
         fuelOverride: fuelOv,
         deprOverride: deprOv,
         maintOverride: maintOv,
@@ -720,6 +740,15 @@
     return result.data || [];
   }
 
+  async function fetchPayloads(vehicleId) {
+    var result = await supabase
+      .from('truck_payloads')
+      .select('*')
+      .eq('vehicle_id', Number(vehicleId))
+      .eq('user_id', currentUser.id);
+    return result.data || [];
+  }
+
   async function runAnalysis() {
     if (!selectedVehicle) return;
     var dateFrom = document.getElementById('date-from').value;
@@ -732,6 +761,7 @@
 
     showMissingBanner(selectedVehicle);
     currentOverrides = await fetchOverrides(selectedVehicle.id);
+    currentPayloads = await fetchPayloads(selectedVehicle.id);
     var data = await fetchVehicleData(selectedVehicle.id, dateFrom, dateTo);
 
     btn.disabled = false;
@@ -876,6 +906,10 @@
         '<td>' + renderCellValue(p.maintPerKm, p.maintOverride, p.maintMissing, false) + '</td>' +
         '<td>' + renderCellValue(p.servPerKm, p.servOverride, p.servMissing, false) + '</td>' +
         '<td>' + renderTotalCell(p) + '</td>' +
+        '<td>' + (p.costPerTonneKm !== null
+          ? fmtMoney(p.costPerTonneKm)
+          : '<span class="payload-missing" data-period-idx="' + idx + '">Enter payload →</span>'
+        ) + '</td>' +
         '<td><button type="button" class="btn-override" data-period-idx="' + idx + '">Override</button></td>' +
       '</tr>';
     }).join('');
@@ -894,6 +928,14 @@
       fmtDateShort(p.periodStart) + ' → ' + fmtDateShort(p.periodEnd);
 
     var html = '';
+    var existingPayload = findPayload(currentPayloads, p.periodStart, p.periodEnd);
+    html += '<div class="override-block" data-component="payload">' +
+      '<h3>Average Payload (tonnes)</h3>' +
+      '<div class="form-group">' +
+        '<label>Average payload carried during this period (tonnes)</label>' +
+        '<input type="number" step="0.1" min="0" id="payload-input" placeholder="e.g. 12.5" value="' + (existingPayload ? existingPayload.payload_tonnes : '') + '">' +
+      '</div>' +
+    '</div>';
     COMPONENT_TYPES.forEach(function(type) {
       var ov = findOverride(currentOverrides, type, p.periodStart, p.periodEnd);
       var deprBase = calcBaseDepreciation(selectedVehicle);
@@ -1019,6 +1061,30 @@
           override_value_per_km: val,
           reason: reason || null
         });
+      }
+    }
+
+    var payloadValue = document.getElementById('payload-input').value.trim();
+    if (payloadValue !== '') {
+      var payloadNum = parseFloat(payloadValue);
+      if (!isNaN(payloadNum) && payloadNum > 0) {
+        var existingPayloadRow = findPayload(currentPayloads, p.periodStart, p.periodEnd);
+        if (existingPayloadRow) {
+          await supabase
+            .from('truck_payloads')
+            .update({ payload_tonnes: payloadNum })
+            .eq('id', existingPayloadRow.id);
+        } else {
+          await supabase
+            .from('truck_payloads')
+            .insert({
+              user_id: currentUser.id,
+              vehicle_id: Number(selectedVehicle.id),
+              period_start: p.periodStart,
+              period_end: p.periodEnd,
+              payload_tonnes: payloadNum
+            });
+        }
       }
     }
 
