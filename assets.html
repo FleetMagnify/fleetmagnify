@@ -1931,8 +1931,29 @@
     var truckAssets = allAssets.filter(function(a) { return isOnRoadType(a.asset_type); });
     var machineryHeaders = getTemplateHeaders(false);
     var trucksHeaders = getTemplateHeaders(true);
-    var machineryData = [[MACHINERY_TYPE_NOTE + ' · ' + ASSET_ID_NOTE], machineryHeaders];
-    var trucksData = [[TRUCKS_TYPE_NOTE + ' · ' + ASSET_ID_NOTE], trucksHeaders];
+    var FILL_IN_COLUMNS = [
+      'purchase_price', 'current_value', 'estimated_end_of_life_value',
+      'estimated_annual_repair_cost', 'expected_life_hours', 'service_cost_per_hour',
+      'available_hours_per_week', 'target_utilisation_percent', 'expected_life_km',
+      'service_cost_per_km', 'current_odometer', 'estimated_annual_km',
+      'idle_burn_rate_lph'
+    ];
+
+    var displayMachineryHeaders = machineryHeaders.map(function(h) {
+      return FILL_IN_COLUMNS.indexOf(h) !== -1 ? '▶ ' + h : h;
+    });
+    var displayTrucksHeaders = trucksHeaders.map(function(h) {
+      return FILL_IN_COLUMNS.indexOf(h) !== -1 ? '▶ ' + h : h;
+    });
+
+    var machineryData = [
+      ['▶ = fill in required · ' + MACHINERY_TYPE_NOTE + ' · ' + ASSET_ID_NOTE],
+      displayMachineryHeaders
+    ];
+    var trucksData = [
+      ['▶ = fill in required · ' + TRUCKS_TYPE_NOTE + ' · ' + ASSET_ID_NOTE],
+      displayTrucksHeaders
+    ];
 
     if (machineryAssets.length) {
       machineryAssets.forEach(function(a) { machineryData.push(assetToTemplateValues(a, machineryHeaders)); });
@@ -2317,7 +2338,7 @@
       return;
     }
     buildExcelTemplate();
-    showToast('Template downloaded — fill in the yellow columns and re-upload', 'success');
+    showToast('Template downloaded — fill in the ▶ columns and re-upload via Import Excel', 'success');
   });
 
   var excelInput = document.getElementById('excel-file-input');
