@@ -796,7 +796,32 @@
       doc.setFont('helvetica', 'normal');
       y += 6;
     });
+    y += 4;
+    doc.setTextColor(30, 40, 55);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Cost Per KM', margin, y);
     y += 6;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(12);
+    var pdfCostPerKm = r.tripKm > 0 ? r.totalCost / r.tripKm : null;
+    doc.text(pdfCostPerKm !== null ? fmtMoney(pdfCostPerKm) + ' / km' : '—', margin, y);
+    y += 8;
+
+    if (r.payloadTonnes) {
+      var pdfCostPerTonneKm = pdfCostPerKm !== null ? pdfCostPerKm / r.payloadTonnes : null;
+      doc.setFont('helvetica', 'bold');
+      doc.text('Cost Per Tonne-KM', margin, y);
+      y += 6;
+      doc.setFont('helvetica', 'normal');
+      doc.text(pdfCostPerTonneKm !== null ? fmtMoney(pdfCostPerTonneKm) + ' / tonne-km' : '—', margin, y);
+      doc.setFontSize(9);
+      doc.setTextColor(120, 130, 145);
+      doc.text('Payload: ' + fmtNum(r.payloadTonnes, 1) + ' tonnes', margin + 60, y);
+      y += 10;
+    }
+
+    y += 4;
 
     doc.setTextColor(14, 165, 122);
     doc.setFont('helvetica', 'bold');
