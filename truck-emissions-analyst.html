@@ -69,6 +69,19 @@
   .kpi-value.white { color: #D8DFE8; }
   .kpi-sub { font-size: 11px; color: #3A4A5C; }
 
+  .emtonne-card { background: rgba(14,165,122,0.05); border: 1px solid rgba(14,165,122,0.22); border-radius: 16px; padding: 24px 32px; margin-bottom: 28px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 24px; }
+  .emtonne-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #0EA57A; margin-bottom: 10px; }
+  .emtonne-value { font-size: 36px; font-weight: 800; letter-spacing: -1px; color: #F0F2F5; }
+  .emtonne-value.missing { font-size: 14px; color: #5A6474; font-style: italic; font-weight: 400; letter-spacing: 0; }
+  .emtonne-sub { font-size: 12px; color: #5A6474; margin-top: 6px; }
+  .emtonne-input-block { display: flex; flex-direction: column; gap: 8px; min-width: 220px; }
+  .emtonne-input-block label { font-size: 11px; font-weight: 600; color: #4A5568; }
+  .emtonne-input-row { display: flex; gap: 10px; align-items: center; }
+  .emtonne-input-row input { background: rgba(255,255,255,0.04); border: 1px solid #2D3748; border-radius: 8px; padding: 9px 13px; color: #F0F2F5; font-size: 14px; font-family: inherit; outline: none; width: 140px; }
+  .emtonne-input-row input:focus { border-color: rgba(14,165,122,0.4); }
+  .emtonne-save-status { font-size: 11px; color: #0EA57A; opacity: 0; transition: opacity 0.3s; }
+  .emtonne-save-status.visible { opacity: 1; }
+
   .chart-card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 24px; margin-bottom: 28px; }
   .chart-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 12px; }
   .chart-card-title { font-size: 14px; font-weight: 700; color: #C8D0DB; }
@@ -207,6 +220,21 @@
         </div>
       </div>
 
+      <div class="emtonne-card" id="emtonne-card">
+        <div>
+          <div class="emtonne-label">Emissions Per Tonne-KM</div>
+          <div class="emtonne-value" id="emtonne-value">—</div>
+          <div class="emtonne-sub">most recent period</div>
+        </div>
+        <div class="emtonne-input-block">
+          <label for="emtonne-payload-input">Average Payload Weight Over Period (tonnes)</label>
+          <div class="emtonne-input-row">
+            <input type="number" step="0.1" min="0" id="emtonne-payload-input" placeholder="e.g. 12.5">
+            <span class="emtonne-save-status" id="emtonne-save-status">Saved ✓</span>
+          </div>
+        </div>
+      </div>
+
       <div class="chart-card">
         <div class="chart-card-header">
           <div class="chart-card-title">Emissions Per KM — Fill to Fill</div>
@@ -267,6 +295,8 @@
   var displayPeriods = [];
   var emissionsChart = null;
   var fleetChart = null;
+  var currentPayloads = [];
+  var latestPeriod = null;
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var EMISSION_FACTORS = { Diesel: 2.68, Petrol: 2.31, Hybrid: 1.5, Electric: 0 };
@@ -297,6 +327,21 @@
       return EMISSION_FACTORS[key];
     }
     return 2.68;
+  }
+
+  async function fetchPayloads(vehicleId) {
+    var result = await supabase
+      .from('truck_payloads')
+      .select('*')
+      .eq('vehicle_id', Number(vehicleId))
+      .eq('user_id', currentUser.id);
+    return result.data || [];
+  }
+
+  function findPayload(payloads, periodStart, periodEnd) {
+    return (payloads || []).find(function(p) {
+      return p.period_start <= periodEnd && p.period_end >= periodStart;
+    }) || null;
   }
 
   function vehicleLabel(v) {
@@ -386,6 +431,33 @@
 
     await loadVehicles();
     await loadFleetComparison();
+
+    document.getElementById('emtonne-payload-input').addEventListener('change', async function() {
+      var val = this.value.trim();
+      if (val === '' || !selectedVehicle || !latestPeriod) return;
+      var num = parseFloat(val);
+      if (isNaN(num) || num <= 0) return;
+
+      var existing = findPayload(currentPayloads, latestPeriod.periodStart, latestPeriod.periodEnd);
+      if (existing) {
+        await supabase.from('truck_payloads').update({ payload_tonnes: num }).eq('id', existing.id);
+      } else {
+        await supabase.from('truck_payloads').insert({
+          user_id: currentUser.id,
+          vehicle_id: Number(selectedVehicle.id),
+          period_start: latestPeriod.periodStart,
+          period_end: latestPeriod.periodEnd,
+          payload_tonnes: num
+        });
+      }
+
+      currentPayloads = await fetchPayloads(selectedVehicle.id);
+      if (displayPeriods.length) showDashboard(displayPeriods);
+
+      var status = document.getElementById('emtonne-save-status');
+      status.classList.add('visible');
+      setTimeout(function() { status.classList.remove('visible'); }, 1500);
+    });
   }
 
   async function loadVehicles() {
@@ -480,6 +552,8 @@
     }
 
     displayPeriods = inRange;
+    latestPeriod = inRange[inRange.length - 1];
+    currentPayloads = await fetchPayloads(selectedVehicle.id);
     showDashboard(inRange);
     await loadFleetComparison();
   }
@@ -496,6 +570,29 @@
     document.getElementById('empty-state').hidden = true;
     document.getElementById('dashboard-content').hidden = false;
     document.getElementById('export-csv-btn').disabled = false;
+
+    var latestPayload = latestPeriod 
+      ? findPayload(currentPayloads, latestPeriod.periodStart, latestPeriod.periodEnd) 
+      : null;
+    var emTonneEl = document.getElementById('emtonne-value');
+    var emTonneInput = document.getElementById('emtonne-payload-input');
+    if (latestPayload && latestPayload.payload_tonnes) {
+      var payloadT = parseFloat(latestPayload.payload_tonnes);
+      var latestP = periods[periods.length - 1];
+      var emPerTonneKm = payloadT > 0 ? latestP.emissionsPerKm / payloadT : null;
+      if (emPerTonneKm !== null) {
+        emTonneEl.className = 'emtonne-value';
+        emTonneEl.textContent = fmtNum(emPerTonneKm, 4) + ' kg/tonne-km';
+      } else {
+        emTonneEl.className = 'emtonne-value missing';
+        emTonneEl.textContent = 'Enter payload weight to calculate';
+      }
+      emTonneInput.value = payloadT;
+    } else {
+      emTonneEl.className = 'emtonne-value missing';
+      emTonneEl.textContent = 'Enter payload weight to calculate';
+      emTonneInput.value = '';
+    }
 
     var latest = periods[periods.length - 1];
     var totalKm = 0;
