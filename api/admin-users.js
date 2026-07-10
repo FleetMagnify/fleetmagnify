@@ -46,7 +46,10 @@ module.exports = async function handler(req, res) {
       if (!email) return res.status(400).json({ error: 'Email required' });
       const { data, error } = await supabase.auth.admin.generateLink({
         type: 'magiclink',
-        email: email
+        email: email,
+        options: {
+          redirectTo: 'https://fleetmagnify.com/home.html'
+        }
       });
       if (error) return res.status(500).json({ error: error.message });
       return res.status(200).json({ link: data.properties.action_link });

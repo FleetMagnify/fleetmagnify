@@ -155,7 +155,8 @@
     this.textContent = 'Generating link...';
     try {
       var link = await generateLink(adminSecret, email);
-      resultEl.innerHTML = '✓ Magic link generated. <a href="' + link + '" target="_blank" style="color:#0EA57A;">Open in new tab →</a><br><br><small style="color:#3A4A5C; font-size:11px;">Link expires in 60 minutes. Open in an incognito window to avoid signing out of your own account.</small>';
+      var redirectLink = link + '&redirect_to=' + encodeURIComponent('https://fleetmagnify.com/home.html');
+      resultEl.innerHTML = '✓ Magic link generated. <a href="' + redirectLink + '" target="_blank" style="color:#0EA57A;">Open in new tab →</a><br><br><small style="color:#3A4A5C; font-size:11px;">Link expires in 60 minutes. Open in an incognito window to avoid signing out of your own account.</small>';
       resultEl.classList.add('visible');
     } catch(e) {
       errEl.textContent = e.message;
