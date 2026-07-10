@@ -120,6 +120,7 @@
   .cell-overridden { color: #EF9F27; font-weight: 600; cursor: help; text-decoration: underline dotted rgba(239,159,39,0.5); text-underline-offset: 3px; }
   .cell-missing { color: #5A6474; font-style: italic; font-size: 12px; }
   .cell-amber { color: #EF9F27; font-weight: 600; cursor: help; }
+  .badge-estimate { display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #4A9EFF; background: rgba(74,158,255,0.12); border: 1px solid rgba(74,158,255,0.3); border-radius: 5px; padding: 2px 6px; margin-left: 6px; vertical-align: middle; }
   .cell-partial-suffix { font-size: 10.5px; font-weight: 600; margin-left: 4px; }
   .btn-override { background: rgba(255,255,255,0.04); border: 1px solid #2D3748; color: #9BA4B0; font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-family: inherit; transition: all 0.2s; white-space: nowrap; }
   .btn-override:hover { border-color: rgba(14,165,122,0.35); color: #0EA57A; }
@@ -445,6 +446,35 @@
     return { periods: periods, error: null };
   }
 
+  function buildEstimatedTrailingPeriod(realPeriods, mileageRows, dateTo) {
+    if (!realPeriods.length) return null;
+    var lastReal = realPeriods[realPeriods.length - 1];
+
+    var eligibleReadings = mileageRows.filter(function(r) { return r.reading_date <= dateTo; });
+    var endReading = closestReading(eligibleReadings, dateTo);
+    if (!endReading) return null;
+    if (endReading.reading_date <= lastReal.periodEnd) return null;
+
+    var startOdoReading = closestReading(mileageRows, lastReal.periodEnd);
+    if (!startOdoReading) return null;
+
+    var kmSinceLastFill = parseFloat(endReading.odometer_km) - parseFloat(startOdoReading.odometer_km);
+    if (kmSinceLastFill <= 0) return null;
+
+    var estimatedCost = lastReal.costPerKm * kmSinceLastFill;
+
+    return {
+      periodStart: lastReal.periodEnd,
+      periodEnd: endReading.reading_date,
+      litresUsed: null,
+      kmDriven: kmSinceLastFill,
+      totalCost: estimatedCost,
+      costPerKm: lastReal.costPerKm,
+      isEstimate: true,
+      estimateBasis: lastReal.periodEnd
+    };
+  }
+
   function filterPeriodsByRange(periods, dateFrom, dateTo) {
     return periods.filter(function(p) {
       return p.periodEnd >= dateFrom && p.periodEnd <= dateTo;
@@ -584,6 +614,8 @@
       return {
         periodStart: p.periodStart,
         periodEnd: p.periodEnd,
+        isEstimate: !!p.isEstimate,
+        estimateBasis: p.estimateBasis || null,
         kmDriven: p.kmDriven,
         litresUsed: p.litresUsed,
         totalCost: p.totalCost,
@@ -836,7 +868,9 @@
       return;
     }
 
-    var inRange = filterPeriodsByRange(computed.periods, dateFrom, dateTo);
+    var estimatedPeriod = buildEstimatedTrailingPeriod(computed.periods, data.mileage, dateTo);
+    var periodsWithEstimate = estimatedPeriod ? computed.periods.concat([estimatedPeriod]) : computed.periods;
+    var inRange = filterPeriodsByRange(periodsWithEstimate, dateFrom, dateTo);
     if (!inRange.length) {
       showEmpty();
       return;
@@ -862,10 +896,14 @@
 
     var latest = periods[periods.length - 1];
 
+    var estimateNote = latest.isEstimate
+      ? ' <span class="badge-estimate" title="Estimated using the fuel rate from the period ending ' + fmtDateShort(latest.estimateBasis) + '. Depreciation, maintenance, and servicing are calculated fresh, not estimated.">Estimate</span>'
+      : '';
+
     var tonneEl = document.getElementById('tonnekm-value');
     if (latest.costPerTonneKm !== null && !isNaN(latest.costPerTonneKm)) {
       tonneEl.className = 'tonnekm-value';
-      tonneEl.textContent = fmtMoney(latest.costPerTonneKm);
+      tonneEl.innerHTML = fmtMoney(latest.costPerTonneKm) + estimateNote;
     } else {
       tonneEl.className = 'tonnekm-value missing';
       tonneEl.textContent = 'Enter payload weight to calculate';
@@ -878,11 +916,11 @@
       if (latest.totalMissing && latest.totalMissing.length) {
         heroEl.className = 'hero-value partial';
         heroEl.innerHTML = fmtMoney(latest.totalPerKm) +
-          ' <span class="hero-partial-suffix">' + esc(partialTotalSuffix(latest.totalMissing)) + '</span>';
+          ' <span class="hero-partial-suffix">' + esc(partialTotalSuffix(latest.totalMissing)) + '</span>' + estimateNote;
         heroEl.title = partialTotalTooltip(latest.totalMissing);
       } else {
         heroEl.className = 'hero-value';
-        heroEl.textContent = fmtMoney(latest.totalPerKm);
+        heroEl.innerHTML = fmtMoney(latest.totalPerKm) + estimateNote;
         heroEl.removeAttribute('title');
       }
     } else {
@@ -898,6 +936,9 @@
       '<div class="hero-breakdown-item">Servicing<strong>' + (latest.servPerKm != null ? fmtMoney(latest.servPerKm) : '—') + '</strong></div>';
 
     setKpiEl('kpi-fuel', latest.fuelPerKm, latest.fuelOverride, null, false);
+    if (latest.isEstimate) {
+      document.getElementById('kpi-fuel').innerHTML += estimateNote;
+    }
     setKpiEl('kpi-depr', latest.deprPerKm, latest.deprOverride, latest.deprMissing, latest.deprLifeExceeded, latest.deprLifeNearLimit);
     setKpiEl('kpi-maint', latest.maintPerKm, latest.maintOverride, latest.maintMissing, false);
     setKpiEl('kpi-serv', latest.servPerKm, latest.servOverride, latest.servMissing, false);
@@ -969,7 +1010,9 @@
     tbody.innerHTML = periods.map(function(p, idx) {
       return '<tr>' +
         '<td class="cell-strong">' + fmtDateShort(p.periodStart) + '</td>' +
-        '<td class="cell-strong">' + fmtDateShort(p.periodEnd) + '</td>' +
+        '<td class="cell-strong">' + fmtDateShort(p.periodEnd) +
+          (p.isEstimate ? ' <span class="badge-estimate" title="Estimated using the fuel rate from the period ending ' + fmtDateShort(p.estimateBasis) + '. Depreciation, maintenance, and servicing figures are calculated fresh, not estimated.">Estimate</span>' : '') +
+        '</td>' +
         '<td>' + renderCellValue(p.fuelPerKm, p.fuelOverride, null, false) + '</td>' +
         '<td>' + renderCellValue(p.deprPerKm, p.deprOverride, p.deprMissing, false, p.deprLifeExceeded, p.deprLifeNearLimit) + '</td>' +
         '<td>' + renderCellValue(p.maintPerKm, p.maintOverride, p.maintMissing, false) + '</td>' +
