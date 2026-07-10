@@ -178,6 +178,10 @@
         <label for="trip-end">Trip End</label>
         <input type="datetime-local" id="trip-end">
       </div>
+      <div class="filter-group">
+        <label for="trip-payload">Average Payload (tonnes)</label>
+        <input type="number" step="0.1" min="0" id="trip-payload" placeholder="Optional">
+      </div>
       <button type="button" class="btn-generate" id="generate-btn" disabled>Generate Trip Report</button>
     </div>
 
@@ -192,6 +196,10 @@
         <div class="trip-dates" id="report-trip-dates"></div>
         <div class="trip-km-label">Trip Distance</div>
         <div class="trip-km-value" id="report-trip-km"></div>
+        <div class="trip-km-label" style="margin-top:18px;">Cost Per KM</div>
+        <div class="trip-km-value" id="report-cost-per-km" style="font-size:28px;"></div>
+        <div class="trip-km-label" style="margin-top:14px;">Cost Per Tonne-KM</div>
+        <div class="trip-km-value" id="report-cost-per-tonne-km" style="font-size:22px;color:#EF9F27;"></div>
       </div>
 
       <div class="total-cost-card">
@@ -594,6 +602,10 @@
       (tripServCost !== null ? tripServCost : 0);
     var tripEmissionsKg = tripFuelLitres * getEmissionFactor(selectedVehicle.fuel_type);
 
+    var payloadRaw = document.getElementById('trip-payload').value.trim();
+    var payloadTonnes = payloadRaw !== '' ? parseFloat(payloadRaw) : null;
+    if (payloadTonnes !== null && (isNaN(payloadTonnes) || payloadTonnes <= 0)) payloadTonnes = null;
+
     tripReport = {
       assetName: selectedVehicle.asset_name,
       tripRangeLabel: formatTripRange(startDt, endDt),
@@ -614,7 +626,8 @@
       emissionsKg: tripEmissionsKg,
       fillPeriod: fillData.period,
       litresPerKm: litresPerKm,
-      pricePerLitre: pricePerLitre
+      pricePerLitre: pricePerLitre,
+      payloadTonnes: payloadTonnes
     };
 
     renderReport(tripReport);
@@ -641,6 +654,15 @@
     document.getElementById('report-asset-name').textContent = r.assetName;
     document.getElementById('report-trip-dates').textContent = r.tripRangeLabel;
     document.getElementById('report-trip-km').textContent = fmtNum(r.tripKm, 1) + ' km';
+
+    var costPerKm = r.tripKm > 0 ? r.totalCost / r.tripKm : null;
+    document.getElementById('report-cost-per-km').textContent =
+      costPerKm !== null ? fmtMoney(costPerKm) + '/km' : '—';
+
+    var costPerTonneKm = (r.payloadTonnes && costPerKm !== null) ? costPerKm / r.payloadTonnes : null;
+    document.getElementById('report-cost-per-tonne-km').textContent =
+      costPerTonneKm !== null ? fmtMoney(costPerTonneKm) + '/tonne-km' : 'Enter payload to calculate';
+
     var totalEl = document.getElementById('report-total-cost');
     var partialTotal = r.deprUnavailable || r.servUnavailable;
     if (partialTotal) {
