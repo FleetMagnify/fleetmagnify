@@ -1090,6 +1090,7 @@
 
     this.disabled = false;
     currentOverrides = await fetchOverrides(selectedVehicle.id);
+    currentPayloads = await fetchPayloads(selectedVehicle.id);
     enrichedPeriods = enrichPeriods(selectedVehicle, basePeriods, currentOverrides);
     showDashboard(enrichedPeriods);
     closeOverrideModal();
