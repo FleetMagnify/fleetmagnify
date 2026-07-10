@@ -257,6 +257,7 @@
           <div class="page-eyebrow"><div class="dash"></div> Job Detail</div>
           <h1 class="page-title" id="detail-job-name">—</h1>
           <p class="page-sub" id="detail-created">—</p>
+          <p class="page-sub" id="detail-dates" style="margin-top:2px; color:#4A5568;"></p>
         </div>
         <div class="detail-actions">
           <select class="status-select" id="detail-status">
@@ -284,10 +285,31 @@
           <div class="kpi-card"><div class="kpi-label">Maintenance (operating hours)</div><div class="kpi-value" id="kpi-maintenance">—</div></div>
           <div class="kpi-card"><div class="kpi-label">Total Emissions</div><div class="kpi-value" id="kpi-emissions">—</div></div>
         </div>
-        <div class="kpi-row grand">
+        <div class="kpi-row" style="grid-template-columns: 1fr 1fr; margin-bottom: 24px;">
           <div class="kpi-card grand">
             <div class="kpi-label">Grand Total Job Cost</div>
             <div class="kpi-value" id="kpi-grand">—</div>
+          </div>
+          <div class="kpi-card" style="background: rgba(14,165,122,0.04); border-color: rgba(14,165,122,0.14);">
+            <div class="kpi-label">Cost Per Operating Hour</div>
+            <div class="kpi-value" id="kpi-cost-per-hour" style="font-size:28px; color:#0EA57A;">—</div>
+            <div style="font-size:11px; color:#3A4A5C; margin-top:6px;" id="kpi-cost-per-hour-sub"></div>
+          </div>
+        </div>
+
+        <div class="section-card" id="cost-per-tonne-card" style="background: rgba(239,159,39,0.04); border-color: rgba(239,159,39,0.16); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 24px; margin-bottom: 24px;" hidden>
+          <div>
+            <div class="kpi-label" style="color:#EF9F27;">Cost Per Tonne</div>
+            <div class="kpi-value" id="kpi-cost-per-tonne" style="font-size:28px; color:#F0F2F5;">—</div>
+            <div style="font-size:11px; color:#3A4A5C; margin-top:6px;">based on job total cost</div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px; min-width:220px;">
+            <label for="job-tonnes-input" style="font-size:11px; font-weight:600; color:#4A5568;">Total Tonnes Moved on Job</label>
+            <div style="display:flex; gap:10px; align-items:center;">
+              <input type="number" step="0.1" min="0" id="job-tonnes-input" placeholder="e.g. 4500" style="background:rgba(255,255,255,0.04); border:1px solid #2D3748; border-radius:8px; padding:9px 13px; color:#F0F2F5; font-size:14px; font-family:inherit; outline:none; width:160px;">
+              <button type="button" id="job-tonnes-save" class="btn-teal" style="padding:9px 16px; font-size:13px;">Save</button>
+              <span id="job-tonnes-status" style="font-size:11px; color:#0EA57A; opacity:0; transition:opacity 0.3s;">Saved ✓</span>
+            </div>
           </div>
         </div>
 
@@ -340,6 +362,14 @@
     <div class="form-group">
       <label for="new-job-name">Job Name</label>
       <input type="text" id="new-job-name" placeholder="e.g. Eastfield Project">
+    </div>
+    <div class="form-group">
+      <label for="new-job-start">Start Date <span style="color:#3A4A5C; font-weight:400;">(optional)</span></label>
+      <input type="date" id="new-job-start">
+    </div>
+    <div class="form-group">
+      <label for="new-job-end">End Date <span style="color:#3A4A5C; font-weight:400;">(optional)</span></label>
+      <input type="date" id="new-job-end">
     </div>
     <div class="form-group">
       <label for="new-job-status">Status</label>
@@ -397,6 +427,7 @@
   var calMonth = new Date();
   var selectedDates = new Set();
   var addAssetId = null;
+  var jobTonnes = null;
   var defaultMachineryFuelCostPerLitre = null;
 
   var DEFAULT_IDLE_RATES = {
@@ -455,7 +486,12 @@
     }
 
     var counts = {};
-    var countResult = await supabase.from('job_assets').select('job_id, asset_id').eq('user_id', currentUser.id);
+    var countResult = await supabase.from('job_assets').select('job_id, asset_id, work_date').eq('user_id', currentUser.id);
+    var daysByJob = {};
+    (countResult.data || []).forEach(function(r) {
+      daysByJob[r.job_id] = daysByJob[r.job_id] || new Set();
+      daysByJob[r.job_id].add(r.asset_id + '|' + r.work_date);
+    });
     (countResult.data || []).forEach(function(r) {
       counts[r.job_id] = counts[r.job_id] || new Set();
       counts[r.job_id].add(r.asset_id);
@@ -467,7 +503,10 @@
       return '<div class="job-card">' +
         '<div><span class="badge ' + statusClass + '">' + esc(job.status || 'Active') + '</span></div>' +
         '<h3>' + esc(job.job_name) + '</h3>' +
-        '<div class="job-meta">' + assetCount + ' asset' + (assetCount !== 1 ? 's' : '') + ' assigned</div>' +
+        '<div class="job-meta">' + assetCount + ' asset' + (assetCount !== 1 ? 's' : '') + ' assigned' +
+          (job.status ? ' · <span class="badge ' + (job.status).toLowerCase() + '">' + esc(job.status) + '</span>' : '') +
+        '</div>' +
+        (job.tonnes_moved ? '<div class="job-meta" style="margin-top:2px; color:#EF9F27;">' + Number(job.tonnes_moved).toLocaleString() + ' t moved</div>' : '') +
         '<button type="button" class="btn-secondary view-job-btn" data-id="' + job.id + '">View Job</button>' +
       '</div>';
     }).join('');
@@ -493,6 +532,19 @@
 
     document.getElementById('export-csv-btn').addEventListener('click', exportCsv);
     document.getElementById('export-pdf-btn').addEventListener('click', exportPdf);
+    document.getElementById('job-tonnes-save').addEventListener('click', async function() {
+      var val = parseFloat(document.getElementById('job-tonnes-input').value);
+      if (isNaN(val) || val <= 0) { showToast('Please enter a valid number of tonnes.', 'error'); return; }
+      if (!currentJob) return;
+      var result = await supabase.from('jobs').update({ tonnes_moved: val }).eq('id', currentJob.id).eq('user_id', currentUser.id);
+      if (result.error) { showToast(result.error.message, 'error'); return; }
+      jobTonnes = val;
+      currentJob.tonnes_moved = val;
+      await calculateCosts();
+      var status = document.getElementById('job-tonnes-status');
+      status.style.opacity = '1';
+      setTimeout(function() { status.style.opacity = '0'; }, 1500);
+    });
     document.getElementById('signout-btn').addEventListener('click', async function() {
       await supabase.auth.signOut(); window.location.href = 'login.html';
     });
@@ -514,10 +566,22 @@
     document.getElementById('detail-view').hidden = false;
     document.getElementById('detail-job-name').textContent = currentJob.job_name;
     document.getElementById('detail-created').textContent = 'Created ' + formatDateLong(currentJob.created_at);
+    var datesEl = document.getElementById('detail-dates');
+    if (currentJob.start_date || currentJob.end_date) {
+      datesEl.textContent = (currentJob.start_date ? formatDateLong(currentJob.start_date + 'T00:00:00') : 'TBC') +
+        ' → ' + (currentJob.end_date ? formatDateLong(currentJob.end_date + 'T00:00:00') : 'Ongoing');
+    } else {
+      datesEl.textContent = '';
+    }
     document.getElementById('detail-status').value = currentJob.status || 'Active';
     document.getElementById('breadcrumb').innerHTML = '<a href="home.html">Overview</a> / <a id="bc-jobs">Job Cost Analyst</a> / ' + esc(currentJob.job_name);
     document.getElementById('bc-jobs').addEventListener('click', function(e) { e.preventDefault(); showListView(); });
     document.getElementById('topbar-title').textContent = currentJob.job_name;
+    jobTonnes = currentJob.tonnes_moved != null ? parseFloat(currentJob.tonnes_moved) : null;
+    var tonnesCard = document.getElementById('cost-per-tonne-card');
+    var tonnesInput = document.getElementById('job-tonnes-input');
+    tonnesCard.hidden = false;
+    tonnesInput.value = jobTonnes !== null ? jobTonnes : '';
     await refreshJobDetail();
   }
 
@@ -814,7 +878,34 @@
     setKpiMoneyOrMissing('kpi-maintenance', totals.maint, totals.maintMissing);
     document.getElementById('kpi-emissions').textContent = (totals.emissions / 1000).toFixed(2) + ' t';
     setKpiGrandTotal('kpi-grand', totals.grand, totals.fuelMissing, totals.idleMissing, totals.deprMissing, totals.deprLifeExceeded, totals.deprLifeNearLimit, totals.servMissing, totals.maintMissing);
+    var totalOperatingHours = 0;
+    costBreakdown.forEach(function(r) {
+      var asset = allAssets.find(function(a) { return a.asset_name === r.name; });
+      if (!asset) return;
+      var assetDates = workDatesByAsset[asset.id] || [];
+      assetDates.forEach(function(d) {
+        var opHours = opMap[asset.id + '|' + d];
+        if (opHours) totalOperatingHours += opHours;
+      });
+    });
+    var costPerHourEl = document.getElementById('kpi-cost-per-hour');
+    var costPerHourSub = document.getElementById('kpi-cost-per-hour-sub');
+    if (totalOperatingHours > 0) {
+      costPerHourEl.textContent = fmtMoney(totals.grand / totalOperatingHours) + '/hr';
+      costPerHourSub.textContent = Math.round(totalOperatingHours) + ' total operating hours';
+    } else {
+      costPerHourEl.textContent = '—';
+      costPerHourSub.textContent = 'No telematics data';
+    }
     updateIdleInsightBanner(totals);
+    var tonnesCard = document.getElementById('cost-per-tonne-card');
+    var costPerTonneEl = document.getElementById('kpi-cost-per-tonne');
+    tonnesCard.hidden = false;
+    if (jobTonnes && jobTonnes > 0) {
+      costPerTonneEl.textContent = fmtMoney(totals.grand / jobTonnes) + '/t';
+    } else {
+      costPerTonneEl.textContent = '—';
+    }
 
     if (costBreakdown.length === 0) {
       document.getElementById('breakdown-tbody').innerHTML = '<tr><td colspan="8" class="empty-state">No cost data available.</td></tr>';
@@ -841,7 +932,7 @@
   }
 
   function setKpisEmpty() {
-    ['kpi-fuel','kpi-idle','kpi-depr','kpi-service','kpi-maintenance','kpi-emissions','kpi-grand'].forEach(function(id) {
+    ['kpi-fuel','kpi-idle','kpi-depr','kpi-service','kpi-maintenance','kpi-emissions','kpi-grand','kpi-cost-per-hour'].forEach(function(id) {
       var el = document.getElementById(id);
       el.className = 'kpi-value';
       el.removeAttribute('title');
@@ -893,6 +984,8 @@
 
   function openCreateModal() {
     document.getElementById('new-job-name').value = '';
+    document.getElementById('new-job-start').value = '';
+    document.getElementById('new-job-end').value = '';
     document.getElementById('new-job-status').value = 'Active';
     document.getElementById('create-job-error').classList.remove('visible');
     document.getElementById('create-job-modal').classList.add('open');
@@ -906,7 +999,9 @@
     if (!name) { errEl.textContent = 'Please enter a job name.'; errEl.classList.add('visible'); return; }
     var btn = document.getElementById('save-create-job');
     btn.disabled = true; btn.textContent = 'Creating...';
-    var result = await supabase.from('jobs').insert({ user_id: currentUser.id, job_name: name, status: status }).select().single();
+    var startDate = document.getElementById('new-job-start').value || null;
+    var endDate = document.getElementById('new-job-end').value || null;
+    var result = await supabase.from('jobs').insert({ user_id: currentUser.id, job_name: name, status: status, start_date: startDate, end_date: endDate }).select().single();
     btn.disabled = false; btn.textContent = 'Create Job';
     if (result.error) { errEl.textContent = result.error.message; errEl.classList.add('visible'); return; }
     closeCreateModal();
