@@ -174,6 +174,7 @@
   .cal-day.empty { cursor: default; }
   .cal-day.other-month { opacity: 0.25; cursor: default; }
   .cal-day.selected { background: rgba(14,165,122,0.18); border-color: rgba(14,165,122,0.35); color: #0EA57A; font-weight: 700; }
+  .cal-day.drag-preview { background: rgba(14,165,122,0.10); border-color: rgba(14,165,122,0.22); }
   .cal-hint { font-size: 11.5px; color: #4A5568; margin-top: 10px; line-height: 1.5; }
 
   .toast { position: fixed; bottom: 28px; right: 28px; z-index: 200; background: rgba(10,16,26,0.98); border: 1px solid #2D3748; border-radius: 12px; padding: 14px 20px; font-size: 13.5px; color: #C8D0DB; transform: translateY(80px); opacity: 0; transition: all 0.3s; pointer-events: none; max-width: 360px; }
@@ -937,6 +938,8 @@
     renderCalendar();
   }
 
+  var dragState = null; // { startDate, selecting }
+
   function renderCalendar() {
     var el = document.getElementById('work-calendar');
     var year = calMonth.getFullYear();
@@ -947,7 +950,7 @@
     var monthLabel = firstDay.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
 
     var html = '<div class="cal-header"><button type="button" class="cal-nav" id="cal-prev">‹</button><span>' + monthLabel + '</span><button type="button" class="cal-nav" id="cal-next">›</button></div>';
-    html += '<div class="cal-grid">';
+    html += '<div class="cal-grid" id="cal-grid" style="user-select:none;">';
     ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(function(d) { html += '<div class="cal-dow">' + d + '</div>'; });
     for (var i = 0; i < startDow; i++) html += '<div class="cal-day empty"></div>';
     for (var day = 1; day <= daysInMonth; day++) {
@@ -956,16 +959,76 @@
       html += '<div class="cal-day' + sel + '" data-date="' + dateStr + '">' + day + '</div>';
     }
     html += '</div>';
+    html += '<p class="cal-hint">Click a day to toggle it. Click and drag across multiple days to select or deselect a range.</p>';
     el.innerHTML = html;
 
-    document.getElementById('cal-prev').addEventListener('click', function() { calMonth.setMonth(calMonth.getMonth() - 1); renderCalendar(); });
-    document.getElementById('cal-next').addEventListener('click', function() { calMonth.setMonth(calMonth.getMonth() + 1); renderCalendar(); });
-    el.querySelectorAll('.cal-day[data-date]').forEach(function(cell) {
-      cell.addEventListener('click', function() {
+    document.getElementById('cal-prev').addEventListener('click', function() {
+      calMonth.setMonth(calMonth.getMonth() - 1); renderCalendar();
+    });
+    document.getElementById('cal-next').addEventListener('click', function() {
+      calMonth.setMonth(calMonth.getMonth() + 1); renderCalendar();
+    });
+
+    var grid = document.getElementById('cal-grid');
+
+    function dateFromCell(cell) {
+      return cell && cell.dataset && cell.dataset.date ? cell.dataset.date : null;
+    }
+
+    function applyDragTo(date) {
+      if (!dragState || !date) return;
+      var start = dragState.startDate;
+      var end = date;
+      if (end < start) { var tmp = start; start = end; end = tmp; }
+      grid.querySelectorAll('.cal-day[data-date]').forEach(function(cell) {
         var d = cell.dataset.date;
-        if (selectedDates.has(d)) selectedDates.delete(d); else selectedDates.add(d);
-        renderCalendar();
+        if (d >= start && d <= end) {
+          if (dragState.selecting) {
+            selectedDates.add(d);
+            cell.classList.add('selected');
+          } else {
+            selectedDates.delete(d);
+            cell.classList.remove('selected');
+          }
+        }
       });
+    }
+
+    grid.addEventListener('mousedown', function(e) {
+      var cell = e.target.closest('.cal-day[data-date]');
+      var date = dateFromCell(cell);
+      if (!date) return;
+      e.preventDefault();
+      var selecting = !selectedDates.has(date);
+      dragState = { startDate: date, selecting: selecting };
+      if (selecting) { selectedDates.add(date); cell.classList.add('selected'); }
+      else { selectedDates.delete(date); cell.classList.remove('selected'); }
+    });
+
+    grid.addEventListener('mouseover', function(e) {
+      if (!dragState) return;
+      var cell = e.target.closest('.cal-day[data-date]');
+      var date = dateFromCell(cell);
+      if (!date) return;
+      // Reset all days to their pre-drag state, then reapply drag range
+      grid.querySelectorAll('.cal-day[data-date]').forEach(function(c) {
+        if (selectedDates.has(c.dataset.date)) c.classList.add('selected');
+        else c.classList.remove('selected');
+      });
+      applyDragTo(date);
+    });
+
+    grid.addEventListener('mouseup', function(e) {
+      if (!dragState) return;
+      var cell = e.target.closest('.cal-day[data-date]');
+      var date = dateFromCell(cell);
+      if (date) applyDragTo(date);
+      dragState = null;
+    });
+
+    document.addEventListener('mouseup', function clearDrag() {
+      if (dragState) dragState = null;
+      document.removeEventListener('mouseup', clearDrag);
     });
   }
 
