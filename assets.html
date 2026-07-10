@@ -280,6 +280,9 @@
   .incomplete-profile-banner.visible { display: flex; }
   .incomplete-profile-banner a { color: #EF9F27; font-weight: 600; text-decoration: none; }
   .incomplete-profile-banner a:hover { text-decoration: underline; }
+  .fab-download { display: none; position: fixed; bottom: 32px; right: 32px; z-index: 90; background: #EF9F27; border: none; color: #080C12; font-size: 13px; font-weight: 700; padding: 14px 22px; border-radius: 100px; cursor: pointer; font-family: inherit; box-shadow: 0 4px 24px rgba(239,159,39,0.35); transition: all 0.2s; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .fab-download:hover { background: #F5B042; transform: translateY(-1px); box-shadow: 0 6px 28px rgba(239,159,39,0.45); }
+  .fab-download.visible { display: flex; }
   .profile-incomplete-badge {
     display: inline-flex;
     align-items: center;
@@ -522,6 +525,9 @@
       </div>
     </div>
   </div>
+    <button type="button" class="fab-download" id="fab-download-btn">
+      📋 Complete Asset Profiles
+    </button>
 </div>
 
 <div class="modal-overlay" id="add-modal">
@@ -1271,6 +1277,7 @@
     var text = document.getElementById('incomplete-profile-banner-text');
     if (stubs.length === 0) {
       banner.classList.remove('visible');
+      document.getElementById('fab-download-btn').classList.remove('visible');
       incompleteFilterActive = false;
       return;
     }
@@ -1282,6 +1289,7 @@
       text.innerHTML = 'You have ' + count + ' ' + assetWord + ' with incomplete profiles. Complete their details to enable full cost calculations. <a href="#" id="incomplete-filter-link">Show incomplete only</a>';
     }
     banner.classList.add('visible');
+    document.getElementById('fab-download-btn').classList.add('visible');
     document.getElementById('incomplete-filter-link').addEventListener('click', function(e) {
       e.preventDefault();
       incompleteFilterActive = !incompleteFilterActive;
@@ -2301,6 +2309,15 @@
       return;
     }
     buildExcelTemplate();
+  });
+
+  document.getElementById('fab-download-btn').addEventListener('click', function() {
+    if (typeof XLSX === 'undefined') {
+      showToast('Excel library failed to load. Please refresh the page.', 'error');
+      return;
+    }
+    buildExcelTemplate();
+    showToast('Template downloaded — fill in the yellow columns and re-upload', 'success');
   });
 
   var excelInput = document.getElementById('excel-file-input');
