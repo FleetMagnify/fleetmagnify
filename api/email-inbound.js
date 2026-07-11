@@ -161,7 +161,7 @@ async function sendFailureAlert(filename, errorMessage, userId) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: 'onboarding@resend.dev',
+        from: 'alerts@fleetmagnify.com',
         to: 'fleetmagnify@gmail.com',
         subject: '⚠️ FleetMagnify Import Failed: ' + (filename || 'unknown file'),
         html: '<p><strong>Import failed</strong></p>' +
