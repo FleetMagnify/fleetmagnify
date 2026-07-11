@@ -56,6 +56,7 @@
   .btn-link:hover { color: #0BC48E; }
 
   .jobs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .jobs-grid-inner { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
   .job-card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 14px; }
   .job-card h3 { font-size: 17px; font-weight: 700; color: #D8DFE8; letter-spacing: -0.3px; }
   .job-meta { font-size: 13px; color: #5A6474; }
@@ -188,6 +189,34 @@
     .idle-insight-hours, .idle-insight-cost { font-size: 28px; }
     .idle-insight-banner { padding: 18px 20px; }
   }
+
+  .jobs-toolbar { display: flex; align-items: center; gap: 10px; 
+    margin-bottom: 20px; flex-wrap: wrap; }
+  .jobs-search { display: flex; align-items: center; gap: 8px; 
+    background: rgba(255,255,255,0.03); border: 1px solid #2D3748; 
+    border-radius: 8px; padding: 7px 12px; flex: 1; min-width: 200px; }
+  .jobs-search input { background: none; border: none; outline: none; 
+    font-size: 13px; color: #C8D0DB; font-family: inherit; width: 100%; }
+  .jobs-search input::placeholder { color: #2E3A4A; }
+  .jobs-filter-btn { padding: 7px 14px; border-radius: 8px; border: 1px solid #2D3748; 
+    background: none; color: #6B7785; font-size: 12.5px; font-weight: 600; 
+    cursor: pointer; font-family: inherit; transition: all 0.15s; }
+  .jobs-filter-btn.active { background: rgba(14,165,122,0.12); 
+    border-color: rgba(14,165,122,0.35); color: #0EA57A; }
+  .jobs-section-label { font-size: 11px; font-weight: 700; letter-spacing: 0.09em; 
+    text-transform: uppercase; color: #3A4A5C; margin: 24px 0 12px; }
+  .btn-delete-job { background: none; border: 1px solid transparent; 
+    color: #3A4A5C; font-size: 11px; font-weight: 500; padding: 4px 8px; 
+    border-radius: 6px; cursor: pointer; transition: all 0.2s; 
+    font-family: inherit; margin-top: 6px; }
+  .btn-delete-job:hover { border-color: rgba(226,75,74,0.3); 
+    color: #F0A8A7; background: rgba(226,75,74,0.08); }
+  .confirm-modal { max-width: 400px; text-align: center; }
+  .confirm-icon { font-size: 36px; margin-bottom: 14px; }
+  .confirm-modal h2 { font-size: 20px; font-weight: 800; color: #F0F2F5; margin-bottom: 8px; }
+  .confirm-modal .modal-sub { margin-bottom: 24px; }
+  .btn-danger { flex: 2; background: rgba(226,75,74,0.15); border: 1px solid rgba(226,75,74,0.30); color: #F0A8A7; font-size: 14px; font-weight: 700; padding: 12px; border-radius: 9px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-danger:hover { background: rgba(226,75,74,0.25); }
 </style>
 </head>
 <body>
@@ -245,7 +274,19 @@
         </div>
         <button type="button" class="btn-teal" id="create-job-btn">+ Create New Job</button>
       </div>
-      <div class="jobs-grid" id="jobs-grid">
+      <div class="jobs-toolbar">
+        <div class="jobs-search">
+          <span style="color:#3A4A5C;">🔍</span>
+          <input type="text" id="jobs-search-input" placeholder="Search jobs...">
+        </div>
+        <button type="button" class="jobs-filter-btn active" 
+          data-filter="active" id="filter-active-btn">Active</button>
+        <button type="button" class="jobs-filter-btn" 
+          data-filter="all" id="filter-all-btn">All Jobs</button>
+        <button type="button" class="jobs-filter-btn" 
+          data-filter="archived" id="filter-archived-btn">Archived</button>
+      </div>
+      <div id="jobs-grid">
         <div class="empty-state"><span class="icon">🏗</span>Loading jobs...</div>
       </div>
     </div>
@@ -350,6 +391,21 @@
         </div>
       </div>
     </div>
+
+      <div class="modal-overlay" id="delete-job-modal">
+        <div class="modal confirm-modal">
+          <div class="confirm-icon">🗑️</div>
+          <h2>Delete Job?</h2>
+          <p class="modal-sub">This will permanently delete the job and all 
+            its asset assignments and cost data. This cannot be undone.</p>
+          <div class="modal-actions">
+            <button type="button" class="btn-cancel" 
+              id="delete-job-cancel">Cancel</button>
+            <button type="button" class="btn-danger" 
+              id="delete-job-confirm">Yes, Delete Job</button>
+          </div>
+        </div>
+      </div>
   </div>
 </div>
 
@@ -420,6 +476,9 @@
   var companyName = '';
   var allAssets = [];
   var allJobs = [];
+  var jobsFilter = 'active';
+  var jobsSearch = '';
+  var pendingDeleteJobId = null;
   var currentJob = null;
   var jobAssignments = [];
   var costBreakdown = [];
@@ -480,13 +539,12 @@
 
   async function renderJobsList() {
     var grid = document.getElementById('jobs-grid');
-    if (allJobs.length === 0) {
-      grid.innerHTML = '<div class="empty-state"><span class="icon">🏗</span>No jobs yet. Create your first job to start tracking project costs.</div>';
-      return;
-    }
 
     var counts = {};
-    var countResult = await supabase.from('job_assets').select('job_id, asset_id, work_date').eq('user_id', currentUser.id);
+    var countResult = await supabase
+      .from('job_assets')
+      .select('job_id, asset_id, work_date')
+      .eq('user_id', currentUser.id);
     var daysByJob = {};
     (countResult.data || []).forEach(function(r) {
       daysByJob[r.job_id] = daysByJob[r.job_id] || new Set();
@@ -497,27 +555,146 @@
       counts[r.job_id].add(r.asset_id);
     });
 
-    grid.innerHTML = allJobs.map(function(job) {
+    var filtered = allJobs.filter(function(job) {
+      var status = (job.status || 'Active').toLowerCase();
+      var matchesFilter = jobsFilter === 'all' ? true :
+        jobsFilter === 'archived' ? status === 'archived' :
+        status !== 'archived';
+      var matchesSearch = jobsSearch === '' ||
+        job.job_name.toLowerCase().indexOf(jobsSearch) !== -1;
+      return matchesFilter && matchesSearch;
+    });
+
+    if (filtered.length === 0) {
+      var msg = jobsSearch ? 'No jobs match your search.' :
+        jobsFilter === 'archived' ? 'No archived jobs.' :
+        'No active jobs. Create your first job to start tracking costs.';
+      grid.innerHTML = '<div class="empty-state"><span class="icon">🏗</span>' + msg + '</div>';
+      return;
+    }
+
+    var activeJobs = filtered.filter(function(j) { 
+      return (j.status || 'Active').toLowerCase() !== 'archived'; 
+    });
+    var archivedJobs = filtered.filter(function(j) { 
+      return (j.status || 'Active').toLowerCase() === 'archived'; 
+    });
+
+    function renderJobCard(job) {
       var assetCount = counts[job.id] ? counts[job.id].size : 0;
       var statusClass = (job.status || 'Active').toLowerCase();
+      var dateRange = '';
+      if (job.start_date || job.end_date) {
+        dateRange = '<div class="job-meta" style="color:#4A5568; margin-top:2px;">' +
+          (job.start_date || 'TBC') + ' → ' + (job.end_date || 'Ongoing') + '</div>';
+      }
       return '<div class="job-card">' +
-        '<div><span class="badge ' + statusClass + '">' + esc(job.status || 'Active') + '</span></div>' +
+        '<div><span class="badge ' + statusClass + '">' + 
+          esc(job.status || 'Active') + '</span></div>' +
         '<h3>' + esc(job.job_name) + '</h3>' +
-        '<div class="job-meta">' + assetCount + ' asset' + (assetCount !== 1 ? 's' : '') + ' assigned' +
-          (job.status ? ' · <span class="badge ' + (job.status).toLowerCase() + '">' + esc(job.status) + '</span>' : '') +
+        '<div class="job-meta">' + assetCount + ' asset' + 
+          (assetCount !== 1 ? 's' : '') + ' assigned</div>' +
+        dateRange +
+        (job.tonnes_moved ? '<div class="job-meta" style="margin-top:2px; color:#EF9F27;">' + 
+          Number(job.tonnes_moved).toLocaleString() + ' t moved</div>' : '') +
+        '<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">' +
+          '<button type="button" class="btn-secondary view-job-btn" ' +
+            'data-id="' + job.id + '">View Job</button>' +
+          '<button type="button" class="btn-delete-job delete-job-btn" ' +
+            'data-id="' + job.id + '">🗑 Delete</button>' +
         '</div>' +
-        (job.tonnes_moved ? '<div class="job-meta" style="margin-top:2px; color:#EF9F27;">' + Number(job.tonnes_moved).toLocaleString() + ' t moved</div>' : '') +
-        '<button type="button" class="btn-secondary view-job-btn" data-id="' + job.id + '">View Job</button>' +
       '</div>';
-    }).join('');
+    }
+
+    var html = '';
+    if (jobsFilter === 'all' && activeJobs.length && archivedJobs.length) {
+      html += '<div class="jobs-section-label">Active Jobs</div>';
+      html += '<div class="jobs-grid-inner">' + 
+        activeJobs.map(renderJobCard).join('') + '</div>';
+      html += '<div class="jobs-section-label">Archived Jobs</div>';
+      html += '<div class="jobs-grid-inner">' + 
+        archivedJobs.map(renderJobCard).join('') + '</div>';
+    } else {
+      html += '<div class="jobs-grid-inner">' + 
+        filtered.map(renderJobCard).join('') + '</div>';
+    }
+
+    grid.innerHTML = html;
 
     grid.querySelectorAll('.view-job-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() { openJobDetail(Number(btn.dataset.id)); });
+      btn.addEventListener('click', function() { 
+        openJobDetail(Number(btn.dataset.id)); 
+      });
     });
+
+    grid.querySelectorAll('.delete-job-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        pendingDeleteJobId = Number(btn.dataset.id);
+        document.getElementById('delete-job-modal').classList.add('open');
+      });
+    });
+  }
+
+  async function deleteJob(jobId) {
+    var deleteAssignments = await supabase
+      .from('job_assets')
+      .delete()
+      .eq('job_id', jobId)
+      .eq('user_id', currentUser.id);
+    if (deleteAssignments.error) {
+      showToast('Failed to delete job assignments: ' + 
+        deleteAssignments.error.message, 'error');
+      return false;
+    }
+    var jobDeleteResult = await supabase
+      .from('jobs')
+      .delete()
+      .eq('id', jobId)
+      .eq('user_id', currentUser.id);
+    if (jobDeleteResult.error) {
+      showToast('Failed to delete job: ' + jobDeleteResult.error.message, 'error');
+      return false;
+    }
+    return true;
   }
 
   function bindUI() {
     document.getElementById('create-job-btn').addEventListener('click', openCreateModal);
+
+    document.getElementById('jobs-search-input').addEventListener('input', function() {
+      jobsSearch = this.value.trim().toLowerCase();
+      renderJobsList();
+    });
+
+    ['filter-active-btn', 'filter-all-btn', 'filter-archived-btn'].forEach(function(id) {
+      document.getElementById(id).addEventListener('click', function() {
+        jobsFilter = this.dataset.filter;
+        document.querySelectorAll('.jobs-filter-btn').forEach(function(b) { 
+          b.classList.remove('active'); 
+        });
+        this.classList.add('active');
+        renderJobsList();
+      });
+    });
+
+    document.getElementById('delete-job-cancel').addEventListener('click', function() {
+      pendingDeleteJobId = null;
+      document.getElementById('delete-job-modal').classList.remove('open');
+    });
+
+    document.getElementById('delete-job-confirm').addEventListener('click', async function() {
+      if (!pendingDeleteJobId) return;
+      var jobId = pendingDeleteJobId;
+      pendingDeleteJobId = null;
+      document.getElementById('delete-job-modal').classList.remove('open');
+      var ok = await deleteJob(jobId);
+      if (ok) {
+        allJobs = allJobs.filter(function(j) { return j.id !== jobId; });
+        showToast('Job deleted.', 'success');
+        renderJobsList();
+      }
+    });
+
     document.getElementById('cancel-create-job').addEventListener('click', closeCreateModal);
     document.getElementById('save-create-job').addEventListener('click', saveNewJob);
     document.getElementById('create-job-modal').addEventListener('click', function(e) { if (e.target === this) closeCreateModal(); });
