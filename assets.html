@@ -744,6 +744,7 @@
 <script src="js/subscription-guard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
 <script src="js/fleet-cost-model.js"></script>
 <script>
 (function() {
@@ -1866,9 +1867,9 @@
   var MACHINERY_SHEET = 'Machinery';
   var TRUCKS_SHEET = 'Trucks';
   var MACHINERY_COLUMNS = [
-    'asset_name', 'asset_type', 'make', 'model', 'year', 'fuel_type', 'registration',
+    'asset_name', 'asset_type', 'make', 'model', 'year', 'fuel_type',
     'idle_burn_rate_lph', 'current_value', 'estimated_end_of_life_value', 'estimated_annual_repair_cost',
-    'expected_life_hours', 'service_cost_per_hour', 'available_hours_per_week', 'target_utilisation_percent'
+    'expected_life_hours', 'current_hours', 'service_cost_per_hour', 'available_hours_per_week', 'target_utilisation_percent'
   ];
   var TRUCKS_COLUMNS = [
     'asset_name', 'asset_type', 'make', 'model', 'year', 'fuel_type', 'registration',
@@ -1883,7 +1884,7 @@
   var EDITABLE_IMPORT_FIELDS = [
     'asset_name', 'asset_type', 'make', 'model', 'year', 'fuel_type', 'registration',
     'idle_burn_rate_lph', 'current_value', 'estimated_end_of_life_value', 'estimated_annual_repair_cost',
-    'expected_life_hours', 'service_cost_per_hour', 'available_hours_per_week', 'target_utilisation_percent',
+    'expected_life_hours', 'current_hours', 'service_cost_per_hour', 'available_hours_per_week', 'target_utilisation_percent',
     'expected_life_km', 'service_cost_per_km', 'current_odometer', 'estimated_annual_km'
   ];
   var IMPORT_FIELD_LABELS = {
@@ -1894,7 +1895,8 @@
     service_cost_per_hour: 'Service Cost / hour', available_hours_per_week: 'Available Hours / week',
     target_utilisation_percent: 'Target Utilisation %', expected_life_km: 'Expected Life (km)',
     service_cost_per_km: 'Service Cost / km', current_odometer: 'Current Odometer',
-    estimated_annual_km: 'Estimated Annual km'
+    estimated_annual_km: 'Estimated Annual km',
+    current_hours: 'Current Hours'
   };
 
   function hasCellValue(row, key) {
@@ -1925,50 +1927,129 @@
     });
   }
 
-  function buildExcelTemplate() {
-    var wb = XLSX.utils.book_new();
+  async function buildExcelTemplate() {
+    if (typeof ExcelJS === 'undefined') {
+      showToast('Excel library failed to load. Please refresh the page.', 'error');
+      return;
+    }
+
+    var wb = new ExcelJS.Workbook();
     var machineryAssets = allAssets.filter(function(a) { return !isOnRoadType(a.asset_type); });
     var truckAssets = allAssets.filter(function(a) { return isOnRoadType(a.asset_type); });
-    var machineryHeaders = getTemplateHeaders(false);
-    var trucksHeaders = getTemplateHeaders(true);
+
     var FILL_IN_COLUMNS = [
-      'purchase_price', 'current_value', 'estimated_end_of_life_value',
-      'estimated_annual_repair_cost', 'expected_life_hours', 'service_cost_per_hour',
-      'available_hours_per_week', 'target_utilisation_percent', 'expected_life_km',
-      'service_cost_per_km', 'current_odometer', 'estimated_annual_km',
-      'idle_burn_rate_lph'
+      'current_value', 'estimated_end_of_life_value', 'estimated_annual_repair_cost',
+      'expected_life_hours', 'current_hours', 'service_cost_per_hour',
+      'available_hours_per_week', 'target_utilisation_percent',
+      'idle_burn_rate_lph', 'expected_life_km', 'service_cost_per_km',
+      'current_odometer', 'estimated_annual_km'
     ];
 
-    var displayMachineryHeaders = machineryHeaders.map(function(h) {
-      return FILL_IN_COLUMNS.indexOf(h) !== -1 ? '▶ ' + h : h;
-    });
-    var displayTrucksHeaders = trucksHeaders.map(function(h) {
-      return FILL_IN_COLUMNS.indexOf(h) !== -1 ? '▶ ' + h : h;
-    });
+    var GREY_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8ECEF' } };
+    var YELLOW_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3CD' } };
+    var HEADER_BORDER = {
+      top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+      bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+      left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+      right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+    };
 
-    var machineryData = [
-      ['▶ = fill in required · ' + MACHINERY_TYPE_NOTE + ' · ' + ASSET_ID_NOTE],
-      displayMachineryHeaders
-    ];
-    var trucksData = [
-      ['▶ = fill in required · ' + TRUCKS_TYPE_NOTE + ' · ' + ASSET_ID_NOTE],
-      displayTrucksHeaders
-    ];
+    function buildSheet(sheetName, headers, assets, typeNote, exampleRow) {
+      var ws = wb.addWorksheet(sheetName);
 
-    if (machineryAssets.length) {
-      machineryAssets.forEach(function(a) { machineryData.push(assetToTemplateValues(a, machineryHeaders)); });
-    } else {
-      machineryData.push(['', 'CAT 390F Excavator', 'Excavator', 'Caterpillar', '390F', 2021, 'Diesel', 'SITE-001', 4.0, 220000, 25000, 12000, 20000, 7.20, 40, 75]);
+      // Row 1: instructions
+      ws.addRow([typeNote + ' · ' + ASSET_ID_NOTE]);
+      var instrCell = ws.getCell('A1');
+      instrCell.font = { italic: true, size: 10, color: { argb: 'FF888888' } };
+      ws.mergeCells(1, 1, 1, headers.length);
+
+      // Row 2: column headers
+      var headerRow = ws.addRow(headers);
+      headerRow.eachCell(function(cell, colNumber) {
+        var col = headers[colNumber - 1];
+        var isFillIn = FILL_IN_COLUMNS.indexOf(col) !== -1;
+        cell.fill = isFillIn ? YELLOW_FILL : GREY_FILL;
+        cell.font = { bold: true, size: 10, color: { argb: isFillIn ? 'FF7C5400' : 'FF444444' } };
+        cell.border = HEADER_BORDER;
+        cell.alignment = { wrapText: true, vertical: 'middle' };
+      });
+      ws.getRow(2).height = 32;
+
+      // Data rows
+      if (assets.length) {
+        assets.forEach(function(asset) {
+          var values = headers.map(function(col) {
+            if (col === 'asset_id') return asset.id;
+            var v = asset[col];
+            return v == null ? '' : v;
+          });
+          var dataRow = ws.addRow(values);
+          dataRow.eachCell(function(cell, colNumber) {
+            var col = headers[colNumber - 1];
+            var isFillIn = FILL_IN_COLUMNS.indexOf(col) !== -1;
+            if (col === 'asset_id') {
+              cell.fill = GREY_FILL;
+              cell.font = { color: { argb: 'FF888888' }, size: 11 };
+            } else if (isFillIn && (cell.value === '' || cell.value == null)) {
+              cell.fill = YELLOW_FILL;
+            }
+            cell.border = HEADER_BORDER;
+          });
+        });
+      } else {
+        var exRow = ws.addRow(exampleRow);
+        exRow.eachCell(function(cell, colNumber) {
+          var col = headers[colNumber - 1];
+          var isFillIn = FILL_IN_COLUMNS.indexOf(col) !== -1;
+          if (isFillIn) cell.fill = YELLOW_FILL;
+          cell.border = HEADER_BORDER;
+          cell.font = { italic: true, color: { argb: 'FFAAAAAA' }, size: 11 };
+        });
+      }
+
+      // Column widths
+      headers.forEach(function(col, idx) {
+        var colObj = ws.getColumn(idx + 1);
+        if (col === 'asset_id') colObj.width = 10;
+        else if (col === 'asset_name') colObj.width = 28;
+        else if (col === 'asset_type') colObj.width = 18;
+        else if (['make', 'model', 'fuel_type'].indexOf(col) !== -1) colObj.width = 14;
+        else if (col === 'registration') colObj.width = 14;
+        else colObj.width = 20;
+      });
+
+      ws.views = [{ state: 'frozen', ySplit: 2 }];
     }
-    if (truckAssets.length) {
-      truckAssets.forEach(function(a) { trucksData.push(assetToTemplateValues(a, trucksHeaders)); });
-    } else {
-      trucksData.push(['', 'Kenworth T610', 'Rigid Truck', 'Kenworth', 'T610', 2022, 'Diesel', 'XYZ789', 2.5, 145000, 18000, 15000, 800000, 0.08, 185000, 80000]);
-    }
 
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(machineryData), MACHINERY_SHEET);
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(trucksData), TRUCKS_SHEET);
-    XLSX.writeFile(wb, 'FleetMagnify_Asset_Import_Template.xlsx');
+    var machineryHeaders = ['asset_id'].concat(MACHINERY_COLUMNS);
+    var trucksHeaders = ['asset_id'].concat(TRUCKS_COLUMNS);
+
+    buildSheet(
+      MACHINERY_SHEET,
+      machineryHeaders,
+      machineryAssets,
+      'Valid asset_type values: Excavator, Dump Truck, Wheel Loader, Motor Grader, Bulldozer, Crane, Forklift, Water Truck, Other',
+      ['', 'CAT 390F Excavator', 'Excavator', 'Caterpillar', '390F', 2021, 'Diesel', 4.0, 220000, 25000, 12000, 20000, 4500, 7.20, 40, 75]
+    );
+
+    buildSheet(
+      TRUCKS_SHEET,
+      trucksHeaders,
+      truckAssets,
+      'Valid asset_type values: Light Vehicle, Rigid Truck, Semi Trailer',
+      ['', 'Kenworth T610', 'Rigid Truck', 'Kenworth', 'T610', 2022, 'Diesel', 'XYZ789', 2.5, 145000, 18000, 15000, 0.08, 450000, 80000]
+    );
+
+    var buffer = await wb.xlsx.writeBuffer();
+    var blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'FleetMagnify_Asset_Import_Template.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
   }
 
   function parseImportNumber(raw) {
@@ -2000,6 +2081,7 @@
       estimated_end_of_life_value: parseImportNumber(row.estimated_end_of_life_value),
       estimated_annual_repair_cost: parseImportNumber(row.estimated_annual_repair_cost),
       expected_life_hours: null,
+      current_hours: null,
       service_cost_per_hour: null,
       available_hours_per_week: null,
       target_utilisation_percent: null,
@@ -2015,6 +2097,7 @@
       rec.estimated_annual_km = parseImportNumber(row.estimated_annual_km);
     } else {
       rec.expected_life_hours = parseImportNumber(row.expected_life_hours);
+      rec.current_hours = parseImportNumber(row.current_hours);
       rec.service_cost_per_hour = parseImportNumber(row.service_cost_per_hour);
       rec.available_hours_per_week = parseImportNumber(row.available_hours_per_week);
       rec.target_utilisation_percent = parseImportNumber(row.target_utilisation_percent);
@@ -2324,21 +2407,21 @@
     document.getElementById('import-results').classList.remove('visible');
   }
 
-  document.getElementById('download-template-btn').addEventListener('click', function() {
-    if (typeof XLSX === 'undefined') {
+  document.getElementById('download-template-btn').addEventListener('click', async function() {
+    if (typeof ExcelJS === 'undefined') {
       showToast('Excel library failed to load. Please refresh the page.', 'error');
       return;
     }
-    buildExcelTemplate();
+    await buildExcelTemplate();
   });
 
-  document.getElementById('fab-download-btn').addEventListener('click', function() {
-    if (typeof XLSX === 'undefined') {
+  document.getElementById('fab-download-btn').addEventListener('click', async function() {
+    if (typeof ExcelJS === 'undefined') {
       showToast('Excel library failed to load. Please refresh the page.', 'error');
       return;
     }
-    buildExcelTemplate();
-    showToast('Template downloaded — fill in the ▶ columns and re-upload via Import Excel', 'success');
+    await buildExcelTemplate();
+    showToast('Template downloaded — fill in the yellow columns and re-upload via Import Excel', 'success');
   });
 
   var excelInput = document.getElementById('excel-file-input');
