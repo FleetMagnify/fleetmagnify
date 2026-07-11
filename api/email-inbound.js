@@ -150,6 +150,32 @@ function createSupabaseClient() {
   });
 }
 
+async function sendFailureAlert(filename, errorMessage, userId) {
+  var apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return;
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: 'onboarding@resend.dev',
+        to: 'fleetmagnify@gmail.com',
+        subject: '⚠️ FleetMagnify Import Failed: ' + (filename || 'unknown file'),
+        html: '<p><strong>Import failed</strong></p>' +
+          '<p><strong>File:</strong> ' + (filename || 'unknown') + '</p>' +
+          '<p><strong>Error:</strong> ' + errorMessage + '</p>' +
+          '<p><strong>User ID:</strong> ' + userId + '</p>' +
+          '<p>Check the email_imports table in Supabase for details.</p>'
+      })
+    });
+  } catch (alertErr) {
+    console.error('email-inbound: failed to send alert email', alertErr.message);
+  }
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -248,6 +274,11 @@ module.exports = async function handler(req, res) {
             attachment.filename,
             parseErr.message
           );
+          await sendFailureAlert(
+            attachment.filename,
+            parseErr.message,
+            userResult.data.user_id
+          );
         }
       } else if (isBpCsv(rawCsv)) {
         try {
@@ -267,6 +298,11 @@ module.exports = async function handler(req, res) {
             'email-inbound: BP parse failed',
             attachment.filename,
             bpErr.message
+          );
+          await sendFailureAlert(
+            attachment.filename,
+            bpErr.message,
+            userResult.data.user_id
           );
         }
       } else {
