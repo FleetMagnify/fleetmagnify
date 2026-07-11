@@ -137,6 +137,24 @@
         </form>
       </div>
     </div>
+
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-tag">💳 Billing</div>
+        <div class="section-title">Subscription & Billing</div>
+        <div class="section-desc">Manage your subscription, update your 
+          payment method, or download past invoices via the Stripe 
+          customer portal.</div>
+      </div>
+      <div class="section-body">
+        <button type="button" class="btn-save" id="manage-billing-btn">
+          Manage Billing →
+        </button>
+        <p class="form-hint" style="margin-top:10px;">
+          Opens Stripe's secure billing portal in a new tab.
+        </p>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -256,6 +274,35 @@
   }
 
   init();
+
+  document.getElementById('manage-billing-btn').addEventListener('click', 
+    async function() {
+      var btn = document.getElementById('manage-billing-btn');
+      btn.disabled = true;
+      btn.textContent = 'Loading...';
+      try {
+        var sessionResult = await supabase.auth.getSession();
+        var token = sessionResult.data.session 
+          ? sessionResult.data.session.access_token : null;
+        if (!token) { showToast('Not signed in', 'error'); return; }
+        var res = await fetch('/api/create-portal-session', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        var data = await res.json();
+        if (data.url) {
+          window.open(data.url, '_blank');
+        } else {
+          showToast(data.error || 'Could not open billing portal', 'error');
+        }
+      } catch (err) {
+        showToast('Something went wrong', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Manage Billing →';
+      }
+    }
+  );
 })();
 </script>
 
