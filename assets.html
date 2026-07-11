@@ -344,6 +344,29 @@
   }
   .pending-review-actions .btn-secondary { color: #9BA4B0; }
   .pending-review-empty { padding: 28px 12px; text-align: center; color: #4A5568; font-size: 13.5px; }
+  .profile-editor-overlay { display: none; position: fixed; inset: 0; z-index: 150; background: #080C12; flex-direction: column; }
+  .profile-editor-overlay.open { display: flex; }
+  .profile-editor-topbar { display: flex; align-items: center; justify-content: space-between; padding: 18px 28px; border-bottom: 1px solid #2D3748; background: rgba(10,16,26,0.98); flex-shrink: 0; }
+  .profile-editor-title { font-size: 18px; font-weight: 800; color: #F0F2F5; letter-spacing: -0.4px; }
+  .profile-editor-tabs { display: flex; gap: 4px; background: rgba(255,255,255,0.04); border: 1px solid #2D3748; border-radius: 8px; padding: 3px; }
+  .profile-editor-tab { padding: 6px 18px; border-radius: 6px; border: none; background: none; color: #5A6474; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+  .profile-editor-tab.active { background: #0EA57A; color: #080C12; }
+  .profile-editor-body { flex: 1; overflow: auto; padding: 0; }
+  .profile-editor-table-wrap { min-width: 100%; }
+  .profile-editor-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .profile-editor-table thead th { position: sticky; top: 0; z-index: 10; background: #0A101A; padding: 10px 10px; text-align: left; font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #3A4A5C; border-bottom: 1px solid #2D3748; white-space: nowrap; }
+  .profile-editor-table thead th.required { color: #EF9F27; }
+  .profile-editor-table tbody tr { border-bottom: 1px solid #1A2233; }
+  .profile-editor-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+  .profile-editor-table tbody td { padding: 6px 6px; vertical-align: middle; }
+  .profile-editor-table .asset-label { font-size: 12px; font-weight: 600; color: #C8D0DB; white-space: nowrap; padding: 6px 12px; min-width: 180px; }
+  .profile-editor-table input[type="number"], .profile-editor-table input[type="text"] { width: 100%; min-width: 90px; background: rgba(255,255,255,0.03); border: 1px solid #2D3748; border-radius: 6px; padding: 6px 8px; color: #F0F2F5; font-size: 12px; font-family: inherit; outline: none; transition: border-color 0.15s; }
+  .profile-editor-table input:focus { border-color: rgba(14,165,122,0.45); background: rgba(14,165,122,0.04); }
+  .profile-editor-table input.needs-value { border-color: rgba(239,159,39,0.45); background: rgba(239,159,39,0.04); }
+  .profile-editor-table input.saved { border-color: rgba(14,165,122,0.6); }
+  .profile-editor-footer { display: flex; align-items: center; justify-content: space-between; padding: 14px 28px; border-top: 1px solid #2D3748; background: rgba(10,16,26,0.98); flex-shrink: 0; }
+  .profile-editor-save-status { font-size: 12px; color: #0EA57A; opacity: 0; transition: opacity 0.3s; }
+  .profile-editor-save-status.visible { opacity: 1; }
   @media (max-width: 700px) {
     .pending-assets-banner { flex-direction: column; align-items: stretch; }
     .pending-review-row { grid-template-columns: 1fr; }
@@ -455,6 +478,7 @@
         </div>
         <div class="page-actions">
           <button class="btn-secondary" id="excel-toggle-btn"><span>📤</span> Import Excel</button>
+          <button class="btn-secondary" id="edit-profiles-btn"><span>✏️</span> Edit Fleet Profiles</button>
           <button class="btn-teal" id="add-asset-btn"><span>+</span> Add Asset</button>
         </div>
       </div>
@@ -605,6 +629,32 @@
     <button type="button" class="fab-download" id="fab-download-btn">
       📋 Complete Asset Profiles
     </button>
+    <div class="profile-editor-overlay" id="profile-editor-overlay">
+      <div class="profile-editor-topbar">
+        <div class="profile-editor-title">✏️ Edit Fleet Profiles</div>
+        <div class="profile-editor-tabs">
+          <button type="button" class="profile-editor-tab active" 
+            id="profile-tab-machinery" data-tab="machinery">🚧 Machinery</button>
+          <button type="button" class="profile-editor-tab" 
+            id="profile-tab-trucks" data-tab="trucks">🚛 Trucks</button>
+        </div>
+        <button type="button" class="btn-teal" id="profile-editor-done-btn">Done</button>
+      </div>
+      <div class="profile-editor-body" id="profile-editor-body">
+        <div class="profile-editor-table-wrap">
+          <table class="profile-editor-table" id="profile-editor-table">
+            <thead id="profile-editor-thead"></thead>
+            <tbody id="profile-editor-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="profile-editor-footer">
+        <span class="profile-editor-save-status" id="profile-editor-save-status">✓ Saved</span>
+        <span style="font-size:12px; color:#3A4A5C;">Changes save automatically when you leave each cell. 
+          <span style="color:#EF9F27;">★ = required for full cost calculations</span>
+        </span>
+      </div>
+    </div>
 </div>
 
 <div class="modal-overlay" id="add-modal">
@@ -857,6 +907,117 @@
   var draggedDiscardId = null;
   var ignoredListVisible = false;
   var pendingAssets = [];
+
+  var profileEditorTab = 'machinery';
+
+  var MACHINERY_PROFILE_COLS = [
+    { key: 'current_value',                  label: 'Current Value ($)',        required: true  },
+    { key: 'estimated_end_of_life_value',    label: 'End of Life Value ($)',    required: true  },
+    { key: 'expected_life_hours',            label: 'Expected Life (hrs)',      required: true  },
+    { key: 'current_hours',                  label: 'Current Hours',            required: true  },
+    { key: 'estimated_annual_repair_cost',   label: 'Annual Repair Cost ($)',   required: true  },
+    { key: 'service_cost_per_hour',          label: 'Service Cost/hr ($)',      required: true  },
+    { key: 'available_hours_per_week',       label: 'Avail Hrs/Week',           required: false },
+    { key: 'target_utilisation_percent',     label: 'Target Util %',            required: false },
+    { key: 'idle_burn_rate_lph',             label: 'Idle Burn Rate (L/hr)',    required: false },
+  ];
+
+  var TRUCKS_PROFILE_COLS = [
+    { key: 'current_value',                  label: 'Current Value ($)',        required: true  },
+    { key: 'estimated_end_of_life_value',    label: 'End of Life Value ($)',    required: true  },
+    { key: 'expected_life_km',               label: 'Expected Life (km)',       required: true  },
+    { key: 'current_odometer',               label: 'Current Odometer (km)',    required: true  },
+    { key: 'estimated_annual_km',            label: 'Est. Annual KM',           required: true  },
+    { key: 'estimated_annual_repair_cost',   label: 'Annual Repair Cost ($)',   required: true  },
+    { key: 'service_cost_per_km',            label: 'Service Cost/km ($)',      required: true  },
+    { key: 'idle_burn_rate_lph',             label: 'Idle Burn Rate (L/hr)',    required: false },
+  ];
+
+  function openProfileEditor() {
+    profileEditorTab = 'machinery';
+    document.getElementById('profile-tab-machinery').classList.add('active');
+    document.getElementById('profile-tab-trucks').classList.remove('active');
+    renderProfileEditorTab();
+    document.getElementById('profile-editor-overlay').classList.add('open');
+  }
+
+  function closeProfileEditor() {
+    document.getElementById('profile-editor-overlay').classList.remove('open');
+    loadAssets();
+  }
+
+  function renderProfileEditorTab() {
+    var isTruck = profileEditorTab === 'trucks';
+    var cols = isTruck ? TRUCKS_PROFILE_COLS : MACHINERY_PROFILE_COLS;
+    var assets = allAssets.filter(function(a) {
+      return isTruck ? isOnRoadType(a.asset_type) : !isOnRoadType(a.asset_type);
+    });
+
+    var thead = document.getElementById('profile-editor-thead');
+    var tbody = document.getElementById('profile-editor-tbody');
+
+    var thHtml = '<tr><th style="min-width:180px;">Asset</th>';
+    cols.forEach(function(col) {
+      thHtml += '<th class="' + (col.required ? 'required' : '') + '">' +
+        (col.required ? '★ ' : '') + esc(col.label) + '</th>';
+    });
+    thHtml += '</tr>';
+    thead.innerHTML = thHtml;
+
+    if (!assets.length) {
+      tbody.innerHTML = '<tr><td colspan="' + (cols.length + 1) + 
+        '" style="padding:32px;text-align:center;color:#3A4A5C;">No ' + 
+        (isTruck ? 'truck' : 'machinery') + ' assets found.</td></tr>';
+      return;
+    }
+
+    var tbodyHtml = '';
+    assets.forEach(function(asset) {
+      tbodyHtml += '<tr data-asset-id="' + asset.id + '">';
+      tbodyHtml += '<td class="asset-label">' + esc(asset.asset_name) + 
+        '<div style="font-size:10px;color:#3A4A5C;margin-top:2px;">' + 
+        esc(asset.asset_type || '') + '</div></td>';
+      cols.forEach(function(col) {
+        var val = asset[col.key];
+        var isEmpty = val === null || val === undefined || val === '';
+        var cls = isEmpty && col.required ? ' needs-value' : '';
+        tbodyHtml += '<td><input type="number" step="any" ' +
+          'class="profile-field' + cls + '" ' +
+          'data-asset-id="' + asset.id + '" ' +
+          'data-field="' + col.key + '" ' +
+          'value="' + (isEmpty ? '' : esc(String(val))) + '" ' +
+          'placeholder="' + (col.required ? 'Required' : 'Optional') + '">' +
+          '</td>';
+      });
+      tbodyHtml += '</tr>';
+    });
+    tbody.innerHTML = tbodyHtml;
+  }
+
+  async function saveProfileField(assetId, field, value) {
+    var patch = {};
+    patch[field] = value === '' ? null : parseFloat(value);
+    if (value !== '' && isNaN(patch[field])) return;
+
+    var result = await supabase
+      .from('assets')
+      .update(patch)
+      .eq('id', Number(assetId))
+      .eq('user_id', currentUser.id);
+
+    var statusEl = document.getElementById('profile-editor-save-status');
+    if (result.error) {
+      statusEl.textContent = '✕ Save failed';
+      statusEl.style.color = '#F0A8A7';
+    } else {
+      statusEl.textContent = '✓ Saved';
+      statusEl.style.color = '#0EA57A';
+      var asset = allAssets.find(function(a) { return Number(a.id) === Number(assetId); });
+      if (asset) asset[field] = patch[field];
+    }
+    statusEl.classList.add('visible');
+    setTimeout(function() { statusEl.classList.remove('visible'); }, 1500);
+  }
 
   var ASSET_TYPE_OPTIONS = [
     'Excavator', 'Dump Truck', 'Wheel Loader', 'Motor Grader', 'Bulldozer', 'Skidder',
@@ -2727,6 +2888,51 @@
     }
     await buildExcelTemplate();
     showToast('Template downloaded — fill in the yellow columns and re-upload via Import Excel', 'success');
+  });
+
+  document.getElementById('edit-profiles-btn').addEventListener('click', openProfileEditor);
+
+  document.getElementById('profile-editor-done-btn').addEventListener('click', closeProfileEditor);
+
+  document.getElementById('profile-tab-machinery').addEventListener('click', function() {
+    profileEditorTab = 'machinery';
+    document.getElementById('profile-tab-machinery').classList.add('active');
+    document.getElementById('profile-tab-trucks').classList.remove('active');
+    renderProfileEditorTab();
+  });
+
+  document.getElementById('profile-tab-trucks').addEventListener('click', function() {
+    profileEditorTab = 'trucks';
+    document.getElementById('profile-tab-trucks').classList.add('active');
+    document.getElementById('profile-tab-machinery').classList.remove('active');
+    renderProfileEditorTab();
+  });
+
+  document.getElementById('profile-editor-table').addEventListener('blur', async function(e) {
+    var input = e.target;
+    if (!input.classList.contains('profile-field')) return;
+    var assetId = input.dataset.assetId;
+    var field = input.dataset.field;
+    var value = input.value.trim();
+    input.classList.remove('needs-value', 'saved');
+    if (value === '') {
+      input.classList.add('needs-value');
+    } else {
+      input.classList.add('saved');
+    }
+    await saveProfileField(assetId, field, value);
+  }, true);
+
+  document.getElementById('profile-editor-table').addEventListener('keydown', function(e) {
+    if (e.key !== 'Tab') return;
+    var inputs = Array.from(
+      document.getElementById('profile-editor-table').querySelectorAll('input.profile-field')
+    );
+    var idx = inputs.indexOf(e.target);
+    if (idx === -1) return;
+    e.preventDefault();
+    var next = inputs[e.shiftKey ? idx - 1 : idx + 1];
+    if (next) next.focus();
   });
 
   var excelInput = document.getElementById('excel-file-input');
