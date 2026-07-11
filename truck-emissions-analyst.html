@@ -261,6 +261,7 @@
         <div class="table-header">
           <div class="table-title">Fill-to-Fill Periods</div>
           <button type="button" class="btn-export" id="export-csv-btn" disabled>⬇ Export CSV</button>
+          <button type="button" class="btn-export" id="export-pdf-btn" disabled style="margin-left:8px;">⬇ Export PDF</button>
         </div>
         <div style="overflow-x:auto;">
           <table>
@@ -286,6 +287,8 @@
 <script src="js/subscription-guard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
 (function() {
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
@@ -563,6 +566,7 @@
     document.getElementById('dashboard-content').hidden = true;
     displayPeriods = [];
     document.getElementById('export-csv-btn').disabled = true;
+    document.getElementById('export-pdf-btn').disabled = true;
     destroyCharts();
   }
 
@@ -570,6 +574,7 @@
     document.getElementById('empty-state').hidden = true;
     document.getElementById('dashboard-content').hidden = false;
     document.getElementById('export-csv-btn').disabled = false;
+    document.getElementById('export-pdf-btn').disabled = false;
 
     var latestPayload = latestPeriod 
       ? findPayload(currentPayloads, latestPeriod.periodStart, latestPeriod.periodEnd) 
@@ -700,6 +705,112 @@
     a.download = 'FleetMagnify_Emissions_' + safeName + '.csv';
     a.click();
     URL.revokeObjectURL(a.href);
+  });
+
+  document.getElementById('export-pdf-btn').addEventListener('click', function() {
+    if (!displayPeriods.length || !selectedVehicle) return;
+    var { jsPDF } = window.jspdf;
+    var doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    var margin = 18;
+    var y = 18;
+
+    // Header
+    doc.setFillColor(14, 165, 122);
+    doc.rect(0, 0, 210, 28, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text('FleetMagnify — Emissions Report', margin, 12);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(selectedVehicle.asset_name || '', margin, 20);
+    y = 38;
+
+    // Summary KPIs
+    doc.setTextColor(30, 40, 55);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Summary', margin, y); y += 7;
+    doc.setFont('helvetica', 'normal');
+
+    var totalKm = 0;
+    var totalLitres = 0;
+    var totalEmissionsKg = 0;
+    displayPeriods.forEach(function(p) {
+      totalKm += p.kmDriven;
+      totalLitres += p.litresUsed;
+      totalEmissionsKg += p.totalEmissionsKg;
+    });
+    var latest = displayPeriods[displayPeriods.length - 1];
+
+    var kpis = [
+      ['Total Emissions', fmtNum(totalEmissionsKg / 1000, 2) + ' t CO₂'],
+      ['Emissions Per KM (latest period)', fmtNum(latest.emissionsPerKm, 3) + ' kg/km'],
+      ['Total Distance', Math.round(totalKm).toLocaleString() + ' km'],
+      ['Total Fuel Used', fmtNum(totalLitres, 1) + ' L'],
+      ['Periods Analysed', displayPeriods.length + ''],
+    ];
+
+    // Add emissions per tonne-km if payload is available
+    var latestPayloadRow = latestPeriod
+      ? findPayload(currentPayloads, latestPeriod.periodStart, latestPeriod.periodEnd)
+      : null;
+    if (latestPayloadRow && latestPayloadRow.payload_tonnes) {
+      var payloadT = parseFloat(latestPayloadRow.payload_tonnes);
+      var emPerTonneKm = payloadT > 0 ? latest.emissionsPerKm / payloadT : null;
+      if (emPerTonneKm !== null) {
+        kpis.push(['Emissions Per Tonne-KM', fmtNum(emPerTonneKm, 4) + ' kg/tonne-km']);
+        kpis.push(['Payload Used', fmtNum(payloadT, 1) + ' tonnes']);
+      }
+    }
+
+    kpis.forEach(function(pair) {
+      doc.setFont('helvetica', 'bold');
+      doc.text(pair[0], margin, y);
+      doc.setFont('helvetica', 'normal');
+      doc.text(pair[1], 120, y);
+      y += 7;
+    });
+
+    y += 6;
+
+    // Period table
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('Fill-to-Fill Periods', margin, y);
+    y += 4;
+
+    doc.autoTable({
+      startY: y,
+      margin: { left: margin, right: margin },
+      head: [['Period Start', 'Period End', 'Litres', 'KM', 'Emissions (kg)', 'kg/km']],
+      body: displayPeriods.map(function(p) {
+        return [
+          p.periodStart,
+          p.periodEnd,
+          fmtNum(p.litresUsed, 1),
+          Math.round(p.kmDriven).toLocaleString(),
+          fmtNum(p.totalEmissionsKg, 2),
+          fmtNum(p.emissionsPerKm, 4)
+        ];
+      }),
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [14, 165, 122], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [245, 248, 250] }
+    });
+
+    // Footer
+    var pageCount = doc.internal.getNumberOfPages();
+    for (var i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(160, 170, 180);
+      doc.text('Generated by FleetMagnify · Page ' + i + ' of ' + pageCount,
+        margin, doc.internal.pageSize.height - 8);
+    }
+
+    var safeName = (selectedVehicle.asset_name || 'vehicle').replace(/[^a-z0-9_-]+/gi, '_');
+    doc.save('FleetMagnify_Emissions_' + safeName + '.pdf');
   });
 
   async function loadFleetComparison() {
