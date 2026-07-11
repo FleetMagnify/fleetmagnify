@@ -280,6 +280,75 @@
   .incomplete-profile-banner.visible { display: flex; }
   .incomplete-profile-banner a { color: #EF9F27; font-weight: 600; text-decoration: none; }
   .incomplete-profile-banner a:hover { text-decoration: underline; }
+  .pending-assets-banner {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: rgba(14,165,122,0.08);
+    border: 1px solid rgba(14,165,122,0.28);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+    font-size: 13.5px;
+    color: #C8D0DB;
+    line-height: 1.55;
+    cursor: pointer;
+  }
+  .pending-assets-banner.visible { display: flex; }
+  .pending-assets-banner-text { display: flex; align-items: flex-start; gap: 12px; flex: 1; min-width: 0; }
+  .pending-assets-banner-text p { color: #C8D0DB; }
+  .pending-assets-banner .btn-teal { flex-shrink: 0; cursor: pointer; }
+  .pending-review-modal { max-width: 720px; text-align: left; padding: 28px 28px 24px; }
+  .pending-review-list { display: flex; flex-direction: column; gap: 12px; max-height: min(60vh, 520px); overflow-y: auto; margin-bottom: 8px; }
+  .pending-review-row {
+    display: grid;
+    grid-template-columns: 1fr 180px auto;
+    gap: 10px;
+    align-items: end;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid #2D3748;
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .pending-review-row .form-group { margin-bottom: 0; }
+  .pending-review-row input,
+  .pending-review-row select {
+    width: 100%;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid #2D3748;
+    border-radius: 8px;
+    color: #F0F2F5;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+  }
+  .pending-review-row input:focus,
+  .pending-review-row select:focus { border-color: rgba(14,165,122,0.45); }
+  .pending-review-row select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%234A5568' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+  }
+  .pending-review-row select option { background: #0A101A; color: #F0F2F5; }
+  .pending-review-meta { font-size: 11px; color: #3A4A5C; margin-top: 6px; }
+  .pending-review-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .pending-review-actions .btn-teal,
+  .pending-review-actions .btn-secondary {
+    padding: 9px 14px;
+    font-size: 12.5px;
+  }
+  .pending-review-actions .btn-secondary { color: #9BA4B0; }
+  .pending-review-empty { padding: 28px 12px; text-align: center; color: #4A5568; font-size: 13.5px; }
+  @media (max-width: 700px) {
+    .pending-assets-banner { flex-direction: column; align-items: stretch; }
+    .pending-review-row { grid-template-columns: 1fr; }
+    .pending-review-actions { justify-content: flex-end; }
+  }
   .fab-download { display: none; position: fixed; bottom: 32px; right: 32px; z-index: 90; background: #EF9F27; border: none; color: #080C12; font-size: 13px; font-weight: 700; padding: 14px 22px; border-radius: 100px; cursor: pointer; font-family: inherit; box-shadow: 0 4px 24px rgba(239,159,39,0.35); transition: all 0.2s; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
   .fab-download:hover { background: #F5B042; transform: translateY(-1px); box-shadow: 0 6px 28px rgba(239,159,39,0.45); }
   .fab-download.visible { display: flex; }
@@ -388,6 +457,14 @@
           <button class="btn-secondary" id="excel-toggle-btn"><span>📤</span> Import Excel</button>
           <button class="btn-teal" id="add-asset-btn"><span>+</span> Add Asset</button>
         </div>
+      </div>
+
+      <div class="pending-assets-banner" id="pending-assets-banner">
+        <div class="pending-assets-banner-text">
+          <div style="font-size:16px; flex-shrink:0;">📥</div>
+          <p id="pending-assets-banner-text"></p>
+        </div>
+        <button type="button" class="btn-teal" id="pending-assets-review-btn">Review now</button>
       </div>
 
       <div class="incomplete-profile-banner" id="incomplete-profile-banner">
@@ -735,6 +812,18 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="pending-review-modal">
+  <div class="modal pending-review-modal">
+    <div class="modal-eyebrow">Import Review</div>
+    <h2>New assets from import</h2>
+    <p class="modal-sub">Confirm to add an asset to your fleet, or ignore to stop tracking it in future imports. You can edit the name and type before confirming.</p>
+    <div class="pending-review-list" id="pending-review-list"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel" id="pending-review-close-btn">Close</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast">
   <span class="toast-icon" id="toast-icon">✓</span>
   <span id="toast-msg"></span>
@@ -767,7 +856,13 @@
   var draggedCardId = null;
   var draggedDiscardId = null;
   var ignoredListVisible = false;
+  var pendingAssets = [];
 
+  var ASSET_TYPE_OPTIONS = [
+    'Excavator', 'Dump Truck', 'Wheel Loader', 'Motor Grader', 'Bulldozer', 'Skidder',
+    'Compactor', 'Crane', 'Forklift', 'Light Vehicle', 'Rigid Truck', 'Semi Trailer',
+    'Water Truck', 'Other'
+  ];
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var ON_ROAD_TYPE_SET = { 'Light Vehicle': true, 'Rigid Truck': true, 'Semi Trailer': true };
   var ON_ROAD_FIELD_IDS = ['field-life-km', 'field-service-km', 'field-current-odometer', 'field-estimated-annual-km'];
@@ -793,6 +888,7 @@
     document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
     await loadCompanyIntegrationState();
     loadAssets();
+    loadPendingAssets();
   }
 
   async function loadCompanyIntegrationState() {
@@ -1298,6 +1394,219 @@
       updateIncompleteBanner();
     });
   }
+
+  async function loadPendingAssets() {
+    var result = await supabase
+      .from('pending_assets')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: true });
+    if (result.error) {
+      console.error('Failed to load pending assets', result.error.message);
+      pendingAssets = [];
+      updatePendingBanner();
+      return;
+    }
+    pendingAssets = result.data || [];
+    updatePendingBanner();
+    if (document.getElementById('pending-review-modal').classList.contains('open')) {
+      renderPendingReviewList();
+    }
+  }
+
+  function updatePendingBanner() {
+    var banner = document.getElementById('pending-assets-banner');
+    var text = document.getElementById('pending-assets-banner-text');
+    var count = pendingAssets.length;
+    if (count === 0) {
+      banner.classList.remove('visible');
+      text.textContent = '';
+      return;
+    }
+    var assetWord = count === 1 ? 'asset' : 'assets';
+    text.textContent = count + ' new ' + assetWord + ' found in your latest import — review now';
+    banner.classList.add('visible');
+  }
+
+  function buildAssetTypeOptionsHtml(selectedType) {
+    var selected = (selectedType || '').trim();
+    var html = '<option value="" disabled' + (selected ? '' : ' selected') + '>Select type</option>';
+    var found = false;
+    ASSET_TYPE_OPTIONS.forEach(function(type) {
+      var isSelected = type === selected;
+      if (isSelected) found = true;
+      html += '<option value="' + esc(type) + '"' + (isSelected ? ' selected' : '') + '>' + esc(type) + '</option>';
+    });
+    if (selected && !found) {
+      html += '<option value="' + esc(selected) + '" selected>' + esc(selected) + '</option>';
+    }
+    return html;
+  }
+
+  function openPendingReviewModal() {
+    renderPendingReviewList();
+    document.getElementById('pending-review-modal').classList.add('open');
+  }
+
+  function closePendingReviewModal() {
+    document.getElementById('pending-review-modal').classList.remove('open');
+  }
+
+  function renderPendingReviewList() {
+    var list = document.getElementById('pending-review-list');
+    if (!pendingAssets.length) {
+      list.innerHTML = '<div class="pending-review-empty">No pending assets left to review.</div>';
+      return;
+    }
+    list.innerHTML = pendingAssets.map(function(p) {
+      var sourceLabel = p.source ? String(p.source) : 'import';
+      var rego = p.registration ? ' · ' + esc(p.registration) : '';
+      return '<div class="pending-review-row" data-pending-id="' + esc(String(p.id)) + '">' +
+        '<div class="form-group">' +
+          '<label>Asset Name</label>' +
+          '<input type="text" class="pending-name-input" value="' + esc(p.asset_name || '') + '">' +
+          '<div class="pending-review-meta">Source: ' + esc(sourceLabel) + rego + '</div>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label>Asset Type</label>' +
+          '<select class="pending-type-select">' + buildAssetTypeOptionsHtml(p.asset_type) + '</select>' +
+        '</div>' +
+        '<div class="pending-review-actions">' +
+          '<button type="button" class="btn-teal pending-confirm-btn">Confirm</button>' +
+          '<button type="button" class="btn-secondary pending-ignore-btn">Ignore</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function getPendingById(id) {
+    return pendingAssets.find(function(p) { return Number(p.id) === Number(id); }) || null;
+  }
+
+  function removePendingFromState(id) {
+    pendingAssets = pendingAssets.filter(function(p) { return Number(p.id) !== Number(id); });
+    updatePendingBanner();
+    renderPendingReviewList();
+    if (pendingAssets.length === 0) {
+      closePendingReviewModal();
+    }
+  }
+
+  function buildConfirmedAssetPayload(pending, assetName, assetType) {
+    var onRoad = isOnRoadType(assetType);
+    var payload = {
+      user_id: currentUser.id,
+      asset_name: assetName,
+      asset_type: assetType,
+      fuel_type: 'Diesel',
+      registration: pending.registration || null
+    };
+    var raw = pending.raw_data;
+    if (raw && typeof raw === 'object' && raw.cardNumber) {
+      payload.bp_card_number = String(raw.cardNumber).trim() || null;
+    }
+    if (supportsIsOnRoad) {
+      payload.is_on_road = onRoad;
+    }
+    return payload;
+  }
+
+  async function confirmPendingAsset(pendingId, rowEl) {
+    var pending = getPendingById(pendingId);
+    if (!pending) { showToast('Pending asset not found', 'error'); return; }
+    var nameInput = rowEl.querySelector('.pending-name-input');
+    var typeSelect = rowEl.querySelector('.pending-type-select');
+    var assetName = (nameInput.value || '').trim();
+    var assetType = (typeSelect.value || '').trim();
+    if (!assetName || !assetType) {
+      showToast('Name and type are required to confirm', 'error');
+      return;
+    }
+    var confirmBtn = rowEl.querySelector('.pending-confirm-btn');
+    var ignoreBtn = rowEl.querySelector('.pending-ignore-btn');
+    confirmBtn.disabled = true;
+    ignoreBtn.disabled = true;
+
+    var payload = buildConfirmedAssetPayload(pending, assetName, assetType);
+    var insertResult = await supabase.from('assets').insert(payload).select('id');
+    if (insertResult.error) {
+      confirmBtn.disabled = false;
+      ignoreBtn.disabled = false;
+      showToast('Failed to confirm asset: ' + insertResult.error.message, 'error');
+      return;
+    }
+
+    var deleteResult = await supabase
+      .from('pending_assets')
+      .delete()
+      .eq('id', Number(pendingId))
+      .eq('user_id', currentUser.id);
+    if (deleteResult.error) {
+      showToast('Asset added, but failed to clear pending row: ' + deleteResult.error.message, 'error');
+    } else {
+      showToast('Asset confirmed', 'success');
+    }
+    removePendingFromState(pendingId);
+    await loadAssets();
+  }
+
+  async function ignorePendingAsset(pendingId, rowEl) {
+    var pending = getPendingById(pendingId);
+    if (!pending) { showToast('Pending asset not found', 'error'); return; }
+    var confirmBtn = rowEl.querySelector('.pending-confirm-btn');
+    var ignoreBtn = rowEl.querySelector('.pending-ignore-btn');
+    confirmBtn.disabled = true;
+    ignoreBtn.disabled = true;
+
+    // Use original import name so future CSV rows still match ignored_assets
+    var ignoreResult = await supabase.from('ignored_assets').insert({
+      user_id: currentUser.id,
+      asset_name: pending.asset_name,
+      source: pending.source || null,
+      ignored_at: new Date().toISOString()
+    });
+    if (ignoreResult.error) {
+      confirmBtn.disabled = false;
+      ignoreBtn.disabled = false;
+      showToast('Failed to ignore asset: ' + ignoreResult.error.message, 'error');
+      return;
+    }
+
+    var deleteResult = await supabase
+      .from('pending_assets')
+      .delete()
+      .eq('id', Number(pendingId))
+      .eq('user_id', currentUser.id);
+    if (deleteResult.error) {
+      showToast('Ignored, but failed to clear pending row: ' + deleteResult.error.message, 'error');
+    } else {
+      showToast('Asset ignored', 'success');
+    }
+    removePendingFromState(pendingId);
+  }
+
+  document.getElementById('pending-assets-review-btn').addEventListener('click', openPendingReviewModal);
+  document.getElementById('pending-assets-banner').addEventListener('click', function(e) {
+    if (e.target.closest('#pending-assets-review-btn')) return;
+    if (e.target.closest('button')) return;
+    openPendingReviewModal();
+  });
+  document.getElementById('pending-review-close-btn').addEventListener('click', closePendingReviewModal);
+  document.getElementById('pending-review-modal').addEventListener('click', function(e) {
+    if (e.target === this) closePendingReviewModal();
+  });
+  document.getElementById('pending-review-list').addEventListener('click', function(e) {
+    var row = e.target.closest('.pending-review-row');
+    if (!row) return;
+    var pendingId = row.getAttribute('data-pending-id');
+    if (e.target.closest('.pending-confirm-btn')) {
+      confirmPendingAsset(pendingId, row);
+      return;
+    }
+    if (e.target.closest('.pending-ignore-btn')) {
+      ignorePendingAsset(pendingId, row);
+    }
+  });
 
   function renderIncompleteProfileBadge(asset) {
     if (!isStubAsset(asset)) return '';
