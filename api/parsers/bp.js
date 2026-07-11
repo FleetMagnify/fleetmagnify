@@ -2,42 +2,14 @@
  * BP Fleet Card transaction CSV parser for the email import pipeline.
  */
 
+const { parseCsvLine, normalizeHeader, parseNumeric, updateImportStatus, detectAssetType } = require('./parser-utils');
+
 var BP_SIGNATURE = [
   'Transaction Effective Date',
   'Card Number',
   'Litres',
   'Customer Value ($)',
 ];
-
-function parseCsvLine(line) {
-  var result = [];
-  var cur = '';
-  var inQuotes = false;
-
-  for (var i = 0; i < line.length; i++) {
-    var ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        cur += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (ch === ',' && !inQuotes) {
-      result.push(cur);
-      cur = '';
-    } else {
-      cur += ch;
-    }
-  }
-
-  result.push(cur);
-  return result;
-}
-
-function normalizeHeader(header) {
-  return String(header || '').replace(/^\uFEFF/, '').trim();
-}
 
 function isBpHeaderRow(headers) {
   var normalized = headers.map(normalizeHeader);
@@ -114,14 +86,6 @@ function parseBpRows(rawCsv) {
   return rows;
 }
 
-function parseNumeric(value) {
-  if (value === '' || value == null) {
-    return null;
-  }
-  var n = parseFloat(String(value).replace(/,/g, '').trim());
-  return isNaN(n) ? null : n;
-}
-
 function parseCurrency(value) {
   if (value === '' || value == null) {
     return null;
@@ -149,24 +113,6 @@ function parseBpDate(value) {
 
 function normalizeCardNumber(value) {
   return String(value || '').trim();
-}
-
-async function updateImportStatus(supabase, importId, status, errorMessage) {
-  var payload = { status: status };
-  if (errorMessage) {
-    payload.error_message = errorMessage;
-  } else {
-    payload.error_message = null;
-  }
-
-  var result = await supabase
-    .from('email_imports')
-    .update(payload)
-    .eq('id', importId);
-
-  if (result.error) {
-    console.error('bp: failed to update email_imports status', importId, result.error.message);
-  }
 }
 
 async function loadCardMap(supabase, userId) {
@@ -286,67 +232,6 @@ function collectCardDetails(rows) {
   }
 
   return cards;
-}
-
-function detectAssetType(vehicleName) {
-  var name = String(vehicleName || '').toLowerCase();
-
-  var rigidTruckKeywords = ['hino', 'isuzu', 'fuso', 'ud ', 'rigid', 'truck'];
-  var hasTruckKeyword = false;
-  for (var t = 0; t < rigidTruckKeywords.length; t++) {
-    if (name.indexOf(rigidTruckKeywords[t]) !== -1) {
-      hasTruckKeyword = true;
-      break;
-    }
-  }
-
-  var semiTrailerKeywords = [
-    'semi', 'kenworth', 'freightliner', 'mack', 'volvo', 'scania', 'man ', 'daf',
-    'prime mover', 'b-train', 'a-train',
-  ];
-  for (var j = 0; j < semiTrailerKeywords.length; j++) {
-    if (name.indexOf(semiTrailerKeywords[j]) !== -1) {
-      return 'Semi Trailer';
-    }
-  }
-
-  if (hasTruckKeyword) {
-    return 'Rigid Truck';
-  }
-
-  var lightVehicleKeywords = [
-    'ranger', 'hilux', 'navara', 'triton', 'colorado', 'd-max', 'bt-50', 'amarok',
-    'ute', 'suv', 'car', 'sedan', 'wagon', 'van', 'transit', 'sprinter', 'hiace',
-  ];
-  for (var i = 0; i < lightVehicleKeywords.length; i++) {
-    if (name.indexOf(lightVehicleKeywords[i]) !== -1) {
-      return 'Light Vehicle';
-    }
-  }
-
-  if (name.indexOf('bulldozer') !== -1 || name.indexOf('dozer') !== -1) {
-    return 'Bulldozer';
-  }
-  if (name.indexOf('excavator') !== -1 || name.indexOf('digger') !== -1) {
-    return 'Excavator';
-  }
-  if (name.indexOf('grader') !== -1) {
-    return 'Motor Grader';
-  }
-  if (name.indexOf('forklift') !== -1) {
-    return 'Forklift';
-  }
-  if (name.indexOf('crane') !== -1) {
-    return 'Crane';
-  }
-  if (name.indexOf('loader') !== -1) {
-    return 'Wheel Loader';
-  }
-  if (name.indexOf('roller') !== -1 || name.indexOf('scraper') !== -1) {
-    return 'Other';
-  }
-
-  return 'Rigid Truck';
 }
 
 async function ensureStubAssets(supabase, userId, rows) {
@@ -482,7 +367,7 @@ async function parseBpReport(supabase, options) {
       throw new Error('Failed to upsert fuel purchases: ' + upsertResult.error.message);
     }
 
-    await updateImportStatus(supabase, importId, 'processed', null);
+    await updateImportStatus(supabase, importId, 'processed', null, 'bp');
 
     return {
       ok: true,
@@ -492,7 +377,7 @@ async function parseBpReport(supabase, options) {
       rowsSkipped: purchases.skipped,
     };
   } catch (err) {
-    await updateImportStatus(supabase, importId, 'failed', err.message || 'BP parse failed');
+    await updateImportStatus(supabase, importId, 'failed', err.message || 'BP parse failed', 'bp');
     throw err;
   }
 }
