@@ -477,7 +477,7 @@
 
   function filterPeriodsByRange(periods, dateFrom, dateTo) {
     return periods.filter(function(p) {
-      return p.periodEnd >= dateFrom && p.periodEnd <= dateTo;
+      return periodsOverlap(p.periodStart, p.periodEnd, dateFrom, dateTo);
     });
   }
 
