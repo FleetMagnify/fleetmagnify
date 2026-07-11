@@ -156,26 +156,41 @@ async function updateImportStatus(supabase, importId, status, errorMessage) {
 }
 
 async function loadAssetMap(supabase, userId) {
-  var result = await supabase
+  var assetResult = await supabase
     .from('assets')
     .select('id, asset_name, current_odometer')
     .eq('user_id', userId);
 
-  if (result.error) {
-    throw new Error('Failed to load assets: ' + result.error.message);
+  if (assetResult.error) {
+    throw new Error('Failed to load assets: ' + assetResult.error.message);
   }
 
+  var ignoredResult = await supabase
+    .from('ignored_assets')
+    .select('asset_name')
+    .eq('user_id', userId);
+
+  if (ignoredResult.error) {
+    throw new Error('Failed to load ignored assets: ' + ignoredResult.error.message);
+  }
+
+  var ignoredSet = {};
+  (ignoredResult.data || []).forEach(function(r) {
+    ignoredSet[String(r.asset_name).trim()] = true;
+  });
+
   var map = {};
-  (result.data || []).forEach(function(asset) {
+  (assetResult.data || []).forEach(function(asset) {
     if (asset.asset_name) {
       map[asset.asset_name] = {
         id: asset.id,
-        current_odometer: asset.current_odometer != null ? parseFloat(asset.current_odometer) : null
+        current_odometer: asset.current_odometer != null 
+          ? parseFloat(asset.current_odometer) : null
       };
     }
   });
 
-  return map;
+  return { assetMap: map, ignoredSet: ignoredSet };
 }
 
 async function getRunningOdometer(supabase, userId, assetId) {
@@ -257,8 +272,10 @@ function detectAssetType(vehicleName) {
 }
 
 async function ensureAssets(supabase, userId, rows) {
-  var assetMap = await loadAssetMap(supabase, userId);
-  var created = 0;
+  var loaded = await loadAssetMap(supabase, userId);
+  var assetMap = loaded.assetMap;
+  var ignoredSet = loaded.ignoredSet;
+  var pendingAdded = 0;
   var seen = {};
 
   for (var i = 0; i < rows.length; i++) {
@@ -268,37 +285,40 @@ async function ensureAssets(supabase, userId, rows) {
     }
     seen[vehicleName] = true;
 
+    // Already a confirmed asset — skip
     if (assetMap[vehicleName]) {
       continue;
     }
 
-    var registration = rows[i].Registration ? String(rows[i].Registration).trim() : null;
+    // Permanently ignored — skip silently
+    if (ignoredSet[vehicleName]) {
+      continue;
+    }
 
-    var insertResult = await supabase
-      .from('assets')
-      .insert({
+    // New asset — add to pending_assets for customer review
+    var registration = rows[i].Registration 
+      ? String(rows[i].Registration).trim() : null;
+
+    var pendingResult = await supabase
+      .from('pending_assets')
+      .upsert({
         user_id: userId,
         asset_name: vehicleName,
         asset_type: detectAssetType(vehicleName),
         registration: registration || null,
-        fuel_type: 'Diesel',
-      })
-      .select('id, asset_name, current_odometer')
-      .single();
+        source: 'navman',
+        raw_data: rows[i]
+      }, { onConflict: 'user_id,asset_name', ignoreDuplicates: true });
 
-    if (insertResult.error) {
-      throw new Error('Failed to create asset "' + vehicleName + '": ' + insertResult.error.message);
+    if (pendingResult.error) {
+      console.error('navman: failed to add pending asset', vehicleName, 
+        pendingResult.error.message);
+    } else {
+      pendingAdded++;
     }
-
-    assetMap[insertResult.data.asset_name] = {
-      id: insertResult.data.id,
-      current_odometer: insertResult.data.current_odometer != null 
-        ? parseFloat(insertResult.data.current_odometer) : null
-    };
-    created++;
   }
 
-  return { assetMap: assetMap, assetsCreated: created };
+  return { assetMap: assetMap, assetsCreated: 0, pendingAdded: pendingAdded };
 }
 
 async function buildTelematicsRecords(supabase, userId, assetMap, rows, recordDate) {
@@ -394,6 +414,7 @@ async function parseNavmanReport(supabase, options) {
       ok: true,
       recordDate: recordDate,
       assetsCreated: assetResult.assetsCreated,
+      pendingAdded: assetResult.pendingAdded,
       recordsUpserted: telematics.records.length,
       rowsSkipped: telematics.skipped,
     };

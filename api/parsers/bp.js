@@ -170,18 +170,32 @@ async function updateImportStatus(supabase, importId, status, errorMessage) {
 }
 
 async function loadCardMap(supabase, userId) {
-  var result = await supabase
+  var assetResult = await supabase
     .from('assets')
     .select('id, bp_card_number, asset_name')
     .eq('user_id', userId);
 
-  if (result.error) {
-    throw new Error('Failed to load assets: ' + result.error.message);
+  if (assetResult.error) {
+    throw new Error('Failed to load assets: ' + assetResult.error.message);
   }
+
+  var ignoredResult = await supabase
+    .from('ignored_assets')
+    .select('asset_name')
+    .eq('user_id', userId);
+
+  if (ignoredResult.error) {
+    throw new Error('Failed to load ignored assets: ' + ignoredResult.error.message);
+  }
+
+  var ignoredSet = {};
+  (ignoredResult.data || []).forEach(function(r) {
+    ignoredSet[String(r.asset_name).trim().toLowerCase()] = true;
+  });
 
   var map = {};
   var nameMap = {};
-  (result.data || []).forEach(function(asset) {
+  (assetResult.data || []).forEach(function(asset) {
     var card = normalizeCardNumber(asset.bp_card_number);
     if (card) {
       map[card] = asset.id;
@@ -192,7 +206,7 @@ async function loadCardMap(supabase, userId) {
     }
   });
 
-  return { cardMap: map, nameMap: nameMap };
+  return { cardMap: map, nameMap: nameMap, ignoredSet: ignoredSet };
 }
 
 function trimBpField(row, column) {
@@ -339,54 +353,59 @@ async function ensureStubAssets(supabase, userId, rows) {
   var maps = await loadCardMap(supabase, userId);
   var cardMap = maps.cardMap;
   var nameMap = maps.nameMap;
+  var ignoredSet = maps.ignoredSet;
   var cardDetails = collectCardDetails(rows);
-  var created = 0;
-  var toInsert = [];
+  var pendingAdded = 0;
+  var toPend = [];
 
   for (var cardNumber in cardDetails) {
-    // cardMap already contains every card this user has ever assigned,
-    // fetched in one bulk query via loadCardMap above — no need to
-    // re-check the database per card.
     if (cardMap[cardNumber]) {
       continue;
     }
 
     var detail = cardDetails[cardNumber];
     var assetName = detail.assetName;
-    var existingId = nameMap[assetName.toLowerCase()];
+    var assetNameLower = assetName.toLowerCase();
+
+    // Permanently ignored — skip silently
+    if (ignoredSet[assetNameLower]) {
+      continue;
+    }
+
+    var existingId = nameMap[assetNameLower];
     if (existingId) {
       cardMap[cardNumber] = existingId;
       continue;
     }
 
-    toInsert.push({
+    // New asset — queue for pending_assets
+    toPend.push({
       user_id: userId,
       asset_name: assetName,
       asset_type: detectAssetType(detail.typeHint),
-      fuel_type: 'Diesel',
-      bp_card_number: cardNumber,
+      source: 'bp',
+      raw_data: { cardNumber: cardNumber, typeHint: detail.typeHint }
     });
   }
 
-  if (toInsert.length > 0) {
-    var insertResult = await supabase
-      .from('assets')
-      .insert(toInsert)
-      .select('id, bp_card_number, asset_name');
+  if (toPend.length > 0) {
+    var pendingResult = await supabase
+      .from('pending_assets')
+      .upsert(toPend, { onConflict: 'user_id,asset_name', ignoreDuplicates: true });
 
-    if (insertResult.error) {
-      throw new Error('Failed to create stub assets: ' + insertResult.error.message);
+    if (pendingResult.error) {
+      console.error('bp: failed to add pending assets', pendingResult.error.message);
+    } else {
+      pendingAdded = toPend.length;
     }
-
-    insertResult.data.forEach(function(row) {
-      var normalizedCard = normalizeCardNumber(row.bp_card_number);
-      cardMap[normalizedCard] = row.id;
-      nameMap[row.asset_name.toLowerCase()] = row.id;
-      created++;
-    });
   }
 
-  return { cardMap: cardMap, nameMap: nameMap, assetsCreated: created };
+  return { 
+    cardMap: cardMap, 
+    nameMap: nameMap, 
+    assetsCreated: 0, 
+    pendingAdded: pendingAdded 
+  };
 }
 
 function buildFuelPurchases(userId, cardMap, nameMap, rows) {
@@ -468,6 +487,7 @@ async function parseBpReport(supabase, options) {
     return {
       ok: true,
       assetsCreated: assetResult.assetsCreated,
+      pendingAdded: assetResult.pendingAdded,
       recordsUpserted: purchases.records.length,
       rowsSkipped: purchases.skipped,
     };
