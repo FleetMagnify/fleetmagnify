@@ -1493,7 +1493,6 @@
   }
 
   function buildConfirmedAssetPayload(pending, assetName, assetType) {
-    var onRoad = isOnRoadType(assetType);
     var payload = {
       user_id: currentUser.id,
       asset_name: assetName,
@@ -1504,9 +1503,6 @@
     var raw = pending.raw_data;
     if (raw && typeof raw === 'object' && raw.cardNumber) {
       payload.bp_card_number = String(raw.cardNumber).trim() || null;
-    }
-    if (supportsIsOnRoad) {
-      payload.is_on_road = onRoad;
     }
     return payload;
   }
