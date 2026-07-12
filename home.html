@@ -108,7 +108,23 @@
     .charts-grid { grid-template-columns: 1fr; }
   }
   @media (max-width: 700px) { .kpi-pair-cards { grid-template-columns: 1fr; } }
+
+  .shepherd-element { max-width: 380px !important; font-family: 'Inter', sans-serif !important; }
+  .shepherd-content { background: #111827 !important; border: 1px solid #2D3748 !important; border-radius: 14px !important; padding: 0 !important; }
+  .shepherd-header { background: #111827 !important; border-bottom: 1px solid #2D3748 !important; padding: 18px 22px 14px !important; border-radius: 14px 14px 0 0 !important; }
+  .shepherd-title { font-size: 15px !important; font-weight: 800 !important; color: #F0F2F5 !important; letter-spacing: -0.3px !important; }
+  .shepherd-text { padding: 14px 22px !important; font-size: 13px !important; color: #9BA4B0 !important; line-height: 1.65 !important; }
+  .shepherd-text strong { color: #F0F2F5 !important; }
+  .shepherd-footer { padding: 12px 22px 18px !important; display: flex !important; justify-content: space-between !important; align-items: center !important; }
+  .shepherd-button { border-radius: 8px !important; font-size: 13px !important; font-weight: 700 !important; padding: 8px 18px !important; font-family: 'Inter', sans-serif !important; cursor: pointer !important; border: none !important; }
+  .shepherd-button-primary { background: #0EA57A !important; color: #080C12 !important; }
+  .shepherd-button-primary:hover { background: #0BC48E !important; }
+  .shepherd-button-secondary { background: rgba(255,255,255,0.04) !important; color: #6B7785 !important; border: 1px solid #2D3748 !important; }
+  .shepherd-has-cancel-link .shepherd-cancel-link { color: #3A4A5C !important; font-size: 12px !important; }
+  .shepherd-arrow:before { background: #2D3748 !important; }
 </style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/shepherd.js@11/dist/css/shepherd.css">
+<script src="https://cdn.jsdelivr.net/npm/shepherd.js@11/dist/js/shepherd.min.js"></script>
 </head>
 <body>
 
@@ -241,6 +257,7 @@
   var FCM = window.FleetCostModel;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
+  var tourCompleted = false;
   var companyName = '';
   var charts = {};
   var defaultMachineryFuelCostPerLitre = null;
@@ -314,6 +331,7 @@
     document.getElementById('signout-btn').addEventListener('click', async function() {
       await supabase.auth.signOut(); window.location.href = 'login.html';
     });
+    await maybeStartTour();
   }
 
   function getIdleRate(a) { return a.idle_burn_rate_lph || DEFAULT_IDLE_RATES[a.asset_type] || 3.0; }
@@ -765,6 +783,137 @@
   }
 
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  async function maybeStartTour() {
+    if (tourCompleted) return;
+    var result = await supabase
+      .from('user_settings')
+      .select('tour_completed')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+    if (result.data && result.data.tour_completed) return;
+    setTimeout(startOnboardingTour, 800);
+  }
+
+  async function markTourComplete() {
+    tourCompleted = true;
+    var existing = await supabase
+      .from('user_settings')
+      .select('user_id')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+    if (existing.data) {
+      await supabase.from('user_settings')
+        .update({ tour_completed: true })
+        .eq('user_id', currentUser.id);
+    } else {
+      await supabase.from('user_settings')
+        .insert({ user_id: currentUser.id, tour_completed: true });
+    }
+  }
+
+  function startOnboardingTour() {
+    var tour = new Shepherd.Tour({
+      useModalOverlay: true,
+      defaultStepOptions: {
+        cancelIcon: { enabled: true },
+        scrollTo: { behavior: 'smooth', block: 'center' },
+        when: {
+          cancel: function() { markTourComplete(); }
+        }
+      }
+    });
+
+    tour.addStep({
+      id: 'welcome',
+      title: '👋 Welcome to FleetMagnify',
+      text: 'FleetMagnify gives you <strong>complete financial visibility</strong> across your entire fleet — machinery and trucks. This quick tour will walk you through everything you need to know to get started. It only takes 2 minutes.',
+      attachTo: { element: '.sidebar-logo', on: 'right' },
+      buttons: [
+        { text: 'Skip Tour', action: function() { markTourComplete(); tour.cancel(); }, classes: 'shepherd-button-secondary' },
+        { text: 'Let\'s Go →', action: tour.next, classes: 'shepherd-button-primary' }
+      ]
+    });
+
+    tour.addStep({
+      id: 'assets',
+      title: '🚧 Start Here — Your Assets',
+      text: 'Before anything else, <strong>add your fleet here</strong>. You can import in bulk via Excel or add assets one by one.<br><br>Once added, complete each asset\'s profile — the more accurate your profiles, the more accurate your cost calculations.',
+      attachTo: { element: 'a[href="assets.html"]', on: 'right' },
+      buttons: [
+        { text: '← Back', action: tour.back, classes: 'shepherd-button-secondary' },
+        { text: 'Next →', action: tour.next, classes: 'shepherd-button-primary' }
+      ]
+    });
+
+    tour.addStep({
+      id: 'asset-profiles',
+      title: '📋 Complete Your Asset Profiles',
+      text: 'For <strong>machinery</strong>, you\'ll need: Current Value, End of Life Value, Expected Life Hours, Current Hours, Annual Repair Cost, and Service Cost Per Hour.<br><br>For <strong>trucks</strong>, you\'ll need: Current Value, Expected Life KM, Current Odometer, Estimated Annual KM, and Service Cost Per KM.<br><br>Incomplete profiles show partial calculations — complete profiles unlock everything.',
+      attachTo: { element: 'a[href="assets.html"]', on: 'right' },
+      buttons: [
+        { text: '← Back', action: tour.back, classes: 'shepherd-button-secondary' },
+        { text: 'Next →', action: tour.next, classes: 'shepherd-button-primary' }
+      ]
+    });
+
+    tour.addStep({
+      id: 'machinery-modules',
+      title: '⚙️ Machinery Modules',
+      text: '<strong>Fuel Analyst</strong> — true fuel cost per machine including idle burn.<br><br><strong>Idle Cost Analyst</strong> — the cost of machines running without working. This is often the biggest hidden cost in a fleet.<br><br><strong>Job Cost Analyst</strong> — track the complete cost of every job across your machinery fleet: fuel, depreciation, idle time, servicing and maintenance per machine.',
+      attachTo: { element: '.nav-label:first-of-type', on: 'right' },
+      buttons: [
+        { text: '← Back', action: tour.back, classes: 'shepherd-button-secondary' },
+        { text: 'Next →', action: tour.next, classes: 'shepherd-button-primary' }
+      ]
+    });
+
+    tour.addStep({
+      id: 'truck-modules',
+      title: '🚛 Truck Modules',
+      text: '<strong>Cost Per KM Analyst</strong> — your true cost per kilometre driven including fuel, depreciation, maintenance and servicing. Also shows <strong>cost per tonne-km</strong> once you enter your average payload.<br><br><strong>Trip Report</strong> — full cost breakdown for any trip including emissions and cost per tonne-km.<br><br><strong>Emissions Analyst</strong> — CO₂ emissions per km and per tonne-km across your truck fleet.',
+      attachTo: { element: 'a[href="cost-per-km-analyst.html"]', on: 'right' },
+      buttons: [
+        { text: '← Back', action: tour.back, classes: 'shepherd-button-secondary' },
+        { text: 'Next →', action: tour.next, classes: 'shepherd-button-primary' }
+      ]
+    });
+
+    tour.addStep({
+      id: 'integrations',
+      title: '🔌 Connect Your Data',
+      text: 'FleetMagnify works by receiving your telematics and fuel reports <strong>automatically via email</strong>.<br><br>Your unique upload address is on the Integrations page. Schedule your reports to send there daily:<br><br>🚛 <strong>Truck telematics</strong> — daily mileage report with odometer readings<br>⚙️ <strong>Machinery telematics</strong> — daily report with operating hours, idle hours, fuel consumed during operation and during idle<br>⛽ <strong>Fuel cards</strong> — transaction report with date, vehicle reference, litres and cost',
+      attachTo: { element: 'a[href="integrations.html"]', on: 'right' },
+      buttons: [
+        { text: '← Back', action: tour.back, classes: 'shepherd-button-secondary' },
+        { text: 'Next →', action: tour.next, classes: 'shepherd-button-primary' }
+      ]
+    });
+
+    tour.addStep({
+      id: 'settings',
+      title: '⚙️ One Last Thing — Settings',
+      text: 'Head to Settings and set your <strong>default fuel cost per litre</strong>. This is used as a fallback across machinery modules when no fuel invoice data is available for a specific asset in a period.<br><br>A good starting point is your current site diesel price.',
+      attachTo: { element: 'a[href="settings.html"]', on: 'right' },
+      buttons: [
+        { text: '← Back', action: tour.back, classes: 'shepherd-button-secondary' },
+        { text: 'Next →', action: tour.next, classes: 'shepherd-button-primary' }
+      ]
+    });
+
+    tour.addStep({
+      id: 'done',
+      title: '✅ You\'re Ready to Go',
+      text: 'That\'s everything you need to get started.<br><br><strong>Your next steps:</strong><br>1. Add your assets and complete their profiles<br>2. Set up your upload email on the Integrations page<br>3. Schedule your daily reports to send automatically<br><br>Once your data starts flowing, FleetMagnify updates everything automatically. Your fleet\'s true costs will be right here on this dashboard.',
+      attachTo: { element: '.sidebar-logo', on: 'right' },
+      buttons: [
+        { text: '← Back', action: tour.back, classes: 'shepherd-button-secondary' },
+        { text: 'Get Started 🚀', action: function() { markTourComplete(); tour.complete(); }, classes: 'shepherd-button-primary' }
+      ]
+    });
+
+    tour.start();
+  }
 
   init();
 })();
