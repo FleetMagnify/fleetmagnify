@@ -2908,6 +2908,14 @@
     renderProfileEditorTab();
   });
 
+  document.getElementById('profile-editor-table').addEventListener('focus', function(e) {
+    var input = e.target;
+    if (!input.classList.contains('profile-field')) return;
+    setTimeout(function() {
+      input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 300);
+  }, true);
+
   document.getElementById('profile-editor-table').addEventListener('blur', async function(e) {
     var input = e.target;
     if (!input.classList.contains('profile-field')) return;
