@@ -952,7 +952,8 @@
       '<div class="hero-breakdown-item">Fuel<strong>' + (latest.fuelPerKm != null ? fmtMoney(latest.fuelPerKm) : '—') + '</strong></div>' +
       '<div class="hero-breakdown-item">Depreciation<strong>' + (latest.deprLifeExceeded ? '—' : (latest.deprPerKm != null ? fmtMoney(latest.deprPerKm) : '—')) + '</strong></div>' +
       '<div class="hero-breakdown-item">Maintenance<strong>' + (latest.maintPerKm != null ? fmtMoney(latest.maintPerKm) : '—') + '</strong></div>' +
-      '<div class="hero-breakdown-item">Servicing<strong>' + (latest.servPerKm != null ? fmtMoney(latest.servPerKm) : '—') + '</strong></div>';
+      '<div class="hero-breakdown-item">Servicing<strong>' + (latest.servPerKm != null ? fmtMoney(latest.servPerKm) : '—') + '</strong></div>' +
+      '<div class="hero-breakdown-item">RUC<strong>' + (latest.rucPerKm != null ? fmtMoney(latest.rucPerKm) : '—') + '</strong></div>';
 
     setKpiEl('kpi-fuel', latest.fuelPerKm, latest.fuelOverride, null, false);
     if (latest.isEstimate) {
