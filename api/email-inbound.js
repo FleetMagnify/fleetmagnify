@@ -6,6 +6,8 @@ const Busboy = require('busboy');
 const { createClient } = require('@supabase/supabase-js');
 const { isNavmanCsv, parseNavmanReport } = require('./parsers/navman');
 const { isBpCsv, parseBpReport } = require('./parsers/bp');
+const { isNavmanMileageCsv, parseNavmanMileageReport } = require('./parsers/navman-mileage');
+const { isNavmanIdleCsv, parseNavmanIdleReport } = require('./parsers/navman-idle');
 
 function classifyUnknownCsv(rawCsv) {
   var lines = String(rawCsv).split(/\r?\n/);
@@ -302,6 +304,56 @@ module.exports = async function handler(req, res) {
           await sendFailureAlert(
             attachment.filename,
             bpErr.message,
+            userResult.data.user_id
+          );
+        }
+      } else if (isNavmanMileageCsv(rawCsv)) {
+        try {
+          var mileageResult = await parseNavmanMileageReport(supabase, {
+            userId: userResult.data.user_id,
+            importId: importId,
+            rawCsv: rawCsv,
+          });
+          console.log(
+            'email-inbound: Navman mileage parse complete',
+            attachment.filename,
+            mileageResult.recordsUpserted + ' records,',
+            mileageResult.pendingAdded + ' pending assets added'
+          );
+        } catch (mileageErr) {
+          console.error(
+            'email-inbound: Navman mileage parse failed',
+            attachment.filename,
+            mileageErr.message
+          );
+          await sendFailureAlert(
+            attachment.filename,
+            mileageErr.message,
+            userResult.data.user_id
+          );
+        }
+      } else if (isNavmanIdleCsv(rawCsv)) {
+        try {
+          var idleResult = await parseNavmanIdleReport(supabase, {
+            userId: userResult.data.user_id,
+            importId: importId,
+            rawCsv: rawCsv,
+          });
+          console.log(
+            'email-inbound: Navman idle parse complete',
+            attachment.filename,
+            idleResult.recordsUpserted + ' records,',
+            idleResult.pendingAdded + ' pending assets added'
+          );
+        } catch (idleErr) {
+          console.error(
+            'email-inbound: Navman idle parse failed',
+            attachment.filename,
+            idleErr.message
+          );
+          await sendFailureAlert(
+            attachment.filename,
+            idleErr.message,
             userResult.data.user_id
           );
         }
