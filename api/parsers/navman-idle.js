@@ -138,46 +138,33 @@ async function parseNavmanIdleReport(supabase, options) {
       dailyIdleMap[key].idleMinutes += duration;
     });
 
-    // Upsert idle minutes into telematics_records
-    // Use a merge approach — update existing records, insert where missing
-    var keys = Object.keys(dailyIdleMap);
-    var upserted = 0;
+    // Batch upsert all idle records in one call instead of one per record
+    var records = [];
+    Object.keys(dailyIdleMap).forEach(function(key) {
+      var entry = dailyIdleMap[key];
+      if (entry.idleMinutes <= 0) return;
+      records.push({
+        user_id: userId,
+        asset_id: Number(entry.assetId),
+        record_date: entry.date,
+        idle_hours: entry.idleMinutes / 60,
+      });
+    });
 
-    for (var i = 0; i < keys.length; i++) {
-      var entry = dailyIdleMap[keys[i]];
-      if (entry.idleMinutes <= 0) continue;
-      var idleHours = entry.idleMinutes / 60;
+    if (records.length === 0) throw new Error('No valid idle records to import');
 
-      // Try update first (record may already exist from mileage import)
-      var updateResult = await supabase
-        .from('telematics_records')
-        .update({ idle_hours: idleHours }, { count: 'exact' })
-        .eq('asset_id', Number(entry.assetId))
-        .eq('record_date', entry.date)
-        .eq('user_id', userId);
+    // Single batch upsert — merges with existing mileage records via onConflict
+    // Only sets idle_hours — does not touch odometer_km or other fields
+    var upsertResult = await supabase
+      .from('telematics_records')
+      .upsert(records, { 
+        onConflict: 'asset_id,record_date',
+        ignoreDuplicates: false
+      });
 
-      if (updateResult.error) {
-        console.error('navman-idle: failed to update idle hours', entry, updateResult.error.message);
-        continue;
-      }
+    if (upsertResult.error) throw new Error('Failed to upsert idle records: ' + upsertResult.error.message);
 
-      // If no row existed to update, insert a new one
-      if (updateResult.count === 0 || updateResult.data === null) {
-        var insertResult = await supabase
-          .from('telematics_records')
-          .upsert({
-            user_id: userId,
-            asset_id: Number(entry.assetId),
-            record_date: entry.date,
-            idle_hours: idleHours,
-          }, { onConflict: 'asset_id,record_date' });
-        if (insertResult.error) {
-          console.error('navman-idle: failed to insert idle record', entry, insertResult.error.message);
-          continue;
-        }
-      }
-      upserted++;
-    }
+    var upserted = records.length;
 
     await updateImportStatus(supabase, importId, 'processed', null, 'navman-idle');
 
