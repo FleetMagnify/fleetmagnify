@@ -923,6 +923,7 @@
   ];
 
   var TRUCKS_PROFILE_COLS = [
+    { key: 'gvm_tonnes',                     label: 'GVM (tonnes)',             required: true  },
     { key: 'current_value',                  label: 'Current Value ($)',        required: true  },
     { key: 'estimated_end_of_life_value',    label: 'End of Life Value ($)',    required: true  },
     { key: 'expected_life_km',               label: 'Expected Life (km)',       required: true  },
@@ -2338,7 +2339,7 @@
     'expected_life_hours', 'current_hours', 'service_cost_per_hour', 'available_hours_per_week', 'target_utilisation_percent'
   ];
   var TRUCKS_COLUMNS = [
-    'asset_name', 'asset_type', 'make', 'model', 'year', 'fuel_type', 'registration',
+    'asset_name', 'gvm_tonnes', 'asset_type', 'make', 'model', 'year', 'fuel_type', 'registration',
     'idle_burn_rate_lph', 'current_value', 'estimated_end_of_life_value', 'estimated_annual_repair_cost',
     'expected_life_km', 'service_cost_per_km', 'current_odometer', 'estimated_annual_km'
   ];
@@ -2351,7 +2352,7 @@
     'asset_name', 'asset_type', 'make', 'model', 'year', 'fuel_type', 'registration',
     'idle_burn_rate_lph', 'current_value', 'estimated_end_of_life_value', 'estimated_annual_repair_cost',
     'expected_life_hours', 'current_hours', 'service_cost_per_hour', 'available_hours_per_week', 'target_utilisation_percent',
-    'expected_life_km', 'service_cost_per_km', 'current_odometer', 'estimated_annual_km'
+    'expected_life_km', 'service_cost_per_km', 'current_odometer', 'estimated_annual_km', 'gvm_tonnes'
   ];
   var IMPORT_FIELD_LABELS = {
     asset_name: 'Asset Name', asset_type: 'Asset Type', make: 'Make', model: 'Model', year: 'Year',
@@ -2362,7 +2363,8 @@
     target_utilisation_percent: 'Target Utilisation %', expected_life_km: 'Expected Life (km)',
     service_cost_per_km: 'Service Cost / km', current_odometer: 'Current Odometer',
     estimated_annual_km: 'Estimated Annual km',
-    current_hours: 'Current Hours'
+    current_hours: 'Current Hours',
+    gvm_tonnes: 'GVM (tonnes)'
   };
 
   function hasCellValue(row, key) {
@@ -2554,13 +2556,15 @@
       expected_life_km: null,
       service_cost_per_km: null,
       current_odometer: null,
-      estimated_annual_km: null
+      estimated_annual_km: null,
+      gvm_tonnes: null
     };
     if (onRoad) {
       rec.expected_life_km = parseImportNumber(row.expected_life_km);
       rec.service_cost_per_km = parseImportNumber(row.service_cost_per_km);
       rec.current_odometer = parseImportNumber(row.current_odometer);
       rec.estimated_annual_km = parseImportNumber(row.estimated_annual_km);
+      rec.gvm_tonnes = parseImportNumber(row.gvm_tonnes);
     } else {
       rec.expected_life_hours = parseImportNumber(row.expected_life_hours);
       rec.current_hours = parseImportNumber(row.current_hours);

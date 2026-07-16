@@ -325,6 +325,7 @@
                 <th>Depreciation / KM</th>
                 <th>Maintenance / KM</th>
                 <th>Servicing</th>
+                <th>RUC/km</th>
                 <th>Total / KM</th>
                 <th>Total Cost per Tonne-KM</th>
                 <th></th>
@@ -388,6 +389,20 @@
 
   function fmtMoney(n) {
     return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  }
+
+  function getRucRatePerKm(gvmTonnes) {
+    if (!gvmTonnes || isNaN(gvmTonnes)) return null;
+    var gvm = parseFloat(gvmTonnes);
+    if (gvm <= 3.5)  return 0.076;
+    if (gvm <= 6)    return 0.120;
+    if (gvm <= 10)   return 0.180;
+    if (gvm <= 14)   return 0.220;
+    if (gvm <= 18)   return 0.260;
+    if (gvm <= 22)   return 0.295;
+    if (gvm <= 28)   return 0.340;
+    if (gvm <= 32)   return 0.385;
+    return 0.430;
   }
 
   function fmtDateShort(dateStr) {
@@ -546,13 +561,14 @@
     return list;
   }
 
-  function calcPartialTotalPerKm(fuelPerKm, deprPerKm, deprMissing, deprLifeExceeded, maintPerKm, maintMissing, servPerKm, servMissing) {
+  function calcPartialTotalPerKm(fuelPerKm, deprPerKm, deprMissing, deprLifeExceeded, maintPerKm, maintMissing, servPerKm, servMissing, rucPerKm) {
     var total = 0;
     var count = 0;
     if (fuelPerKm !== null && !isNaN(fuelPerKm)) { total += fuelPerKm; count++; }
     if (!deprMissing && !deprLifeExceeded && deprPerKm !== null && !isNaN(deprPerKm)) { total += deprPerKm; count++; }
     if (!maintMissing && maintPerKm !== null && !isNaN(maintPerKm)) { total += maintPerKm; count++; }
     if (!servMissing && servPerKm !== null && !isNaN(servPerKm)) { total += servPerKm; count++; }
+    if (rucPerKm !== null && !isNaN(rucPerKm)) total += rucPerKm;
     return count > 0 ? total : null;
   }
 
@@ -606,9 +622,10 @@
       var deprLifeNearLimit = deprOv ? false : !!deprBase.lifeNearLimit;
       var maintMissing = maintOv ? null : (maintBase.ok ? null : maintBase.missing);
       var servMissing = servOv ? null : (servBase.ok ? null : servBase.missing);
+      var rucPerKm = asset.gvm_tonnes ? getRucRatePerKm(asset.gvm_tonnes) : null;
       var totalMissing = buildTotalMissing(fuelPerKm, deprMissing, deprLifeExceeded, deprLifeNearLimit, maintMissing, servMissing);
       var totalPerKm = calcPartialTotalPerKm(
-        fuelPerKm, deprPerKm, deprMissing, deprLifeExceeded, maintPerKm, maintMissing, servPerKm, servMissing
+        fuelPerKm, deprPerKm, deprMissing, deprLifeExceeded, maintPerKm, maintMissing, servPerKm, servMissing, rucPerKm
       );
 
       return {
@@ -624,6 +641,8 @@
         deprPerKm: deprPerKm,
         maintPerKm: maintPerKm,
         servPerKm: servPerKm,
+        rucPerKm: asset.gvm_tonnes ? getRucRatePerKm(asset.gvm_tonnes) : null,
+        rucOverride: findOverride(overrides, 'ruc', p.periodStart, p.periodEnd),
         totalPerKm: totalPerKm,
         totalMissing: totalMissing,
         payloadTonnes: (function() {
@@ -635,7 +654,7 @@
           if (!pl) return null;
           var payload = parseFloat(pl.payload_tonnes);
           if (!payload || payload <= 0) return null;
-          var total = calcPartialTotalPerKm(fuelPerKm, deprPerKm, deprMissing, deprLifeExceeded, maintPerKm, maintMissing, servPerKm, servMissing);
+          var total = calcPartialTotalPerKm(fuelPerKm, deprPerKm, deprMissing, deprLifeExceeded, maintPerKm, maintMissing, servPerKm, servMissing, rucPerKm);
           return total / payload;
         })(),
         fuelOverride: fuelOv,
@@ -1017,6 +1036,7 @@
         '<td>' + renderCellValue(p.deprPerKm, p.deprOverride, p.deprMissing, false, p.deprLifeExceeded, p.deprLifeNearLimit) + '</td>' +
         '<td>' + renderCellValue(p.maintPerKm, p.maintOverride, p.maintMissing, false) + '</td>' +
         '<td>' + renderCellValue(p.servPerKm, p.servOverride, p.servMissing, false) + '</td>' +
+        '<td>' + (p.rucPerKm !== null ? fmtMoney(p.rucPerKm) : '—') + '</td>' +
         '<td>' + renderTotalCell(p) + '</td>' +
         '<td>' + (p.costPerTonneKm !== null
           ? fmtMoney(p.costPerTonneKm)
