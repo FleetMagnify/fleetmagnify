@@ -4,11 +4,11 @@
  */
 const Busboy = require('busboy');
 const { createClient } = require('@supabase/supabase-js');
-const { isNavmanCsv, parseNavmanReport } = require('./parsers/navman');
-const { isBpCsv, parseBpReport } = require('./parsers/bp');
-const { isBpTransactionCsv, parseBpTransactionReport } = require('./parsers/bp-transaction');
-const { isNavmanMileageCsv, parseNavmanMileageReport } = require('./parsers/navman-mileage');
-const { isNavmanIdleCsv, parseNavmanIdleReport } = require('./parsers/navman-idle');
+const { isNavmanCsv, parseNavmanReport } = require('../parsers/navman');
+const { isBpCsv, parseBpReport } = require('../parsers/bp');
+const { isBpTransactionCsv, parseBpTransactionReport } = require('../parsers/bp-transaction');
+const { isNavmanMileageCsv, parseNavmanMileageReport } = require('../parsers/navman-mileage');
+const { isNavmanIdleCsv, parseNavmanIdleReport } = require('../parsers/navman-idle');
 
 function classifyUnknownCsv(rawCsv) {
   var lines = String(rawCsv).split(/\r?\n/);

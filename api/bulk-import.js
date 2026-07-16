@@ -1,8 +1,8 @@
-const { isNavmanCsv, parseNavmanReport } = require('./parsers/navman');
-const { isNavmanMileageCsv, parseNavmanMileageReport } = require('./parsers/navman-mileage');
-const { isNavmanIdleCsv, parseNavmanIdleReport } = require('./parsers/navman-idle');
-const { isBpCsv, parseBpReport } = require('./parsers/bp');
-const { isBpTransactionCsv, parseBpTransactionReport } = require('./parsers/bp-transaction');
+const { isNavmanCsv, parseNavmanReport } = require('../parsers/navman');
+const { isNavmanMileageCsv, parseNavmanMileageReport } = require('../parsers/navman-mileage');
+const { isNavmanIdleCsv, parseNavmanIdleReport } = require('../parsers/navman-idle');
+const { isBpCsv, parseBpReport } = require('../parsers/bp');
+const { isBpTransactionCsv, parseBpTransactionReport } = require('../parsers/bp-transaction');
 const { createClient } = require('@supabase/supabase-js');
 
 module.exports = async function handler(req, res) {
