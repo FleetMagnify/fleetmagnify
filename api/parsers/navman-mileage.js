@@ -84,18 +84,27 @@ async function loadAssetMap(supabase, userId) {
   return { assetMap: map, ignoredSet: ignoredSet };
 }
 
-async function getRunningOdometer(supabase, userId, assetId) {
+async function loadAllOdometers(supabase, userId) {
+  // Load the most recent odometer reading for every asset in one query
+  // rather than one query per asset — critical for bulk import performance
   var result = await supabase
     .from('telematics_records')
-    .select('odometer_km')
+    .select('asset_id, odometer_km, record_date')
     .eq('user_id', userId)
-    .eq('asset_id', Number(assetId))
     .not('odometer_km', 'is', null)
-    .order('record_date', { ascending: false })
-    .limit(1);
-  if (result.error || !result.data || !result.data.length) return null;
-  var val = parseFloat(result.data[0].odometer_km);
-  return isNaN(val) ? null : val;
+    .order('record_date', { ascending: false });
+
+  if (result.error || !result.data) return {};
+
+  // Keep only the most recent odometer per asset
+  var odoMap = {};
+  result.data.forEach(function(r) {
+    var aid = String(r.asset_id);
+    if (!odoMap[aid]) {
+      odoMap[aid] = parseFloat(r.odometer_km);
+    }
+  });
+  return odoMap;
 }
 
 async function ensureAssets(supabase, userId, rows) {
@@ -134,6 +143,7 @@ async function parseNavmanMileageReport(supabase, options) {
 
     var assetResult = await ensureAssets(supabase, userId, rows);
     var assetMap = assetResult.assetMap;
+    var odoMap = await loadAllOdometers(supabase, userId);
 
     // Aggregate distance per vehicle per date — deduplicate same-day entries by summing
     // then taking the MAX (same-day duplicates from overlapping exports should be same value)
@@ -162,11 +172,14 @@ async function parseNavmanMileageReport(supabase, options) {
       if (dailyDistanceKm <= 0) continue;
 
       var cumulativeOdometer = null;
-      var runningOdo = await getRunningOdometer(supabase, userId, entry.assetId);
+      var runningOdo = odoMap[String(entry.assetId)] || null;
       if (runningOdo !== null) {
         cumulativeOdometer = runningOdo + dailyDistanceKm;
+        // Update odoMap so next record for this asset uses updated value
+        odoMap[String(entry.assetId)] = cumulativeOdometer;
       } else if (entry.assetEntry.current_odometer !== null) {
         cumulativeOdometer = entry.assetEntry.current_odometer + dailyDistanceKm;
+        odoMap[String(entry.assetId)] = cumulativeOdometer;
       }
 
       records.push({
