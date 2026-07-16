@@ -404,6 +404,11 @@
   .fuel-card-name { font-size: 13.5px; font-weight: 700; color: #D8DFE8; margin-bottom: 3px; }
   .fuel-card-meta { font-size: 11px; color: #5A6474; margin-bottom: 4px; }
   .fuel-card-context { font-size: 11.5px; color: #8B94A0; }
+  .match-suggestion { background: rgba(14,165,122,0.08); border: 1px solid rgba(14,165,122,0.25); border-radius: 8px; padding: 10px 14px; margin-top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+  .suggestion-text { color: #9BA4B0; flex: 1; }
+  .suggestion-text strong { color: #F0F2F5; }
+  .btn-confirm-suggestion { background: #0EA57A; border: none; color: #080C12; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-family: inherit; }
+  .btn-dismiss-suggestion { background: rgba(255,255,255,0.04); border: 1px solid #2D3748; color: #6B7785; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-family: inherit; }
   .vehicle-drop-item { background: rgba(255,255,255,0.03); border: 1px solid #2D3748; border-radius: 10px; padding: 12px 14px; transition: border-color 0.2s, background 0.2s, opacity 0.15s; }
   .vehicle-drop-item[draggable="true"] { cursor: grab; }
   .vehicle-drop-item.dragging { opacity: 0.45; cursor: grabbing; }
@@ -1212,6 +1217,28 @@
     renderCardMatchVehicles();
   }
 
+  function nameSimilarity(a, b) {
+    if (!a || !b) return 0;
+    var aWords = a.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(Boolean);
+    var bWords = b.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(Boolean);
+    if (!aWords.length || !bWords.length) return 0;
+    var matches = aWords.filter(function(w) { return bWords.indexOf(w) !== -1; });
+    return matches.length / Math.max(aWords.length, bWords.length);
+  }
+
+  function findSuggestedMatch(cardName, assets) {
+    var best = null;
+    var bestScore = 0.5; // minimum threshold
+    (assets || []).forEach(function(asset) {
+      var score = nameSimilarity(cardName, asset.asset_name);
+      if (score > bestScore) {
+        bestScore = score;
+        best = asset;
+      }
+    });
+    return best;
+  }
+
   function renderCardMatchCards() {
     var list = document.getElementById('card-match-cards-list');
     if (unmatchedCards.length === 0) {
@@ -1235,11 +1262,20 @@
       } else {
         context = 'No fuel records yet';
       }
-      return '<div class="fuel-card-item" draggable="true" data-id="' + a.id + '">' +
+      var html = '<div class="fuel-card-item" draggable="true" data-id="' + a.id + '">' +
         '<div class="fuel-card-name">' + esc(a.asset_name || '—') + '</div>' +
         '<div class="fuel-card-meta">Card ' + esc(a.bp_card_number || '—') + '</div>' +
-        '<div class="fuel-card-context">' + esc(context) + '</div>' +
-      '</div>';
+        '<div class="fuel-card-context">' + esc(context) + '</div>';
+      var suggested = findSuggestedMatch(a.asset_name || '', realVehicles);
+      if (suggested) {
+        html += '<div class="match-suggestion" data-card-id="' + esc(a.id) + '" data-asset-id="' + suggested.id + '">' +
+          '<span class="suggestion-text">Suggested match: <strong>' + esc(suggested.asset_name) + '</strong></span>' +
+          '<button type="button" class="btn-confirm-suggestion">Confirm ✓</button>' +
+          '<button type="button" class="btn-dismiss-suggestion">Dismiss ✗</button>' +
+        '</div>';
+      }
+      html += '</div>';
+      return html;
     }).join('');
     list.querySelectorAll('.fuel-card-item').forEach(function(el) {
       el.addEventListener('dragstart', onCardDragStart);
@@ -1844,6 +1880,27 @@
   discardZone.addEventListener('dragover', onDiscardZoneDragOver);
   discardZone.addEventListener('dragleave', onDiscardZoneDragLeave);
   discardZone.addEventListener('drop', onDiscardZoneDrop);
+
+  document.getElementById('card-match-cards-list').addEventListener('click', function(e) {
+    var confirmBtn = e.target.closest('.btn-confirm-suggestion');
+    var dismissBtn = e.target.closest('.btn-dismiss-suggestion');
+
+    if (confirmBtn) {
+      var suggestion = confirmBtn.closest('.match-suggestion');
+      var cardId = suggestion.dataset.cardId;
+      var assetId = suggestion.dataset.assetId;
+      var stub = unmatchedCards.find(function(a) { return String(a.id) === String(cardId); });
+      var target = realVehicles.find(function(a) { return String(a.id) === String(assetId); });
+      if (stub && target) {
+        openMergeConfirm(stub, target);
+      }
+    }
+
+    if (dismissBtn) {
+      dismissBtn.closest('.match-suggestion').remove();
+    }
+  });
+
   document.getElementById('show-ignored-btn').addEventListener('click', async function() {
     ignoredListVisible = !ignoredListVisible;
     var list = document.getElementById('card-ignored-list');
