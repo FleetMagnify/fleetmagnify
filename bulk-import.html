@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bulk Import | FleetMagnify Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #080C12; color: #E2E8F0; min-height: 100vh; padding: 32px 24px; }
+  .page { max-width: 800px; margin: 0 auto; }
+  h1 { font-size: 24px; font-weight: 800; color: #F0F2F5; margin-bottom: 6px; letter-spacing: -0.5px; }
+  .sub { font-size: 13px; color: #5A6474; margin-bottom: 32px; }
+  .card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 28px; margin-bottom: 20px; }
+  .card h2 { font-size: 15px; font-weight: 700; color: #F0F2F5; margin-bottom: 16px; }
+  .form-group { margin-bottom: 16px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: #9BA4B0; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+  input[type="password"], input[type="file"], select { width: 100%; padding: 10px 14px; background: rgba(255,255,255,0.04); border: 1px solid #2D3748; border-radius: 8px; color: #F0F2F5; font-size: 13px; font-family: inherit; outline: none; }
+  input[type="file"] { cursor: pointer; }
+  .btn { padding: 11px 22px; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
+  .btn-teal { background: #0EA57A; color: #080C12; }
+  .btn-teal:hover { background: #0BC48E; }
+  .btn-teal:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary { background: rgba(255,255,255,0.04); border: 1px solid #2D3748; color: #C8D0DB; }
+  .results { margin-top: 20px; }
+  .result-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; margin-bottom: 8px; font-size: 13px; }
+  .result-ok { background: rgba(14,165,122,0.10); color: #0EA57A; border: 1px solid rgba(14,165,122,0.25); }
+  .result-error { background: rgba(226,75,74,0.10); color: #F0A8A7; border: 1px solid rgba(226,75,74,0.25); }
+  .result-info { background: rgba(255,255,255,0.04); color: #9BA4B0; border: 1px solid #2D3748; }
+  .error-msg { background: rgba(226,75,74,0.10); border: 1px solid rgba(226,75,74,0.28); color: #F0A8A7; font-size: 13px; padding: 11px 14px; border-radius: 8px; margin-bottom: 14px; display: none; }
+  .error-msg.visible { display: block; }
+  #gate-view, #import-view { display: none; }
+  #gate-view.visible, #import-view.visible { display: block; }
+  .file-list { font-size: 12px; color: #5A6474; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>📦 FleetMagnify Bulk Import</h1>
+  <p class="sub">Admin tool — upload historical CSV data for any account.</p>
+
+  <!-- Password gate -->
+  <div id="gate-view" class="visible">
+    <div class="card">
+      <h2>🔒 Admin Access Required</h2>
+      <div class="form-group">
+        <label>Admin Password</label>
+        <input type="password" id="gate-password" placeholder="Enter admin password">
+      </div>
+      <div class="error-msg" id="gate-error">Incorrect password.</div>
+      <button type="button" class="btn btn-teal" id="gate-btn">Unlock →</button>
+    </div>
+  </div>
+
+  <!-- Import panel -->
+  <div id="import-view">
+    <div class="card">
+      <h2>1. Select Account</h2>
+      <div class="form-group">
+        <label>Customer Account</label>
+        <select id="account-select"><option value="">Loading accounts...</option></select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. Upload CSV Files</h2>
+      <p style="font-size:13px; color:#5A6474; margin-bottom:16px;">
+        Upload one or more CSV files. Each file will be automatically detected 
+        as BP Fuel, Navman Mileage, Navman Idle, or Navman Executive Summary.
+      </p>
+      <div class="form-group">
+        <label>Select CSV Files (multiple allowed)</label>
+        <input type="file" id="csv-files" accept=".csv" multiple>
+        <div class="file-list" id="file-list"></div>
+      </div>
+      <button type="button" class="btn btn-teal" id="import-btn" disabled>
+        Import Files →
+      </button>
+    </div>
+
+    <div class="card" id="results-card" style="display:none;">
+      <h2>3. Results</h2>
+      <div class="results" id="results-list"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase-config.js"></script>
+<script>
+(function() {
+  var adminSecret = sessionStorage.getItem('fm_bulk_admin') || null;
+  var selectedUserId = null;
+
+  // Gate
+  document.getElementById('gate-btn').addEventListener('click', async function() {
+    var pwd = document.getElementById('gate-password').value.trim();
+    var errEl = document.getElementById('gate-error');
+    errEl.classList.remove('visible');
+    if (!pwd) return;
+    this.disabled = true;
+    this.textContent = 'Checking...';
+    try {
+      var res = await fetch('/api/admin-users', { headers: { 'x-admin-secret': pwd } });
+      if (!res.ok) throw new Error('Unauthorized');
+      var data = await res.json();
+      adminSecret = pwd;
+      sessionStorage.setItem('fm_bulk_admin', pwd);
+      document.getElementById('gate-view').classList.remove('visible');
+      document.getElementById('import-view').classList.add('visible');
+      populateAccounts(data.users || []);
+    } catch(e) {
+      errEl.classList.add('visible');
+    }
+    this.disabled = false;
+    this.textContent = 'Unlock →';
+  });
+
+  document.getElementById('gate-password').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') document.getElementById('gate-btn').click();
+  });
+
+  function populateAccounts(users) {
+    users.sort(function(a, b) {
+      return (a.company_name || a.email).localeCompare(b.company_name || b.email);
+    });
+    var sel = document.getElementById('account-select');
+    sel.innerHTML = '<option value="">Select account...</option>' +
+      users.map(function(u) {
+        var label = u.company_name ? u.company_name + ' (' + u.email + ')' : u.email;
+        return '<option value="' + u.id + '">' + label + '</option>';
+      }).join('');
+  }
+
+  document.getElementById('account-select').addEventListener('change', function() {
+    selectedUserId = this.value || null;
+    updateImportBtn();
+  });
+
+  document.getElementById('csv-files').addEventListener('change', function() {
+    var files = Array.from(this.files);
+    document.getElementById('file-list').textContent = 
+      files.length ? files.map(function(f) { return f.name; }).join(', ') : '';
+    updateImportBtn();
+  });
+
+  function updateImportBtn() {
+    var hasAccount = !!selectedUserId;
+    var hasFiles = document.getElementById('csv-files').files.length > 0;
+    document.getElementById('import-btn').disabled = !(hasAccount && hasFiles);
+  }
+
+  document.getElementById('import-btn').addEventListener('click', async function() {
+    var files = Array.from(document.getElementById('csv-files').files);
+    if (!files.length || !selectedUserId) return;
+
+    this.disabled = true;
+    this.textContent = 'Importing...';
+
+    var resultsCard = document.getElementById('results-card');
+    var resultsList = document.getElementById('results-list');
+    resultsCard.style.display = 'block';
+    resultsList.innerHTML = '';
+
+    for (var i = 0; i < files.length; i++) {
+      var file = files[i];
+      addResult('info', '⏳ Processing: ' + file.name + '...');
+      try {
+        var text = await readFileAsText(file);
+
+        var res = await fetch('/api/bulk-import', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain',
+            'x-admin-secret': adminSecret,
+            'x-user-id': selectedUserId,
+            'x-filename': file.name
+          },
+          body: text
+        });
+        var data = await res.json();
+        if (data.ok) {
+          addResult('ok', '✓ ' + file.name + ' — ' + 
+            (data.parser || 'unknown') + ': ' + 
+            (data.recordsUpserted || 0) + ' records imported' +
+            (data.pendingAdded ? ', ' + data.pendingAdded + ' new assets pending review' : ''));
+        } else {
+          addResult('error', '✕ ' + file.name + ' — ' + (data.error || 'Unknown error'));
+        }
+      } catch(e) {
+        addResult('error', '✕ ' + file.name + ' — ' + e.message);
+      }
+    }
+
+    this.disabled = false;
+    this.textContent = 'Import Files →';
+  });
+
+  function readFileAsText(file) {
+    return new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function(e) { resolve(e.target.result); };
+      reader.onerror = function() { reject(new Error('Failed to read file')); };
+      reader.readAsText(file);
+    });
+  }
+
+  function addResult(type, message) {
+    var div = document.createElement('div');
+    div.className = 'result-row result-' + type;
+    div.textContent = message;
+    document.getElementById('results-list').appendChild(div);
+  }
+
+  // Auto-unlock if session still valid
+  if (adminSecret) {
+    fetch('/api/admin-users', { headers: { 'x-admin-secret': adminSecret } })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        document.getElementById('gate-view').classList.remove('visible');
+        document.getElementById('import-view').classList.add('visible');
+        populateAccounts(data.users || []);
+      }).catch(function() {
+        sessionStorage.removeItem('fm_bulk_admin');
+        adminSecret = null;
+      });
+  }
+})();
+</script>
+</body>
+</html>
