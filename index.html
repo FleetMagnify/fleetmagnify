@@ -624,6 +624,158 @@
     .btn-hero-video { display: none; }
   }
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What is FleetMagnify?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "FleetMagnify is a dedicated fleet cost intelligence platform that acts as a forensic accountant for your vehicles and heavy machines. It calculates true Total Cost of Ownership, cost-per-kilometre, cost-per-tonne-km, and job costs across mixed fleets of trucks and machinery — automatically, using your existing telematics and fuel card data."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does FleetMagnify require new GPS hardware or telematics devices?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. FleetMagnify is a software-only overlay that connects to your existing telematics and fuel card providers via automated daily email reports. Zero new hardware required. Zero manual data entry."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Which telematics and fuel card providers does FleetMagnify support?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "FleetMagnify supports Navman, eROAD, VisionLink (Caterpillar), Komtrax (Komatsu), CareTrack (Volvo), ConSite (Hitachi), and FleetPin for telematics. For fuel cards, it supports BP and is compatible with any provider that exports structured CSV data. New providers are added continuously as part of our active pilot programme."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How does FleetMagnify calculate cost per kilometre?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "FleetMagnify uses a fill-to-fill methodology — pairing actual fuel card purchases with real odometer readings from your telematics provider to calculate true fuel cost per kilometre for each vehicle. Depreciation, maintenance, servicing, and RUC costs are added to produce a complete total cost per kilometre figure."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is cost per tonne-kilometre and why does it matter?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Cost per tonne-kilometre ($/tonne-km) divides your true cost per kilometre by the average payload carried, giving freight operators a standardised measure of transport efficiency. It allows direct comparison between different vehicles, routes, and time periods — and is the key metric for understanding true freight profitability."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How does FleetMagnify calculate job costs for machinery fleets?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "The Job Cost Analyst assigns machinery assets to specific jobs and tracks their daily operating hours from telematics data. It calculates fuel cost, depreciation, idle cost, servicing, and maintenance for each machine on each job — producing a complete cost breakdown per job, per asset, and per operating hour."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is idle cost and why should fleet managers track it?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Idle cost is the money spent on fuel while machines or vehicles are running without performing useful work. For heavy machinery and trucks, idle fuel burn can represent 20-40% of total fuel consumption. FleetMagnify's Idle Cost Analyst identifies which assets are wasting the most fuel at idle, quantifies the dollar cost, and benchmarks each asset against your own utilisation targets."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How are emissions calculated in FleetMagnify?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "FleetMagnify calculates CO₂ emissions using actual measured fuel consumption data combined with New Zealand Ministry for the Environment emission factors (2.680680605 kg CO₂-e per litre of diesel). This produces auditable, data-derived emissions figures suitable for ESG disclosure and sustainability reporting."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What does FleetMagnify cost?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "FleetMagnify is priced at NZD $49 per month platform fee, plus $8 per truck per month and $15 per machine per month. A fleet of 10 trucks costs $129/month. A mixed fleet of 10 trucks and 10 machines costs $249/month. No setup fees. No long-term contracts."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is FleetMagnify suitable for small fleets?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "FleetMagnify is designed for commercial fleet operators who need genuine cost visibility — typically fleets of 10 or more vehicles or machines. It is particularly valuable for mixed fleets operating both trucks and heavy machinery, where job costing, idle cost analysis, and cost-per-tonne-km are critical to profitability."
+      }
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "FleetMagnify",
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "Web",
+  "description": "Fleet cost intelligence platform that calculates true Total Cost of Ownership, cost-per-kilometre, cost-per-tonne-km, and job costs across mixed fleets of trucks and heavy machinery using existing telematics and fuel card data.",
+  "url": "https://www.fleetmagnify.com",
+  "offers": [
+    {
+      "@type": "Offer",
+      "name": "Platform Fee",
+      "price": "49.00",
+      "priceCurrency": "NZD",
+      "description": "Monthly platform fee — required for all accounts",
+      "billingIncrement": "monthly"
+    },
+    {
+      "@type": "Offer", 
+      "name": "Truck Module",
+      "price": "8.00",
+      "priceCurrency": "NZD",
+      "description": "Per truck per month — includes Cost Per KM Analyst, Fuel Analyst, Emissions Analyst, Trip Report",
+      "billingIncrement": "monthly"
+    },
+    {
+      "@type": "Offer",
+      "name": "Machine Module", 
+      "price": "15.00",
+      "priceCurrency": "NZD",
+      "description": "Per machine per month — includes Job Cost Analyst, Idle Cost Analyst, Fuel Analyst, Utilisation Analyst, Emissions Intelligence",
+      "billingIncrement": "monthly"
+    }
+  ],
+  "featureList": [
+    "Fill-to-fill cost per kilometre calculation",
+    "Cost per tonne-kilometre for freight fleets",
+    "Job cost analysis for machinery fleets",
+    "Idle cost identification and benchmarking",
+    "Automated data ingestion via daily email reports",
+    "NZ Road User Charges (RUC) cost calculation by GVM",
+    "CO2 emissions reporting using MfE emission factors",
+    "Mixed fleet support — trucks and heavy machinery",
+    "Asset depreciation and whole-life cost modelling",
+    "Compatible with Navman, eROAD, VisionLink, Komtrax, BP fuel cards"
+  ],
+  "aggregateRating": {
+    "@type": "AggregateRating",
+    "ratingValue": "5",
+    "ratingCount": "1",
+    "bestRating": "5"
+  },
+  "provider": {
+    "@type": "Organization",
+    "name": "FleetMagnify Limited",
+    "url": "https://www.fleetmagnify.com",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "NZ"
+    }
+  }
+}
+</script>
 </head>
 <body>
 
