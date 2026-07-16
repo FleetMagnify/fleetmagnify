@@ -6,6 +6,7 @@ const Busboy = require('busboy');
 const { createClient } = require('@supabase/supabase-js');
 const { isNavmanCsv, parseNavmanReport } = require('./parsers/navman');
 const { isBpCsv, parseBpReport } = require('./parsers/bp');
+const { isBpTransactionCsv, parseBpTransactionReport } = require('./parsers/bp-transaction');
 const { isNavmanMileageCsv, parseNavmanMileageReport } = require('./parsers/navman-mileage');
 const { isNavmanIdleCsv, parseNavmanIdleReport } = require('./parsers/navman-idle');
 
@@ -279,6 +280,31 @@ module.exports = async function handler(req, res) {
           await sendFailureAlert(
             attachment.filename,
             parseErr.message,
+            userResult.data.user_id
+          );
+        }
+      } else if (isBpTransactionCsv(rawCsv)) {
+        try {
+          var bpTransactionResult = await parseBpTransactionReport(supabase, {
+            userId: userResult.data.user_id,
+            importId: importId,
+            rawCsv: rawCsv,
+          });
+          console.log(
+            'email-inbound: BP transaction parse complete',
+            attachment.filename,
+            bpTransactionResult.recordsUpserted + ' purchases,',
+            bpTransactionResult.pendingAdded + ' pending assets'
+          );
+        } catch (bpTransactionErr) {
+          console.error(
+            'email-inbound: BP transaction parse failed',
+            attachment.filename,
+            bpTransactionErr.message
+          );
+          await sendFailureAlert(
+            attachment.filename,
+            bpTransactionErr.message,
             userResult.data.user_id
           );
         }

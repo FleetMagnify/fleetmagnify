@@ -2,6 +2,7 @@ const { isNavmanCsv, parseNavmanReport } = require('./parsers/navman');
 const { isNavmanMileageCsv, parseNavmanMileageReport } = require('./parsers/navman-mileage');
 const { isNavmanIdleCsv, parseNavmanIdleReport } = require('./parsers/navman-idle');
 const { isBpCsv, parseBpReport } = require('./parsers/bp');
+const { isBpTransactionCsv, parseBpTransactionReport } = require('./parsers/bp-transaction');
 const { createClient } = require('@supabase/supabase-js');
 
 module.exports = async function handler(req, res) {
@@ -67,6 +68,9 @@ module.exports = async function handler(req, res) {
     } else if (isNavmanCsv(rawCsv)) {
       parser = 'Navman Executive Summary';
       result = await parseNavmanReport(supabase, options);
+    } else if (isBpTransactionCsv(rawCsv)) {
+      parser = 'BP Transaction';
+      result = await parseBpTransactionReport(supabase, options);
     } else if (isBpCsv(rawCsv)) {
       parser = 'BP Fuel';
       result = await parseBpReport(supabase, options);
