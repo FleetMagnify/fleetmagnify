@@ -1228,15 +1228,34 @@
 
   function findSuggestedMatch(cardName, assets) {
     var best = null;
-    var bestScore = 0.5; // minimum threshold
+    var bestScore = 0;
+    var bestAsset = null;
+    var cardWords = (cardName || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(Boolean);
+    
     (assets || []).forEach(function(asset) {
-      var score = nameSimilarity(cardName, asset.asset_name);
-      if (score > bestScore) {
+      var assetWords = (asset.asset_name || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(Boolean);
+      
+      // Check if any word from card name matches any word in asset name
+      var matchingWords = cardWords.filter(function(w) { 
+        return w.length >= 2 && assetWords.indexOf(w) !== -1; 
+      });
+      
+      // Score: matching words / total unique words, bonus for short identifiers like T28
+      var score = matchingWords.length > 0 
+        ? matchingWords.length / Math.max(cardWords.length, assetWords.length)
+        : 0;
+      
+      // Bonus: if first word matches (e.g. T28) treat as strong signal
+      if (cardWords[0] && assetWords[0] && cardWords[0] === assetWords[0] && cardWords[0].length >= 2) {
+        score += 0.4;
+      }
+      
+      if (score > bestScore && score > 0.2) {
         bestScore = score;
-        best = asset;
+        bestAsset = asset;
       }
     });
-    return best;
+    return bestAsset;
   }
 
   function renderCardMatchCards() {
