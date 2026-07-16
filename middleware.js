@@ -1,12 +1,12 @@
 export const config = {
-  matcher: '/((?!api|css|js|images|favicon.ico).*)',
+  matcher: '/((?!api|_next|css|js|images|favicon.ico).*)',
+  runtime: 'edge',
 };
 
 export default function middleware(request) {
   var url = new URL(request.url);
-
   fetch('https://ntfy.sh/fleetmagnify-pings-x7k2p9', {
     method: 'POST',
     body: 'Page view: ' + url.pathname,
-  }).catch(function () {});
+  }).catch(function() {});
 }
