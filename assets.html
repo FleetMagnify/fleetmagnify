@@ -128,8 +128,8 @@
   .actions-cell { display: flex; align-items: center; gap: 4px; white-space: nowrap; flex-shrink: 0; }
   .actions-cell .btn-edit { background: none; border: 1px solid transparent; color: #3A4A5C; font-size: 11px; font-weight: 500; padding: 4px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; flex-shrink: 0; white-space: nowrap; }
   .actions-cell .btn-edit:hover { border-color: rgba(14,165,122,0.35); color: #0EA57A; background: rgba(14,165,122,0.08); }
-  .actions-cell .btn-delete { background: none; border: 1px solid transparent; color: #3A4A5C; font-size: 11px; font-weight: 500; padding: 4px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; flex-shrink: 0; white-space: nowrap; }
-  .actions-cell .btn-delete:hover { border-color: rgba(226,75,74,0.3); color: #F0A8A7; background: rgba(226,75,74,0.08); }
+  .actions-cell .btn-remove { background: none; border: 1px solid transparent; color: #3A4A5C; font-size: 11px; font-weight: 500; padding: 4px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; flex-shrink: 0; white-space: nowrap; }
+  .actions-cell .btn-remove:hover { border-color: rgba(255,255,255,0.18); color: #C8D0DB; background: rgba(255,255,255,0.05); }
   #delete-asset-modal-btn { background: none; border: 1px solid transparent; color: #6B7785; font-size: 13px; font-weight: 500; padding: 12px 0; margin-right: auto; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
   #delete-asset-modal-btn:hover { color: #F0A8A7; }
   .empty-state { padding: 60px 24px; text-align: center; }
@@ -173,8 +173,10 @@
   .import-confirm-item strong { color: #C8D0DB; font-weight: 600; }
   .import-change { margin-top: 4px; padding-left: 10px; border-left: 2px solid rgba(14,165,122,0.35); font-size: 11.5px; }
   .import-change em { color: #3A4A5C; font-style: normal; }
-  .btn-danger { flex: 2; background: rgba(226,75,74,0.15); border: 1px solid rgba(226,75,74,0.30); color: #F0A8A7; font-size: 14px; font-weight: 700; padding: 12px; border-radius: 9px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-danger { flex: 1; background: rgba(226,75,74,0.15); border: 1px solid rgba(226,75,74,0.30); color: #F0A8A7; font-size: 14px; font-weight: 700; padding: 12px; border-radius: 9px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
   .btn-danger:hover { background: rgba(226,75,74,0.25); }
+  .btn-warning { flex: 1; background: rgba(217,164,6,0.15); border: 1px solid rgba(217,164,6,0.30); color: #E8C46B; font-size: 14px; font-weight: 700; padding: 12px; border-radius: 9px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-warning:hover { background: rgba(217,164,6,0.25); }
   .form-error { display: none; background: rgba(226,75,74,0.10); border: 1px solid rgba(226,75,74,0.28); color: #F0A8A7; font-size: 13px; line-height: 1.5; padding: 11px 14px; border-radius: 9px; margin-bottom: 16px; }
   .form-error.visible { display: block; }
   .type-select-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -829,15 +831,16 @@
   </div>
 </div>
 
-<div class="modal-overlay" id="confirm-modal">
+<div class="modal-overlay" id="remove-modal">
   <div class="modal confirm-modal">
     <div class="confirm-icon">🗑</div>
-    <h2>Delete Asset?</h2>
-    <p class="modal-sub">This will permanently remove the asset and all associated data records. This action cannot be undone.</p>
+    <h2>Asset disposed, or tracking not required?</h2>
+    <p class="modal-sub">If this asset has been sold or disposed of, delete it permanently. If you just don't need to track or bill it right now (e.g. temporarily off the road), ignore it instead — you can restore it later from the ignored assets list.</p>
     <div class="modal-actions">
-      <button class="btn-cancel" id="cancel-delete-btn">Keep Asset</button>
-      <button class="btn-danger" id="confirm-delete-btn">Yes, Delete</button>
+      <button class="btn-warning" id="confirm-ignore-remove-btn">Not Tracking — Ignore</button>
+      <button class="btn-danger" id="confirm-dispose-btn">Disposed — Delete Permanently</button>
     </div>
+    <button class="btn-cancel" id="cancel-remove-btn" style="width:100%; margin-top:10px;">Cancel</button>
   </div>
 </div>
 
@@ -897,7 +900,7 @@
   var currentUser = null;
   var allAssets = [];
   var latestTelByAsset = {};
-  var pendingDeleteId = null;
+  var pendingRemoveId = null;
   var editingAssetId = null;
   var storedHasEroadKey = false;
   var importMachineryRows = [];
@@ -1867,8 +1870,7 @@
         '<td class="col-life">' + esc(formatExpectedLife(a)) + '</td>' +
         '<td class="col-actions"><div class="actions-cell">' +
           '<button type="button" class="btn-edit" data-id="' + a.id + '">Edit</button>' +
-          '<button type="button" class="btn-ignore" data-id="' + a.id + '">Ignore</button>' +
-          '<button type="button" class="btn-delete" data-id="' + a.id + '">Delete</button>' +
+          '<button type="button" class="btn-remove" data-id="' + a.id + '">Remove</button>' +
         '</div></td>' +
       '</tr>';
       return row;
@@ -1877,11 +1879,8 @@
     tbody.querySelectorAll('.btn-edit').forEach(function(btn) {
       btn.addEventListener('click', function() { openEditModal(btn.dataset.id); });
     });
-    tbody.querySelectorAll('.btn-ignore').forEach(function(btn) {
-      btn.addEventListener('click', function() { ignoreAssetFromTable(btn.dataset.id); });
-    });
-    tbody.querySelectorAll('.btn-delete').forEach(function(btn) {
-      btn.addEventListener('click', function() { openConfirmDelete(btn.dataset.id); });
+    tbody.querySelectorAll('.btn-remove').forEach(function(btn) {
+      btn.addEventListener('click', function() { openRemoveModal(btn.dataset.id); });
     });
   }
 
@@ -2398,23 +2397,30 @@
     loadAssets();
   });
 
-  function openConfirmDelete(id) { pendingDeleteId = id; document.getElementById('confirm-modal').classList.add('open'); }
-  document.getElementById('cancel-delete-btn').addEventListener('click', function() {
-    document.getElementById('confirm-modal').classList.remove('open'); pendingDeleteId = null;
+  function openRemoveModal(id) { pendingRemoveId = id; document.getElementById('remove-modal').classList.add('open'); }
+  document.getElementById('cancel-remove-btn').addEventListener('click', function() {
+    document.getElementById('remove-modal').classList.remove('open'); pendingRemoveId = null;
   });
-  document.getElementById('confirm-modal').addEventListener('click', function(e) {
-    if (e.target === this) { this.classList.remove('open'); pendingDeleteId = null; }
+  document.getElementById('remove-modal').addEventListener('click', function(e) {
+    if (e.target === this) { this.classList.remove('open'); pendingRemoveId = null; }
   });
-  document.getElementById('confirm-delete-btn').addEventListener('click', async function() {
-    if (!pendingDeleteId) return;
+  document.getElementById('confirm-dispose-btn').addEventListener('click', async function() {
+    if (!pendingRemoveId) return;
     this.disabled = true; this.textContent = 'Deleting...';
-    var { error } = await supabase.from('assets').delete().eq('id', Number(pendingDeleteId)).eq('user_id', currentUser.id);
-    this.disabled = false; this.textContent = 'Yes, Delete';
-    document.getElementById('confirm-modal').classList.remove('open');
-    pendingDeleteId = null;
+    var { error } = await supabase.from('assets').delete().eq('id', Number(pendingRemoveId)).eq('user_id', currentUser.id);
+    this.disabled = false; this.textContent = 'Disposed — Delete Permanently';
+    document.getElementById('remove-modal').classList.remove('open');
+    pendingRemoveId = null;
     if (error) { showToast('Failed to delete asset', 'error'); return; }
     showToast('Asset deleted', 'success');
     loadAssets();
+  });
+  document.getElementById('confirm-ignore-remove-btn').addEventListener('click', async function() {
+    if (!pendingRemoveId) return;
+    var id = pendingRemoveId;
+    document.getElementById('remove-modal').classList.remove('open');
+    pendingRemoveId = null;
+    await ignoreAssetFromTable(id);
   });
 
   document.getElementById('excel-toggle-btn').addEventListener('click', function() {
