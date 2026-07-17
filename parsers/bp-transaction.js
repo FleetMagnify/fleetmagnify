@@ -102,44 +102,65 @@ function parseBpTransactionXlsRows(fileBuffer) {
   return rows;
 }
 
+function normalizeCardNumber(value) {
+  return String(value || '').trim();
+}
+
 async function loadAssetMap(supabase, userId) {
-  var assetResult = await supabase.from('assets').select('id, asset_name').eq('user_id', userId);
+  var assetResult = await supabase
+    .from('assets')
+    .select('id, bp_card_number')
+    .eq('user_id', userId)
+    .not('bp_card_number', 'is', null);
   if (assetResult.error) throw new Error('Failed to load assets: ' + assetResult.error.message);
-  var ignoredResult = await supabase.from('ignored_assets').select('asset_name').eq('user_id', userId);
-  if (ignoredResult.error) throw new Error('Failed to load ignored assets: ' + ignoredResult.error.message);
-  var ignoredSet = {};
-  (ignoredResult.data || []).forEach(function(r) { ignoredSet[String(r.asset_name).trim()] = true; });
-  var map = {};
+
+  var cardMap = {};
   (assetResult.data || []).forEach(function(asset) {
-    if (asset.asset_name) map[asset.asset_name] = { id: asset.id };
+    var card = normalizeCardNumber(asset.bp_card_number);
+    if (card) cardMap[card] = { id: asset.id };
   });
-  return { assetMap: map, ignoredSet: ignoredSet };
+  return { cardMap: cardMap };
 }
 
 async function ensureAssets(supabase, userId, rows) {
   var loaded = await loadAssetMap(supabase, userId);
-  var assetMap = loaded.assetMap;
-  var ignoredSet = loaded.ignoredSet;
-  var pendingAdded = 0;
+  var cardMap = loaded.cardMap;
   var seen = {};
+
   for (var i = 0; i < rows.length; i++) {
-    var vehicleDesc = String(rows[i]['Vehicle Description'] || '').trim();
-    if (!vehicleDesc || seen[vehicleDesc]) continue;
-    seen[vehicleDesc] = true;
-    if (assetMap[vehicleDesc] || ignoredSet[vehicleDesc]) continue;
-    var reg = rows[i]['Vehicle Registration Number'] 
-      ? String(rows[i]['Vehicle Registration Number']).trim() : null;
-    var pendingResult = await supabase.from('pending_assets').upsert({
+    var cardNumber = normalizeCardNumber(rows[i]['Card Number']);
+    if (!cardNumber || seen[cardNumber] || cardMap[cardNumber]) continue;
+    seen[cardNumber] = true;
+
+    var stubName = 'Card ••••' + cardNumber.slice(-4);
+    var insertResult = await supabase.from('assets').insert({
       user_id: userId,
-      asset_name: vehicleDesc,
-      asset_type: detectAssetType(vehicleDesc),
-      registration: reg || null,
-      source: 'bp-transaction',
-      raw_data: rows[i]
-    }, { onConflict: 'user_id,asset_name', ignoreDuplicates: true });
-    if (!pendingResult.error) pendingAdded++;
+      asset_name: stubName,
+      asset_type: detectAssetType(stubName),
+      fuel_type: 'Diesel',
+      bp_card_number: cardNumber,
+    }).select('id').single();
+
+    if (insertResult.error) {
+      // Card may have been created by a concurrent import — fall back to lookup
+      var existing = await supabase
+        .from('assets')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('bp_card_number', cardNumber)
+        .maybeSingle();
+      if (existing.data) {
+        cardMap[cardNumber] = { id: existing.data.id };
+      } else {
+        console.error('bp-transaction: failed to create stub asset for card', cardNumber, insertResult.error.message);
+      }
+      continue;
+    }
+
+    cardMap[cardNumber] = { id: insertResult.data.id };
   }
-  return { assetMap: assetMap, pendingAdded: pendingAdded };
+
+  return { cardMap: cardMap };
 }
 
 async function parseBpTransactionReport(supabase, options) {
@@ -153,25 +174,23 @@ async function parseBpTransactionReport(supabase, options) {
     if (rows.length === 0) throw new Error('No BP transaction rows found');
 
     var assetResult = await ensureAssets(supabase, userId, rows);
-    var assetMap = assetResult.assetMap;
+    var cardMap = assetResult.cardMap;
 
     // Build fuel purchase records
     var records = [];
     var seen = {};
 
     rows.forEach(function(row) {
-      var vehicleDesc = String(row['Vehicle Description'] || '').trim();
       var dateStr = parseDMY(row['Transaction Effective Date']);
       var litres = parseNumeric(row['Litres']);
       var costExGst = parseNumeric(row['Customer Value ($)']);
-      var cardNumber = String(row['Card Number'] || '').trim();
-      var receiptNumber = String(row['Transaction Receipt Number'] || '').trim();
+      var cardNumber = normalizeCardNumber(row['Card Number']);
       var odometer = parseNumeric(row['Transaction Odometer Reading']);
 
-      if (!vehicleDesc || !dateStr || litres === null || litres <= 0) return;
+      if (!cardNumber || !dateStr || litres === null || litres <= 0) return;
       if (costExGst === null) return;
 
-      var assetEntry = assetMap[vehicleDesc];
+      var assetEntry = cardMap[cardNumber];
       if (!assetEntry) return;
 
       // Dedup: vehicle + date + litres (in case same transaction appears in overlapping exports)
@@ -203,7 +222,6 @@ async function parseBpTransactionReport(supabase, options) {
     return {
       ok: true,
       recordsUpserted: records.length,
-      pendingAdded: assetResult.pendingAdded,
     };
   } catch (err) {
     await updateImportStatus(supabase, importId, 'failed', err.message, 'bp-transaction');

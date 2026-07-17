@@ -293,8 +293,7 @@ module.exports = async function handler(req, res) {
           console.log(
             'email-inbound: BP transaction parse complete',
             attachment.filename,
-            bpTransactionResult.recordsUpserted + ' purchases,',
-            bpTransactionResult.pendingAdded + ' pending assets'
+            bpTransactionResult.recordsUpserted + ' purchases'
           );
         } catch (bpTransactionErr) {
           console.error(
