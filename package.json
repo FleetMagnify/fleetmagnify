@@ -4,6 +4,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
     "busboy": "^1.6.0",
-    "stripe": "^22.3.0"
+    "stripe": "^22.3.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz"
   }
 }

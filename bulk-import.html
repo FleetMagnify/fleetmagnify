@@ -70,7 +70,7 @@
       </p>
       <div class="form-group">
         <label>Select CSV Files (multiple allowed)</label>
-        <input type="file" id="csv-files" accept=".csv" multiple>
+        <input type="file" id="csv-files" accept=".csv,.xls,.xlsx" multiple>
         <div class="file-list" id="file-list"></div>
       </div>
       <button type="button" class="btn btn-teal" id="import-btn" disabled>
@@ -166,17 +166,18 @@
       var file = files[i];
       addResult('info', '⏳ Processing: ' + file.name + '...');
       try {
-        var text = await readFileAsText(file);
+        var isXlsFile = /\.xlsx?$/i.test(file.name);
+        var body = isXlsFile ? await readFileAsArrayBuffer(file) : await readFileAsText(file);
 
         var res = await fetch('/api/bulk-import', {
           method: 'POST',
           headers: {
-            'Content-Type': 'text/plain',
+            'Content-Type': isXlsFile ? 'application/octet-stream' : 'text/plain',
             'x-admin-secret': adminSecret,
             'x-user-id': selectedUserId,
             'x-filename': file.name
           },
-          body: text
+          body: body
         });
         var data = await res.json();
         if (data.ok) {
@@ -202,6 +203,15 @@
       reader.onload = function(e) { resolve(e.target.result); };
       reader.onerror = function() { reject(new Error('Failed to read file')); };
       reader.readAsText(file);
+    });
+  }
+
+  function readFileAsArrayBuffer(file) {
+    return new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function(e) { resolve(e.target.result); };
+      reader.onerror = function() { reject(new Error('Failed to read file')); };
+      reader.readAsArrayBuffer(file);
     });
   }
 

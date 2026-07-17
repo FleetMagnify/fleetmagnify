@@ -5,6 +5,7 @@
  */
 
 const { parseCsvLine, normalizeHeader, parseNumeric, updateImportStatus, detectAssetType } = require('./parser-utils');
+const XLSX = require('xlsx');
 
 var BP_TRANSACTION_SIGNATURE = ['Transaction Effective Date', 'Card Number', 'Litres', 'Customer Value ($)', 'Vehicle Description'];
 
@@ -66,6 +67,41 @@ function parseBpTransactionRows(rawCsv) {
   return rows;
 }
 
+function parseBpTransactionXlsRows(fileBuffer) {
+  var workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+  var firstSheetName = workbook.SheetNames[0];
+  var sheet = workbook.Sheets[firstSheetName];
+  if (!sheet) return [];
+
+  // raw: false keeps date cells as their original text (e.g. "06/06/2026")
+  // instead of converting them to JS Date objects
+  var sheetRows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
+
+  var headerIdx = -1;
+  var headers = [];
+  for (var i = 0; i < Math.min(sheetRows.length, 15); i++) {
+    var candidate = (sheetRows[i] || []).map(function(v) { return v == null ? '' : String(v); });
+    if (isBpTransactionHeaderRow(candidate)) {
+      headerIdx = i;
+      headers = candidate.map(normalizeHeader);
+      break;
+    }
+  }
+  if (headerIdx === -1) return [];
+
+  var rows = [];
+  for (var j = headerIdx + 1; j < sheetRows.length; j++) {
+    var values = sheetRows[j] || [];
+    if (values.every(function(v) { return v == null || !String(v).trim(); })) continue;
+    var row = {};
+    headers.forEach(function(h, idx) {
+      if (h) row[h] = values[idx] != null ? String(values[idx]).trim() : '';
+    });
+    rows.push(row);
+  }
+  return rows;
+}
+
 async function loadAssetMap(supabase, userId) {
   var assetResult = await supabase.from('assets').select('id, asset_name').eq('user_id', userId);
   if (assetResult.error) throw new Error('Failed to load assets: ' + assetResult.error.message);
@@ -110,9 +146,10 @@ async function parseBpTransactionReport(supabase, options) {
   var userId = options.userId;
   var importId = options.importId;
   var rawCsv = options.rawCsv;
+  var fileBuffer = options.fileBuffer;
 
   try {
-    var rows = parseBpTransactionRows(rawCsv);
+    var rows = fileBuffer ? parseBpTransactionXlsRows(fileBuffer) : parseBpTransactionRows(rawCsv);
     if (rows.length === 0) throw new Error('No BP transaction rows found');
 
     var assetResult = await ensureAssets(supabase, userId, rows);
@@ -177,4 +214,5 @@ async function parseBpTransactionReport(supabase, options) {
 module.exports = {
   isBpTransactionCsv: isBpTransactionCsv,
   parseBpTransactionReport: parseBpTransactionReport,
+  parseBpTransactionXlsRows: parseBpTransactionXlsRows,
 };

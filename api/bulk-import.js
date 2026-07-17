@@ -17,11 +17,16 @@ module.exports = async function handler(req, res) {
   if (!userId) return res.status(400).json({ error: 'userId required' });
 
   var filename = req.headers['x-filename'] || 'upload.csv';
+  var rawBuffer = null;
   var rawCsv = '';
   await new Promise(function(resolve, reject) {
     var chunks = [];
     req.on('data', function(chunk) { chunks.push(chunk); });
-    req.on('end', function() { rawCsv = Buffer.concat(chunks).toString('utf8'); resolve(); });
+    req.on('end', function() {
+      rawBuffer = Buffer.concat(chunks);
+      rawCsv = rawBuffer.toString('utf8');
+      resolve();
+    });
     req.on('error', reject);
   });
 
@@ -48,6 +53,8 @@ module.exports = async function handler(req, res) {
   var importId = importRecord.data ? importRecord.data.id : null;
 
   try {
+    var isXlsFile = /\.xlsx?$/i.test(filename);
+
     var options = {
       userId: userId,
       importId: importId,
@@ -59,7 +66,16 @@ module.exports = async function handler(req, res) {
     var result;
     var parser;
 
-    if (isNavmanMileageCsv(rawCsv)) {
+    if (isXlsFile) {
+      parser = 'BP Transaction';
+      result = await parseBpTransactionReport(supabase, {
+        userId: userId,
+        importId: importId,
+        fileBuffer: rawBuffer,
+        filename: filename,
+        receivedAt: new Date().toISOString()
+      });
+    } else if (isNavmanMileageCsv(rawCsv)) {
       parser = 'Navman Mileage';
       result = await parseNavmanMileageReport(supabase, options);
     } else if (isNavmanIdleCsv(rawCsv)) {
