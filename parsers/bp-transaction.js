@@ -122,6 +122,34 @@ async function loadAssetMap(supabase, userId) {
   return { cardMap: cardMap };
 }
 
+function isValidCardNumber(cardNumber) {
+  if (!cardNumber) return false;
+  var lower = cardNumber.toLowerCase();
+  return lower !== 'null' && lower !== 'undefined';
+}
+
+function looksLikePersonName(value) {
+  var titleCasePattern = /^[A-Z][a-z]+(\s+[A-Z][a-z]+)+$/;
+  var allCapsPattern = /^[A-Z]+(\s+[A-Z]+)+$/;
+  return titleCasePattern.test(value) || allCapsPattern.test(value);
+}
+
+function isVehicleCodeLike(value) {
+  var trimmed = String(value || '').trim();
+  if (!trimmed) return false;
+  return !looksLikePersonName(trimmed);
+}
+
+function resolveStubAssetName(row, cardNumber) {
+  var vehicleDesc = String(row['Vehicle Description'] || '').trim();
+  if (vehicleDesc && isVehicleCodeLike(vehicleDesc)) return vehicleDesc;
+
+  var driverName = String(row['Driver Name'] || '').trim();
+  if (driverName && isVehicleCodeLike(driverName)) return driverName;
+
+  return 'Card ••••' + cardNumber.slice(-4);
+}
+
 async function ensureAssets(supabase, userId, rows) {
   var loaded = await loadAssetMap(supabase, userId);
   var cardMap = loaded.cardMap;
@@ -129,10 +157,10 @@ async function ensureAssets(supabase, userId, rows) {
 
   for (var i = 0; i < rows.length; i++) {
     var cardNumber = normalizeCardNumber(rows[i]['Card Number']);
-    if (!cardNumber || seen[cardNumber] || cardMap[cardNumber]) continue;
+    if (!isValidCardNumber(cardNumber) || seen[cardNumber] || cardMap[cardNumber]) continue;
     seen[cardNumber] = true;
 
-    var stubName = 'Card ••••' + cardNumber.slice(-4);
+    var stubName = resolveStubAssetName(rows[i], cardNumber);
     var insertResult = await supabase.from('assets').insert({
       user_id: userId,
       asset_name: stubName,
