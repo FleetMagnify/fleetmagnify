@@ -1867,6 +1867,7 @@
         '<td class="col-life">' + esc(formatExpectedLife(a)) + '</td>' +
         '<td class="col-actions"><div class="actions-cell">' +
           '<button type="button" class="btn-edit" data-id="' + a.id + '">Edit</button>' +
+          '<button type="button" class="btn-ignore" data-id="' + a.id + '">Ignore</button>' +
           '<button type="button" class="btn-delete" data-id="' + a.id + '">Delete</button>' +
         '</div></td>' +
       '</tr>';
@@ -1876,9 +1877,27 @@
     tbody.querySelectorAll('.btn-edit').forEach(function(btn) {
       btn.addEventListener('click', function() { openEditModal(btn.dataset.id); });
     });
+    tbody.querySelectorAll('.btn-ignore').forEach(function(btn) {
+      btn.addEventListener('click', function() { ignoreAssetFromTable(btn.dataset.id); });
+    });
     tbody.querySelectorAll('.btn-delete').forEach(function(btn) {
       btn.addEventListener('click', function() { openConfirmDelete(btn.dataset.id); });
     });
+  }
+
+  async function ignoreAssetFromTable(id) {
+    var result = await supabase
+      .from('assets')
+      .update({ is_ignored: true })
+      .eq('id', Number(id))
+      .eq('user_id', currentUser.id);
+
+    if (result.error) {
+      showToast('Failed to ignore asset: ' + result.error.message, 'error');
+      return;
+    }
+    showToast('Asset ignored', 'success');
+    await loadAssets();
   }
 
   function updateStats(assets) {
