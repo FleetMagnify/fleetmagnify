@@ -1112,10 +1112,6 @@
       var hasCard = a.bp_card_number != null && String(a.bp_card_number).trim() !== '';
       return hasCard && !latestTelByAsset[Number(a.id)];
     });
-    if (unmatchedCards.length === 0) {
-      section.style.display = 'none';
-      return;
-    }
     realVehicles = allAssets.filter(function(a) {
       return a.bp_card_number == null || String(a.bp_card_number).trim() === '';
     });
