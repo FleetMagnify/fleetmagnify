@@ -258,6 +258,7 @@
   var FCM = window.FleetCostModel;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
+  var effectiveAccountId = null;
   var tourCompleted = false;
   var companyName = '';
   var charts = {};
@@ -298,7 +299,7 @@
     var result = await supabase
       .from('user_settings')
       .select('machinery_fuel_cost_per_litre')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .maybeSingle();
     if (result.data && result.data.machinery_fuel_cost_per_litre != null) {
       var val = parseFloat(result.data.machinery_fuel_cost_per_litre);
@@ -306,10 +307,24 @@
     }
   }
 
+  async function resolveAccountId(supabase, authUserId) {
+    var memberResult = await supabase
+      .from('account_members')
+      .select('account_owner_user_id')
+      .eq('member_auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (memberResult.data && memberResult.data.account_owner_user_id) {
+      return memberResult.data.account_owner_user_id;
+    }
+    return authUserId;
+  }
+
   async function init() {
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
+    effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, currentUser.id);
     if (!hasAccess) return;
     companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name)
@@ -320,7 +335,7 @@
 
     if (window.FleetMagnifyUploadEmail) {
       var signupCompanyName = (currentUser.user_metadata && currentUser.user_metadata.company_name) || '';
-      await window.FleetMagnifyUploadEmail.ensureUploadEmail(supabase, currentUser.id, signupCompanyName);
+      await window.FleetMagnifyUploadEmail.ensureUploadEmail(supabase, effectiveAccountId, signupCompanyName);
     }
 
     var now = new Date();
@@ -494,18 +509,18 @@
   }
 
   async function fetchData(dateFrom, dateTo) {
-    var assetsResult = await supabase.from('assets').select('*').eq('user_id', currentUser.id).order('asset_name');
+    var assetsResult = await supabase.from('assets').select('*').eq('user_id', effectiveAccountId).order('asset_name');
     var assets = assetsResult.data || [];
     if (assets.length === 0) return { assets: [], fuel: [], tel: [], latestTel: [] };
 
     var fuelResult = await supabase.from('fuel_records').select('asset_id, litres, total_cost, record_date')
-      .eq('user_id', currentUser.id).gte('record_date', dateFrom).lte('record_date', dateTo);
+      .eq('user_id', effectiveAccountId).gte('record_date', dateFrom).lte('record_date', dateTo);
     var fuelPurchasesResult = await supabase.from('fuel_purchases').select('vehicle_id, litres, cost_nzd, purchase_date')
-      .eq('user_id', currentUser.id).gte('purchase_date', dateFrom).lte('purchase_date', dateTo);
+      .eq('user_id', effectiveAccountId).gte('purchase_date', dateFrom).lte('purchase_date', dateTo);
     var telResult = await supabase.from('telematics_records').select('asset_id, idle_hours, operating_hours, total_engine_hours, record_date')
-      .eq('user_id', currentUser.id).gte('record_date', dateFrom).lte('record_date', dateTo);
+      .eq('user_id', effectiveAccountId).gte('record_date', dateFrom).lte('record_date', dateTo);
     var latestTelResult = await supabase.from('telematics_records').select('asset_id, total_engine_hours, record_date')
-      .eq('user_id', currentUser.id).order('record_date', { ascending: false });
+      .eq('user_id', effectiveAccountId).order('record_date', { ascending: false });
 
     var normalizedPurchases = (fuelPurchasesResult.data || []).map(function(r) {
       return {
@@ -545,7 +560,7 @@
       return;
     }
 
-    var hasHistoricalData = await hasAnyHistoricalData(currentUser.id);
+    var hasHistoricalData = await hasAnyHistoricalData(effectiveAccountId);
     if (!hasHistoricalData) {
       document.getElementById('empty-state').hidden = false;
       document.getElementById('dashboard-content').hidden = true;
@@ -806,7 +821,7 @@
     var result = await supabase
       .from('user_settings')
       .select('tour_completed')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .maybeSingle();
     if (result.data && result.data.tour_completed) return;
     setTimeout(startOnboardingTour, 800);
@@ -817,15 +832,15 @@
     var existing = await supabase
       .from('user_settings')
       .select('user_id')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .maybeSingle();
     if (existing.data) {
       await supabase.from('user_settings')
         .update({ tour_completed: true })
-        .eq('user_id', currentUser.id);
+        .eq('user_id', effectiveAccountId);
     } else {
       await supabase.from('user_settings')
-        .insert({ user_id: currentUser.id, tour_completed: true });
+        .insert({ user_id: effectiveAccountId, tour_completed: true });
     }
   }
 

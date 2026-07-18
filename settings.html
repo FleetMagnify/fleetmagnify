@@ -171,6 +171,7 @@
 (function() {
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
+  var effectiveAccountId = null;
   var toastTimer;
 
   function showToast(msg, type) {
@@ -187,7 +188,7 @@
     var result = await supabase
       .from('user_settings')
       .select('machinery_fuel_cost_per_litre')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .maybeSingle();
 
     if (result.error) {
@@ -219,14 +220,14 @@
     btn.textContent = 'Saving...';
 
     var payload = {
-      user_id: currentUser.id,
+      user_id: effectiveAccountId,
       machinery_fuel_cost_per_litre: cost
     };
 
     var existing = await supabase
       .from('user_settings')
       .select('user_id')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .maybeSingle();
 
     var result;
@@ -234,7 +235,7 @@
       result = await supabase
         .from('user_settings')
         .update({ machinery_fuel_cost_per_litre: cost })
-        .eq('user_id', currentUser.id);
+        .eq('user_id', effectiveAccountId);
     } else {
       result = await supabase.from('user_settings').insert(payload);
     }
@@ -254,10 +255,24 @@
     showToast('Settings saved', 'success');
   });
 
+  async function resolveAccountId(supabase, authUserId) {
+    var memberResult = await supabase
+      .from('account_members')
+      .select('account_owner_user_id')
+      .eq('member_auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (memberResult.data && memberResult.data.account_owner_user_id) {
+      return memberResult.data.account_owner_user_id;
+    }
+    return authUserId;
+  }
+
   async function init() {
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
+    effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, currentUser.id);
     if (!hasAccess) return;
     var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
