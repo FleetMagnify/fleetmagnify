@@ -68,6 +68,7 @@
   .kpi-value.amber { color: #EF9F27; }
   .kpi-value.white { color: #D8DFE8; }
   .kpi-sub { font-size: 11px; color: #3A4A5C; }
+  .kpi-sub-rate { font-size: 10.5px; color: #6B7785; margin-top: 6px; }
 
   .chart-card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 24px; margin-bottom: 28px; }
   .chart-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 12px; }
@@ -191,6 +192,7 @@
           <div class="kpi-label">Current Cost Per KM</div>
           <div class="kpi-value teal" id="kpi-cost-km">—</div>
           <div class="kpi-sub">Benchmark: $0.15 – $0.16 / km</div>
+          <div class="kpi-sub-rate" id="kpi-cost-km-basis"></div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Total KM Driven</div>
@@ -275,8 +277,12 @@
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var BENCHMARK = 0.155;
   var DATE_BUFFER_DAYS = 21;
+  var PRICE_HISTORY_MONTHS = 6;
   var DEFAULT_IDLE_RATES = {
     'Light Vehicle': 1.2, 'Rigid Truck': 2.5, 'Truck and Trailer / B-Train': 3.0
+  };
+  var DEFAULT_TRAVEL_RATES = {
+    'Light Vehicle': 0.12, 'Rigid Truck': 0.25, 'Semi Trailer': 0.40, 'Truck and Trailer / B-Train': 0.40
   };
 
   function fmtDate(d) {
@@ -286,6 +292,12 @@
   function addDays(dateStr, days) {
     var d = new Date(dateStr + 'T00:00:00');
     d.setDate(d.getDate() + days);
+    return fmtDate(d);
+  }
+
+  function addMonths(dateStr, months) {
+    var d = new Date(dateStr + 'T00:00:00');
+    d.setMonth(d.getMonth() + months);
     return fmtDate(d);
   }
 
@@ -314,6 +326,26 @@
       }
     });
     return best;
+  }
+
+  function effectiveTravelRate(asset) {
+    return asset.travel_rate_lpk || DEFAULT_TRAVEL_RATES[asset.asset_type] || 0.30;
+  }
+
+  function travelRateStatus(asset) {
+    if (asset.last_calibrated_at) {
+      var r2 = asset.travel_rate_r2 != null ? parseFloat(asset.travel_rate_r2) : null;
+      return {
+        calibrated: true,
+        label: 'Calibrated rate',
+        sub: (r2 != null && !isNaN(r2)) ? ('R² = ' + r2.toFixed(3)) : null
+      };
+    }
+    return {
+      calibrated: false,
+      label: 'Estimated rate',
+      sub: 'Default for ' + (asset.asset_type || 'vehicle type')
+    };
   }
 
   function computePeriods(fuelRows, mileageRows, idleRows, idleBurnRateLph) {
@@ -489,6 +521,55 @@
     };
   }
 
+  // Average price/litre over the trailing PRICE_HISTORY_MONTHS window ending at dateTo
+  // (or all-time if less) — same pattern as truck-idle-monitor.html's price-window calc.
+  async function fetchAvgPricePerLitre(vehicleId, dateTo) {
+    var priceWindowFrom = addMonths(dateTo, -PRICE_HISTORY_MONTHS);
+    var result = await supabase
+      .from('fuel_purchases')
+      .select('litres, cost_nzd')
+      .eq('vehicle_id', Number(vehicleId))
+      .eq('user_id', currentUser.id)
+      .gte('purchase_date', priceWindowFrom)
+      .lte('purchase_date', dateTo)
+      .order('purchase_date');
+
+    var rows = result.data || [];
+    var totalCost = rows.reduce(function(sum, r) { return sum + (parseFloat(r.cost_nzd) || 0); }, 0);
+    var totalLitres = rows.reduce(function(sum, r) { return sum + (parseFloat(r.litres) || 0); }, 0);
+    return {
+      avgPricePerLitre: totalLitres > 0 ? totalCost / totalLitres : 0,
+      error: result.error
+    };
+  }
+
+  // Closest telematics odometer reading at or before dateStr (not "nearest either direction").
+  async function fetchOdometerAtOrBefore(vehicleId, dateStr) {
+    var result = await supabase
+      .from('telematics_records')
+      .select('record_date, odometer_km')
+      .eq('asset_id', Number(vehicleId))
+      .eq('user_id', currentUser.id)
+      .lte('record_date', dateStr)
+      .not('odometer_km', 'is', null)
+      .order('record_date', { ascending: false })
+      .limit(1);
+    var rows = result.data || [];
+    return { reading: rows[0] || null, error: result.error };
+  }
+
+  // Real distance for the exact selected range: single before/after odometer diff,
+  // not a fill-to-fill period sum. Informational only — not an input to cost/km anymore.
+  async function fetchRangeDistanceKm(vehicleId, dateFrom, dateTo) {
+    var endResult = await fetchOdometerAtOrBefore(vehicleId, dateTo);
+    var startResult = await fetchOdometerAtOrBefore(vehicleId, dateFrom);
+    if (endResult.error || startResult.error || !endResult.reading || !startResult.reading) {
+      return null;
+    }
+    var km = parseFloat(endResult.reading.odometer_km) - parseFloat(startResult.reading.odometer_km);
+    return km > 0 ? km : null;
+  }
+
   async function runAnalysis() {
     if (!selectedVehicle) return;
     var dateFrom = document.getElementById('date-from').value;
@@ -521,7 +602,7 @@
       return;
     }
 
-    showDashboard(inRange);
+    await showDashboard(inRange);
     await loadFleetComparison();
   }
 
@@ -531,25 +612,37 @@
     destroyCharts();
   }
 
-  function showDashboard(periods) {
+  async function showDashboard(periods) {
     document.getElementById('empty-state').hidden = true;
     document.getElementById('dashboard-content').hidden = false;
 
-    var latest = periods[periods.length - 1];
-    var totalKm = 0;
     var totalCost = 0;
     var anomalyCount = 0;
     periods.forEach(function(p) {
-      totalKm += p.kmDriven;
       totalCost += p.totalCost;
       if (p.anomaly) anomalyCount++;
     });
 
-    var costKmEl = document.getElementById('kpi-cost-km');
-    costKmEl.textContent = fmtMoney(latest.costPerKm);
-    costKmEl.className = 'kpi-value ' + (latest.anomaly ? 'amber' : 'teal');
+    var dateFrom = document.getElementById('date-from').value;
+    var dateTo = document.getElementById('date-to').value;
 
-    document.getElementById('kpi-total-km').textContent = Math.round(totalKm).toLocaleString() + ' km';
+    var travelRate = effectiveTravelRate(selectedVehicle);
+    var priceInfo = await fetchAvgPricePerLitre(selectedVehicle.id, dateTo);
+    var costPerKm = travelRate * priceInfo.avgPricePerLitre;
+    var isAnomaly = costPerKm > BENCHMARK;
+
+    var costKmEl = document.getElementById('kpi-cost-km');
+    costKmEl.textContent = fmtMoney(costPerKm);
+    costKmEl.className = 'kpi-value ' + (isAnomaly ? 'amber' : 'teal');
+
+    var rateStatus = travelRateStatus(selectedVehicle);
+    document.getElementById('kpi-cost-km-basis').textContent =
+      rateStatus.label + (rateStatus.sub ? ' · ' + rateStatus.sub : '');
+
+    var rangeKm = await fetchRangeDistanceKm(selectedVehicle.id, dateFrom, dateTo);
+    document.getElementById('kpi-total-km').textContent =
+      rangeKm != null ? (Math.round(rangeKm).toLocaleString() + ' km') : '—';
+
     document.getElementById('kpi-total-cost').textContent = fmtMoney(totalCost);
     document.getElementById('kpi-anomalies').textContent = String(anomalyCount);
 
