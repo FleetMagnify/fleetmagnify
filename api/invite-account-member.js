@@ -31,6 +31,8 @@ module.exports = async function handler(req, res) {
     { auth: { persistSession: false, autoRefreshToken: false } }
   );
 
+  console.log('Service role key prefix: ' + process.env.SUPABASE_SERVICE_ROLE_KEY.slice(0, 12));
+  console.log('Token prefix: ' + token.slice(0, 12));
   var userResult = await supabase.auth.getUser(token);
   if (userResult.error || !userResult.data.user) {
     return res.status(401).json({ error: 'Invalid session' });
