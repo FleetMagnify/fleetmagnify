@@ -68,6 +68,10 @@
   .kpi-value.amber { color: #EF9F27; }
   .kpi-value.white { color: #D8DFE8; }
   .kpi-sub { font-size: 11px; color: #3A4A5C; }
+  .kpi-sub-rate { font-size: 10.5px; color: #6B7785; margin-top: 6px; }
+  .badge-rate { display: inline-flex; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 100px; letter-spacing: 0.03em; }
+  .badge-rate.calibrated { color: #0EA57A; background: rgba(14,165,122,0.12); border: 1px solid rgba(14,165,122,0.25); }
+  .badge-rate.estimated { color: #4A9EFF; background: rgba(74,158,255,0.12); border: 1px solid rgba(74,158,255,0.3); }
 
   .emtonne-card { background: rgba(14,165,122,0.05); border: 1px solid rgba(14,165,122,0.22); border-radius: 16px; padding: 24px 32px; margin-bottom: 28px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 24px; }
   .emtonne-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #0EA57A; margin-bottom: 10px; }
@@ -207,7 +211,8 @@
         <div class="kpi-card">
           <div class="kpi-label">Emissions Per KM</div>
           <div class="kpi-value white" id="kpi-emissions-km">—</div>
-          <div class="kpi-sub">kg CO₂ · most recent period</div>
+          <span class="badge-rate" id="emissions-rate-badge">—</span>
+          <div class="kpi-sub-rate" id="emissions-rate-sub"></div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Total KM Driven</div>
@@ -225,7 +230,7 @@
         <div>
           <div class="emtonne-label">Emissions Per Tonne-KM</div>
           <div class="emtonne-value" id="emtonne-value">—</div>
-          <div class="emtonne-sub">most recent period</div>
+          <div class="emtonne-sub">current rate ÷ entered payload</div>
         </div>
         <div class="emtonne-input-block">
           <label for="emtonne-payload-input">Average Payload Weight Over Period (tonnes)</label>
@@ -305,6 +310,9 @@
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var EMISSION_FACTORS = { Diesel: 2.68, Petrol: 2.31, Hybrid: 1.5, Electric: 0 };
   var DATE_BUFFER_DAYS = 21;
+  var DEFAULT_TRAVEL_RATES = {
+    'Light Vehicle': 0.12, 'Rigid Truck': 0.25, 'Semi Trailer': 0.40, 'Truck and Trailer / B-Train': 0.40
+  };
 
   function fmtDate(d) {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -314,6 +322,53 @@
     var d = new Date(dateStr + 'T00:00:00');
     d.setDate(d.getDate() + days);
     return fmtDate(d);
+  }
+
+  function effectiveTravelRate(asset) {
+    return asset.travel_rate_lpk || DEFAULT_TRAVEL_RATES[asset.asset_type] || 0.30;
+  }
+
+  function travelRateStatus(asset) {
+    if (asset.last_calibrated_at) {
+      var r2 = asset.travel_rate_r2 != null ? parseFloat(asset.travel_rate_r2) : null;
+      return {
+        calibrated: true,
+        label: 'Calibrated',
+        sub: (r2 != null && !isNaN(r2)) ? ('R² = ' + r2.toFixed(3)) : null
+      };
+    }
+    return {
+      calibrated: false,
+      label: 'Estimated',
+      sub: 'Default rate for ' + (asset.asset_type || 'vehicle type')
+    };
+  }
+
+  // Closest telematics odometer reading at or before dateStr.
+  async function fetchOdometerAtOrBefore(vehicleId, dateStr) {
+    var result = await supabase
+      .from('telematics_records')
+      .select('record_date, odometer_km')
+      .eq('asset_id', Number(vehicleId))
+      .eq('user_id', currentUser.id)
+      .lte('record_date', dateStr)
+      .not('odometer_km', 'is', null)
+      .order('record_date', { ascending: false })
+      .limit(1);
+    var rows = result.data || [];
+    return { reading: rows[0] || null, error: result.error };
+  }
+
+  // Real distance for the exact selected range: single before/after odometer diff,
+  // not a fill-to-fill period sum. Informational only — not an input to Emissions Per KM.
+  async function fetchRangeDistanceKm(vehicleId, dateFrom, dateTo) {
+    var endResult = await fetchOdometerAtOrBefore(vehicleId, dateTo);
+    var startResult = await fetchOdometerAtOrBefore(vehicleId, dateFrom);
+    if (endResult.error || startResult.error || !endResult.reading || !startResult.reading) {
+      return null;
+    }
+    var km = parseFloat(endResult.reading.odometer_km) - parseFloat(startResult.reading.odometer_km);
+    return km > 0 ? km : null;
   }
 
   function fmtDateShort(dateStr) {
@@ -467,7 +522,7 @@
   async function loadVehicles() {
     var result = await supabase
       .from('assets')
-      .select('id, asset_name, asset_type, fuel_type')
+      .select('id, asset_name, asset_type, fuel_type, travel_rate_lpk, travel_rate_r2, last_calibrated_at')
       .eq('user_id', currentUser.id)
       .eq('is_ignored', false)
       .in('asset_type', ON_ROAD_TYPES)
@@ -560,7 +615,7 @@
     displayPeriods = inRange;
     latestPeriod = inRange[inRange.length - 1];
     currentPayloads = await fetchPayloads(selectedVehicle.id);
-    showDashboard(inRange);
+    await showDashboard(inRange);
     await loadFleetComparison();
   }
 
@@ -573,11 +628,26 @@
     destroyCharts();
   }
 
-  function showDashboard(periods) {
+  async function showDashboard(periods) {
     document.getElementById('empty-state').hidden = true;
     document.getElementById('dashboard-content').hidden = false;
     document.getElementById('export-csv-btn').disabled = false;
     document.getElementById('export-pdf-btn').disabled = false;
+
+    // Headline Emissions Per KM (and Emissions Per Tonne-KM below) is now a
+    // stable rate × emission-factor projection — travel_rate_lpk × the
+    // vehicle's emission factor — decoupled from which fill-to-fill periods
+    // overlap the selected range. The emission factor lookup itself, the
+    // Fill-to-Fill Periods table, its chart, and fleet comparison are untouched.
+    var travelRate = effectiveTravelRate(selectedVehicle);
+    var factor = getEmissionFactor(selectedVehicle.fuel_type);
+    var headlineEmissionsPerKm = travelRate * factor;
+
+    var rateStatus = travelRateStatus(selectedVehicle);
+    var emRateBadgeEl = document.getElementById('emissions-rate-badge');
+    emRateBadgeEl.textContent = rateStatus.label;
+    emRateBadgeEl.className = 'badge-rate ' + (rateStatus.calibrated ? 'calibrated' : 'estimated');
+    document.getElementById('emissions-rate-sub').textContent = rateStatus.sub || '';
 
     var latestPayload = latestPeriod 
       ? findPayload(currentPayloads, latestPeriod.periodStart, latestPeriod.periodEnd) 
@@ -586,8 +656,7 @@
     var emTonneInput = document.getElementById('emtonne-payload-input');
     if (latestPayload && latestPayload.payload_tonnes) {
       var payloadT = parseFloat(latestPayload.payload_tonnes);
-      var latestP = periods[periods.length - 1];
-      var emPerTonneKm = payloadT > 0 ? latestP.emissionsPerKm / payloadT : null;
+      var emPerTonneKm = payloadT > 0 ? headlineEmissionsPerKm / payloadT : null;
       if (emPerTonneKm !== null) {
         emTonneEl.className = 'emtonne-value';
         emTonneEl.textContent = fmtNum(emPerTonneKm, 4) + ' kg/tonne-km';
@@ -602,19 +671,20 @@
       emTonneInput.value = '';
     }
 
-    var latest = periods[periods.length - 1];
-    var totalKm = 0;
     var totalLitres = 0;
     var totalEmissionsKg = 0;
     periods.forEach(function(p) {
-      totalKm += p.kmDriven;
       totalLitres += p.litresUsed;
       totalEmissionsKg += p.totalEmissionsKg;
     });
 
+    var dateFrom = document.getElementById('date-from').value;
+    var dateTo = document.getElementById('date-to').value;
+    var rangeKm = await fetchRangeDistanceKm(selectedVehicle.id, dateFrom, dateTo);
+
     document.getElementById('kpi-total-emissions').textContent = fmtNum(totalEmissionsKg / 1000, 2) + ' t';
-    document.getElementById('kpi-emissions-km').textContent = fmtNum(latest.emissionsPerKm, 3) + ' kg';
-    document.getElementById('kpi-total-km').textContent = Math.round(totalKm).toLocaleString() + ' km';
+    document.getElementById('kpi-emissions-km').textContent = fmtNum(headlineEmissionsPerKm, 3) + ' kg';
+    document.getElementById('kpi-total-km').textContent = rangeKm != null ? (Math.round(rangeKm).toLocaleString() + ' km') : '—';
     document.getElementById('kpi-total-litres').textContent = fmtNum(totalLitres, 1) + ' L';
 
     renderEmissionsChart(periods);
@@ -710,7 +780,7 @@
     URL.revokeObjectURL(a.href);
   });
 
-  document.getElementById('export-pdf-btn').addEventListener('click', function() {
+  document.getElementById('export-pdf-btn').addEventListener('click', async function() {
     if (!displayPeriods.length || !selectedVehicle) return;
     var { jsPDF } = window.jspdf;
     var doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -736,20 +806,29 @@
     doc.text('Summary', margin, y); y += 7;
     doc.setFont('helvetica', 'normal');
 
-    var totalKm = 0;
     var totalLitres = 0;
     var totalEmissionsKg = 0;
     displayPeriods.forEach(function(p) {
-      totalKm += p.kmDriven;
       totalLitres += p.litresUsed;
       totalEmissionsKg += p.totalEmissionsKg;
     });
-    var latest = displayPeriods[displayPeriods.length - 1];
+
+    // Same stable rate × emission-factor headline used on-screen, so the export
+    // matches what's displayed rather than the old latest-period-based figure.
+    var travelRate = effectiveTravelRate(selectedVehicle);
+    var factor = getEmissionFactor(selectedVehicle.fuel_type);
+    var headlineEmissionsPerKm = travelRate * factor;
+
+    // Same telematics range diff used for the on-screen "Total KM Driven" KPI,
+    // so the exported figure matches exactly instead of being a period-sum.
+    var dateFrom = document.getElementById('date-from').value;
+    var dateTo = document.getElementById('date-to').value;
+    var rangeKm = await fetchRangeDistanceKm(selectedVehicle.id, dateFrom, dateTo);
 
     var kpis = [
       ['Total Emissions', fmtNum(totalEmissionsKg / 1000, 2) + ' t CO₂'],
-      ['Emissions Per KM (latest period)', fmtNum(latest.emissionsPerKm, 3) + ' kg/km'],
-      ['Total Distance', Math.round(totalKm).toLocaleString() + ' km'],
+      ['Emissions Per KM', fmtNum(headlineEmissionsPerKm, 3) + ' kg/km'],
+      ['Total Distance', rangeKm != null ? (Math.round(rangeKm).toLocaleString() + ' km') : '—'],
       ['Total Fuel Used', fmtNum(totalLitres, 1) + ' L'],
       ['Periods Analysed', displayPeriods.length + ''],
     ];
@@ -760,7 +839,7 @@
       : null;
     if (latestPayloadRow && latestPayloadRow.payload_tonnes) {
       var payloadT = parseFloat(latestPayloadRow.payload_tonnes);
-      var emPerTonneKm = payloadT > 0 ? latest.emissionsPerKm / payloadT : null;
+      var emPerTonneKm = payloadT > 0 ? headlineEmissionsPerKm / payloadT : null;
       if (emPerTonneKm !== null) {
         kpis.push(['Emissions Per Tonne-KM', fmtNum(emPerTonneKm, 4) + ' kg/tonne-km']);
         kpis.push(['Payload Used', fmtNum(payloadT, 1) + ' tonnes']);

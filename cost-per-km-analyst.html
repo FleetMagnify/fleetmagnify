@@ -97,6 +97,10 @@
   .kpi-value.white { color: #D8DFE8; }
   .kpi-value.missing { font-size: 12px; font-weight: 600; color: #EF9F27; letter-spacing: 0; line-height: 1.4; }
   .kpi-sub { font-size: 11px; color: #3A4A5C; }
+  .kpi-sub-rate { font-size: 10.5px; color: #6B7785; margin-top: 6px; }
+  .badge-rate { display: inline-flex; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 100px; letter-spacing: 0.03em; }
+  .badge-rate.calibrated { color: #0EA57A; background: rgba(14,165,122,0.12); border: 1px solid rgba(14,165,122,0.25); }
+  .badge-rate.estimated { color: #4A9EFF; background: rgba(74,158,255,0.12); border: 1px solid rgba(74,158,255,0.3); }
 
   .chart-card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 24px; margin-bottom: 28px; }
   .chart-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 12px; }
@@ -255,7 +259,7 @@
         <div class="tonnekm-value-block">
           <div class="tonnekm-label">Cost Per Tonne-KM</div>
           <div class="tonnekm-value" id="tonnekm-value">—</div>
-          <div class="tonnekm-sub">most recent period</div>
+          <div class="tonnekm-sub">current rate ÷ entered payload</div>
         </div>
         <div class="tonnekm-input-block">
           <label for="tonnekm-payload-input">Average Payload Weight Over Period (tonnes)</label>
@@ -270,7 +274,8 @@
         <div class="kpi-card">
           <div class="kpi-label">Fuel Cost Per KM</div>
           <div class="kpi-value teal" id="kpi-fuel">—</div>
-          <div class="kpi-sub">most recent period</div>
+          <span class="badge-rate" id="fuel-rate-badge">—</span>
+          <div class="kpi-sub-rate" id="fuel-rate-sub"></div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Depreciation Per KM</div>
@@ -377,6 +382,10 @@
   var COMPONENT_TYPES = ['fuel', 'depreciation', 'maintenance', 'servicing'];
   var COMPONENT_LABELS = { fuel: 'Fuel', depreciation: 'Depreciation', maintenance: 'Maintenance', servicing: 'Servicing' };
   var DATE_BUFFER_DAYS = 21;
+  var PRICE_HISTORY_MONTHS = 6;
+  var DEFAULT_TRAVEL_RATES = {
+    'Light Vehicle': 0.12, 'Rigid Truck': 0.25, 'Semi Trailer': 0.40, 'Truck and Trailer / B-Train': 0.40
+  };
 
   function fmtDate(d) {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -386,6 +395,54 @@
     var d = new Date(dateStr + 'T00:00:00');
     d.setDate(d.getDate() + days);
     return fmtDate(d);
+  }
+
+  function addMonths(dateStr, months) {
+    var d = new Date(dateStr + 'T00:00:00');
+    d.setMonth(d.getMonth() + months);
+    return fmtDate(d);
+  }
+
+  function effectiveTravelRate(asset) {
+    return asset.travel_rate_lpk || DEFAULT_TRAVEL_RATES[asset.asset_type] || 0.30;
+  }
+
+  function travelRateStatus(asset) {
+    if (asset.last_calibrated_at) {
+      var r2 = asset.travel_rate_r2 != null ? parseFloat(asset.travel_rate_r2) : null;
+      return {
+        calibrated: true,
+        label: 'Calibrated',
+        sub: (r2 != null && !isNaN(r2)) ? ('R² = ' + r2.toFixed(3)) : null
+      };
+    }
+    return {
+      calibrated: false,
+      label: 'Estimated',
+      sub: 'Default rate for ' + (asset.asset_type || 'vehicle type')
+    };
+  }
+
+  // Average price/litre over the trailing PRICE_HISTORY_MONTHS window ending at dateTo
+  // (or all-time if less) — same pattern as truck-idle-monitor.html / truck-fuel-analyst.html.
+  async function fetchAvgPricePerLitre(vehicleId, dateTo) {
+    var priceWindowFrom = addMonths(dateTo, -PRICE_HISTORY_MONTHS);
+    var result = await supabase
+      .from('fuel_purchases')
+      .select('litres, cost_nzd')
+      .eq('vehicle_id', Number(vehicleId))
+      .eq('user_id', currentUser.id)
+      .gte('purchase_date', priceWindowFrom)
+      .lte('purchase_date', dateTo)
+      .order('purchase_date');
+
+    var rows = result.data || [];
+    var totalCost = rows.reduce(function(sum, r) { return sum + (parseFloat(r.cost_nzd) || 0); }, 0);
+    var totalLitres = rows.reduce(function(sum, r) { return sum + (parseFloat(r.litres) || 0); }, 0);
+    return {
+      avgPricePerLitre: totalLitres > 0 ? totalCost / totalLitres : 0,
+      error: result.error
+    };
   }
 
   function fmtMoney(n) {
@@ -900,7 +957,7 @@
 
     basePeriods = inRange;
     enrichedPeriods = enrichPeriods(selectedVehicle, basePeriods, currentOverrides);
-    showDashboard(enrichedPeriods);
+    await showDashboard(enrichedPeriods);
     await loadFleetComparison();
   }
 
@@ -912,20 +969,47 @@
     basePeriods = [];
   }
 
-  function showDashboard(periods) {
+  async function showDashboard(periods) {
     document.getElementById('empty-state').hidden = true;
     document.getElementById('dashboard-content').hidden = false;
 
     var latest = periods[periods.length - 1];
 
-    var estimateNote = latest.isEstimate
-      ? ' <span class="badge-estimate" title="Estimated using the fuel rate from the period ending ' + fmtDateShort(latest.estimateBasis) + '. Depreciation, maintenance, and servicing are calculated fresh, not estimated.">Estimate</span>'
-      : '';
+    // Headline Fuel Cost Per KM (and everything derived from it below) is now a
+    // stable rate × avg-price projection — travel_rate_lpk × trailing average
+    // price/litre — decoupled from which fill-to-fill periods overlap the
+    // selected range. Depreciation/maintenance/servicing/RUC below are untouched
+    // and still come straight from `latest`. The Fill-to-Fill Periods table,
+    // its chart, and fleet comparison are untouched and keep using `latest`/
+    // period-based figures as before.
+    var dateTo = document.getElementById('date-to').value;
+    var travelRate = effectiveTravelRate(selectedVehicle);
+    var priceInfo = await fetchAvgPricePerLitre(selectedVehicle.id, dateTo);
+    var headlineFuelPerKm = travelRate * priceInfo.avgPricePerLitre;
+
+    var rateStatus = travelRateStatus(selectedVehicle);
+    var fuelBadgeEl = document.getElementById('fuel-rate-badge');
+    fuelBadgeEl.textContent = rateStatus.label;
+    fuelBadgeEl.className = 'badge-rate ' + (rateStatus.calibrated ? 'calibrated' : 'estimated');
+    document.getElementById('fuel-rate-sub').textContent = rateStatus.sub || '';
+
+    var headlineTotalMissing = buildTotalMissing(
+      headlineFuelPerKm, latest.deprMissing, latest.deprLifeExceeded, latest.deprLifeNearLimit, latest.maintMissing, latest.servMissing
+    );
+    var headlineTotalPerKm = calcPartialTotalPerKm(
+      headlineFuelPerKm, latest.deprPerKm, latest.deprMissing, latest.deprLifeExceeded,
+      latest.maintPerKm, latest.maintMissing, latest.servPerKm, latest.servMissing, latest.rucPerKm
+    );
+
+    var payloadTonnes = latest.payloadTonnes;
+    var headlineCostPerTonneKm = (payloadTonnes && payloadTonnes > 0 && headlineTotalPerKm !== null && !isNaN(headlineTotalPerKm))
+      ? headlineTotalPerKm / payloadTonnes
+      : null;
 
     var tonneEl = document.getElementById('tonnekm-value');
-    if (latest.costPerTonneKm !== null && !isNaN(latest.costPerTonneKm)) {
+    if (headlineCostPerTonneKm !== null && !isNaN(headlineCostPerTonneKm)) {
       tonneEl.className = 'tonnekm-value';
-      tonneEl.innerHTML = fmtMoney(latest.costPerTonneKm) + estimateNote;
+      tonneEl.innerHTML = fmtMoney(headlineCostPerTonneKm);
     } else {
       tonneEl.className = 'tonnekm-value missing';
       tonneEl.textContent = 'Enter payload weight to calculate';
@@ -934,15 +1018,15 @@
     payloadInput.value = latest.payloadTonnes !== null ? latest.payloadTonnes : '';
 
     var heroEl = document.getElementById('hero-total');
-    if (latest.totalPerKm !== null && !isNaN(latest.totalPerKm)) {
-      if (latest.totalMissing && latest.totalMissing.length) {
+    if (headlineTotalPerKm !== null && !isNaN(headlineTotalPerKm)) {
+      if (headlineTotalMissing && headlineTotalMissing.length) {
         heroEl.className = 'hero-value partial';
-        heroEl.innerHTML = fmtMoney(latest.totalPerKm) +
-          ' <span class="hero-partial-suffix">' + esc(partialTotalSuffix(latest.totalMissing)) + '</span>' + estimateNote;
-        heroEl.title = partialTotalTooltip(latest.totalMissing);
+        heroEl.innerHTML = fmtMoney(headlineTotalPerKm) +
+          ' <span class="hero-partial-suffix">' + esc(partialTotalSuffix(headlineTotalMissing)) + '</span>';
+        heroEl.title = partialTotalTooltip(headlineTotalMissing);
       } else {
         heroEl.className = 'hero-value';
-        heroEl.innerHTML = fmtMoney(latest.totalPerKm) + estimateNote;
+        heroEl.innerHTML = fmtMoney(headlineTotalPerKm);
         heroEl.removeAttribute('title');
       }
     } else {
@@ -952,16 +1036,13 @@
     }
 
     document.getElementById('hero-breakdown').innerHTML =
-      '<div class="hero-breakdown-item">Fuel<strong>' + (latest.fuelPerKm != null ? fmtMoney(latest.fuelPerKm) : '—') + '</strong></div>' +
+      '<div class="hero-breakdown-item">Fuel<strong>' + fmtMoney(headlineFuelPerKm) + '</strong></div>' +
       '<div class="hero-breakdown-item">Depreciation<strong>' + (latest.deprLifeExceeded ? '—' : (latest.deprPerKm != null ? fmtMoney(latest.deprPerKm) : '—')) + '</strong></div>' +
       '<div class="hero-breakdown-item">Maintenance<strong>' + (latest.maintPerKm != null ? fmtMoney(latest.maintPerKm) : '—') + '</strong></div>' +
       '<div class="hero-breakdown-item">Servicing<strong>' + (latest.servPerKm != null ? fmtMoney(latest.servPerKm) : '—') + '</strong></div>' +
       '<div class="hero-breakdown-item">RUC<strong>' + (latest.rucPerKm != null ? fmtMoney(latest.rucPerKm) : '—') + '</strong></div>';
 
-    setKpiEl('kpi-fuel', latest.fuelPerKm, latest.fuelOverride, null, false);
-    if (latest.isEstimate) {
-      document.getElementById('kpi-fuel').innerHTML += estimateNote;
-    }
+    setKpiEl('kpi-fuel', headlineFuelPerKm, null, null, false);
     setKpiEl('kpi-depr', latest.deprPerKm, latest.deprOverride, latest.deprMissing, latest.deprLifeExceeded, latest.deprLifeNearLimit);
     setKpiEl('kpi-maint', latest.maintPerKm, latest.maintOverride, latest.maintMissing, false);
     setKpiEl('kpi-serv', latest.servPerKm, latest.servOverride, latest.servMissing, false);

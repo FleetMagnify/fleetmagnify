@@ -69,6 +69,9 @@
   .kpi-value.white { color: #D8DFE8; }
   .kpi-sub { font-size: 11px; color: #3A4A5C; }
   .kpi-sub-rate { font-size: 10.5px; color: #6B7785; margin-top: 6px; }
+  .badge-rate { display: inline-flex; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 100px; letter-spacing: 0.03em; }
+  .badge-rate.calibrated { color: #0EA57A; background: rgba(14,165,122,0.12); border: 1px solid rgba(14,165,122,0.25); }
+  .badge-rate.estimated { color: #4A9EFF; background: rgba(74,158,255,0.12); border: 1px solid rgba(74,158,255,0.3); }
 
   .chart-card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 24px; margin-bottom: 28px; }
   .chart-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 12px; }
@@ -191,6 +194,7 @@
         <div class="kpi-card">
           <div class="kpi-label">Current Cost Per KM</div>
           <div class="kpi-value teal" id="kpi-cost-km">—</div>
+          <span class="badge-rate" id="fuel-rate-badge">—</span>
           <div class="kpi-sub">Benchmark: $0.15 – $0.16 / km</div>
           <div class="kpi-sub-rate" id="kpi-cost-km-basis"></div>
         </div>
@@ -337,14 +341,14 @@
       var r2 = asset.travel_rate_r2 != null ? parseFloat(asset.travel_rate_r2) : null;
       return {
         calibrated: true,
-        label: 'Calibrated rate',
+        label: 'Calibrated',
         sub: (r2 != null && !isNaN(r2)) ? ('R² = ' + r2.toFixed(3)) : null
       };
     }
     return {
       calibrated: false,
-      label: 'Estimated rate',
-      sub: 'Default for ' + (asset.asset_type || 'vehicle type')
+      label: 'Estimated',
+      sub: 'Default rate for ' + (asset.asset_type || 'vehicle type')
     };
   }
 
@@ -636,8 +640,10 @@
     costKmEl.className = 'kpi-value ' + (isAnomaly ? 'amber' : 'teal');
 
     var rateStatus = travelRateStatus(selectedVehicle);
-    document.getElementById('kpi-cost-km-basis').textContent =
-      rateStatus.label + (rateStatus.sub ? ' · ' + rateStatus.sub : '');
+    var fuelBadgeEl = document.getElementById('fuel-rate-badge');
+    fuelBadgeEl.textContent = rateStatus.label;
+    fuelBadgeEl.className = 'badge-rate ' + (rateStatus.calibrated ? 'calibrated' : 'estimated');
+    document.getElementById('kpi-cost-km-basis').textContent = rateStatus.sub || '';
 
     var rangeKm = await fetchRangeDistanceKm(selectedVehicle.id, dateFrom, dateTo);
     document.getElementById('kpi-total-km').textContent =
