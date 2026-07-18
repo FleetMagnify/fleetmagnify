@@ -899,6 +899,7 @@
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var FCM = window.FleetCostModel;
   var currentUser = null;
+  var effectiveAccountId = null;
   var allAssets = [];
   var latestTelByAsset = {};
   var pendingRemoveId = null;
@@ -1013,7 +1014,7 @@
       .from('assets')
       .update(patch)
       .eq('id', Number(assetId))
-      .eq('user_id', currentUser.id);
+      .eq('user_id', effectiveAccountId);
 
     var statusEl = document.getElementById('profile-editor-save-status');
     if (result.error) {
@@ -1047,10 +1048,24 @@
     'Rigid Truck': 2.5, 'Semi Trailer': 3.0, 'Water Truck': 3.5, 'Other': 3.0
   };
 
+  async function resolveAccountId(supabase, authUserId) {
+    var memberResult = await supabase
+      .from('account_members')
+      .select('account_owner_user_id')
+      .eq('member_auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (memberResult.data && memberResult.data.account_owner_user_id) {
+      return memberResult.data.account_owner_user_id;
+    }
+    return authUserId;
+  }
+
   async function init() {
     var { data: { session } } = await supabase.auth.getSession();
     if (!session) { window.location.href = 'login.html'; return; }
     currentUser = session.user;
+    effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, currentUser.id);
     if (!hasAccess) return;
     var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
@@ -1066,7 +1081,7 @@
     var result = await supabase
       .from('company_integrations')
       .select('eroad_api_key')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .maybeSingle();
     if (result.error && result.error.code !== 'PGRST116') return;
     storedHasEroadKey = !!(result.data && result.data.eroad_api_key);
@@ -1076,7 +1091,7 @@
     var colCount = getTableColCount();
     var tbody = document.getElementById('assets-tbody');
     tbody.innerHTML = '<tr class="loading-row"><td colspan="' + colCount + '">Loading assets...</td></tr>';
-    var { data, error } = await supabase.from('assets').select('*').eq('user_id', currentUser.id).eq('is_ignored', false).order('created_at', { ascending: false });
+    var { data, error } = await supabase.from('assets').select('*').eq('user_id', effectiveAccountId).eq('is_ignored', false).order('created_at', { ascending: false });
     if (error) {
       showToast('Failed to load assets', 'error');
       allAssets = [];
@@ -1093,7 +1108,7 @@
     var telResult = await supabase
       .from('telematics_records')
       .select('asset_id, total_engine_hours, odometer_km, record_date')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .order('record_date', { ascending: false });
     if (telResult.error) {
       showToast('Could not load telematics for life badges — assets shown without warnings.', 'error');
@@ -1125,7 +1140,7 @@
     var fpResult = await supabase
       .from('fuel_purchases')
       .select('vehicle_id, litres, cost_nzd')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .in('vehicle_id', stubIds);
     if (!fpResult.error) {
       (fpResult.data || []).forEach(function(r) {
@@ -1146,7 +1161,7 @@
     var result = await supabase
       .from('assets')
       .select('id, asset_name, bp_card_number')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .eq('is_ignored', true)
       .order('asset_name');
     var ignored = result.data || [];
@@ -1187,7 +1202,7 @@
       .from('assets')
       .update({ is_ignored: false })
       .eq('id', Number(id))
-      .eq('user_id', currentUser.id);
+      .eq('user_id', effectiveAccountId);
     if (result.error) {
       showToast('Failed to restore asset: ' + result.error.message, 'error');
       return;
@@ -1383,7 +1398,7 @@
       .from('assets')
       .update({ is_ignored: true })
       .eq('id', Number(id))
-      .eq('user_id', currentUser.id);
+      .eq('user_id', effectiveAccountId);
 
     draggedDiscardId = null;
     draggedCardId = null;
@@ -1530,7 +1545,7 @@
       .from('assets')
       .delete()
       .eq('id', Number(stub.id))
-      .eq('user_id', currentUser.id);
+      .eq('user_id', effectiveAccountId);
     if (deleteResult.error) {
       btn.disabled = false;
       btn.textContent = 'Yes, Merge';
@@ -1544,7 +1559,7 @@
       .from('assets')
       .update({ bp_card_number: stub.bp_card_number })
       .eq('id', Number(target.id))
-      .eq('user_id', currentUser.id);
+      .eq('user_id', effectiveAccountId);
 
     btn.disabled = false;
     btn.textContent = 'Yes, Merge';
@@ -1616,7 +1631,7 @@
     var result = await supabase
       .from('pending_assets')
       .select('*')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .order('created_at', { ascending: true });
     if (result.error) {
       console.error('Failed to load pending assets', result.error.message);
@@ -1711,7 +1726,7 @@
 
   function buildConfirmedAssetPayload(pending, assetName, assetType) {
     var payload = {
-      user_id: currentUser.id,
+      user_id: effectiveAccountId,
       asset_name: assetName,
       asset_type: assetType,
       fuel_type: 'Diesel',
@@ -1753,7 +1768,7 @@
       .from('pending_assets')
       .delete()
       .eq('id', Number(pendingId))
-      .eq('user_id', currentUser.id);
+      .eq('user_id', effectiveAccountId);
     if (deleteResult.error) {
       showToast('Asset added, but failed to clear pending row: ' + deleteResult.error.message, 'error');
     } else {
@@ -1773,7 +1788,7 @@
 
     // Use original import name so future CSV rows still match ignored_assets
     var ignoreResult = await supabase.from('ignored_assets').insert({
-      user_id: currentUser.id,
+      user_id: effectiveAccountId,
       asset_name: pending.asset_name,
       source: pending.source || null,
       ignored_at: new Date().toISOString()
@@ -1789,7 +1804,7 @@
       .from('pending_assets')
       .delete()
       .eq('id', Number(pendingId))
-      .eq('user_id', currentUser.id);
+      .eq('user_id', effectiveAccountId);
     if (deleteResult.error) {
       showToast('Ignored, but failed to clear pending row: ' + deleteResult.error.message, 'error');
     } else {
@@ -1890,7 +1905,7 @@
       .from('assets')
       .update({ is_ignored: true })
       .eq('id', Number(id))
-      .eq('user_id', currentUser.id);
+      .eq('user_id', effectiveAccountId);
 
     if (result.error) {
       showToast('Failed to ignore asset: ' + result.error.message, 'error');
@@ -1946,7 +1961,7 @@
     var result = await supabase
       .from('assets')
       .select('id, asset_name, bp_card_number')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .eq('is_ignored', true)
       .order('asset_name');
     if (result.error) {
@@ -2114,16 +2129,16 @@
     var existing = await supabase
       .from('company_integrations')
       .select('user_id')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .maybeSingle();
 
     if (existing.data) {
       return supabase.from('company_integrations')
         .update({ telematics_provider: 'eRoad', eroad_api_key: apiKey })
-        .eq('user_id', currentUser.id);
+        .eq('user_id', effectiveAccountId);
     }
     return supabase.from('company_integrations').insert({
-      user_id: currentUser.id,
+      user_id: effectiveAccountId,
       telematics_provider: 'eRoad',
       eroad_api_key: apiKey
     });
@@ -2225,10 +2240,10 @@
       return supabase.from('assets')
         .update(payload)
         .eq('id', Number(assetId))
-        .eq('user_id', currentUser.id)
+        .eq('user_id', effectiveAccountId)
         .select('*');
     }
-    payload.user_id = currentUser.id;
+    payload.user_id = effectiveAccountId;
     return supabase.from('assets').insert(payload).select('*');
   }
 
@@ -2408,7 +2423,7 @@
   document.getElementById('confirm-dispose-btn').addEventListener('click', async function() {
     if (!pendingRemoveId) return;
     this.disabled = true; this.textContent = 'Deleting...';
-    var { error } = await supabase.from('assets').delete().eq('id', Number(pendingRemoveId)).eq('user_id', currentUser.id);
+    var { error } = await supabase.from('assets').delete().eq('id', Number(pendingRemoveId)).eq('user_id', effectiveAccountId);
     this.disabled = false; this.textContent = 'Disposed — Delete Permanently';
     document.getElementById('remove-modal').classList.remove('open');
     pendingRemoveId = null;
@@ -2634,7 +2649,7 @@
     var assetType = (row.asset_type || '').trim();
     var onRoad = isOnRoadType(assetType);
     var rec = {
-      user_id: currentUser.id,
+      user_id: effectiveAccountId,
       asset_name: (row.asset_name || '').trim() || null,
       asset_type: assetType || null,
       make: (row.make || '').trim() || null,
@@ -2819,11 +2834,11 @@
     for (var i = 0; i < plan.updates.length; i++) {
       var u = plan.updates[i];
       var patch = Object.assign({}, u.patch);
-      var result = await supabase.from('assets').update(patch).eq('id', u.existing.id).eq('user_id', currentUser.id).select();
+      var result = await supabase.from('assets').update(patch).eq('id', u.existing.id).eq('user_id', effectiveAccountId).select();
       if (result.error && supportsIsOnRoad && result.error.message && result.error.message.indexOf('is_on_road') !== -1) {
         supportsIsOnRoad = false;
         delete patch.is_on_road;
-        result = await supabase.from('assets').update(patch).eq('id', u.existing.id).eq('user_id', currentUser.id).select();
+        result = await supabase.from('assets').update(patch).eq('id', u.existing.id).eq('user_id', effectiveAccountId).select();
       }
       if (result.error) {
         skipped.push('Update failed for ' + (u.existing.asset_name || 'ID ' + u.existing.id) + ': ' + result.error.message);
