@@ -200,6 +200,16 @@
     </div>
 
     <div id="fleet-view">
+      <div class="chart-card pie-card" style="max-width:420px;margin-bottom:28px;">
+        <div class="chart-card-header">
+          <div class="chart-card-title">Fleet-Wide Idle vs Travel Fuel Cost</div>
+        </div>
+        <div class="chart-wrap"><canvas id="fleet-idle-pie-chart"></canvas></div>
+        <div class="chart-legend" style="margin-top:16px;">
+          <div class="legend-item"><div class="legend-dot" style="background:#EF9F27;"></div> Idle Fuel Cost</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#0EA57A;"></div> Travel Fuel Cost</div>
+        </div>
+      </div>
       <div class="table-card">
         <div class="table-header"><div class="table-title">Fleet Idle Overview — Selected Date Range</div></div>
         <div style="overflow-x:auto;">
@@ -310,6 +320,7 @@
   var vehiclesList = [];
   var selectedVehicle = null;
   var pieChart = null;
+  var fleetPieChart = null;
   var lineChart = null;
   var fleetRows = [];
   var fleetSortKey = 'idleFuelCost';
@@ -668,7 +679,10 @@
     document.getElementById('anomaly-confirmed-badge').hidden = asset.idle_anomaly_confirmed !== true;
   }
 
-  function renderPieChart(periods) {
+  function renderPieChart(periods, opts) {
+    opts = opts || {};
+    var canvasId = opts.canvasId || 'idle-pie-chart';
+    var isFleet = !!opts.fleet;
     var idleCost = 0, travelCost = 0;
     periods.forEach(function(p) {
       idleCost += p.idleFuelCost;
@@ -677,9 +691,13 @@
     idleCost = Math.max(0, idleCost);
     travelCost = Math.max(0, travelCost);
 
-    var ctx = document.getElementById('idle-pie-chart').getContext('2d');
-    if (pieChart) pieChart.destroy();
-    pieChart = new Chart(ctx, {
+    var ctx = document.getElementById(canvasId).getContext('2d');
+    if (isFleet) {
+      if (fleetPieChart) fleetPieChart.destroy();
+    } else {
+      if (pieChart) pieChart.destroy();
+    }
+    var chart = new Chart(ctx, {
       type: 'pie',
       data: {
         labels: ['Idle Fuel Cost', 'Travel Fuel Cost'],
@@ -707,6 +725,23 @@
         }
       }
     });
+    if (isFleet) {
+      fleetPieChart = chart;
+    } else {
+      pieChart = chart;
+    }
+  }
+
+  function renderFleetPieChart() {
+    var idleCost = 0, travelCost = 0;
+    fleetRows.forEach(function(r) {
+      idleCost += r.idleFuelCost;
+      travelCost += r.travelFuelCost;
+    });
+    renderPieChart([{
+      idleFuelCost: idleCost,
+      totalCost: idleCost + travelCost
+    }], { canvasId: 'fleet-idle-pie-chart', fleet: true });
   }
 
   function renderIdleLineChart(dailyInfo) {
@@ -817,6 +852,7 @@
     if (vehiclesList.length === 0) {
       fleetRows = [];
       tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:#3A4A5C;">No on-road vehicles found.</td></tr>';
+      renderFleetPieChart();
       return;
     }
 
@@ -835,14 +871,19 @@
       var inRange = filterPeriodsByRange(computed.periods, dateFrom, dateTo);
       if (!inRange.length) continue;
 
-      var idleHours = 0, idleFuelCost = 0;
-      inRange.forEach(function(p) { idleHours += p.idleHours; idleFuelCost += p.idleFuelCost; });
+      var idleHours = 0, idleFuelCost = 0, travelFuelCost = 0;
+      inRange.forEach(function(p) {
+        idleHours += p.idleHours;
+        idleFuelCost += p.idleFuelCost;
+        travelFuelCost += (p.totalCost - p.idleFuelCost);
+      });
 
       rows.push({
         asset: v,
         name: v.asset_name,
         idleHours: idleHours,
         idleFuelCost: idleFuelCost,
+        travelFuelCost: travelFuelCost,
         idleRate: rate,
         status: calibrationStatus(v)
       });
@@ -881,6 +922,7 @@
     if (!fleetRows.length) {
       tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:#3A4A5C;">No idle data available for the selected range.</td></tr>';
       updateSortIndicators();
+      renderFleetPieChart();
       return;
     }
 
@@ -901,6 +943,7 @@
     });
 
     updateSortIndicators();
+    renderFleetPieChart();
   }
 
   function selectVehicleAndRun(id) {
