@@ -524,12 +524,28 @@
     };
   }
 
+  async function hasAnyHistoricalData(userId) {
+    var results = await Promise.all([
+      supabase.from('fuel_records').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+      supabase.from('fuel_purchases').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+      supabase.from('telematics_records').select('id', { count: 'exact', head: true }).eq('user_id', userId)
+    ]);
+    return results.some(function(r) { return (r.count || 0) > 0; });
+  }
+
   async function loadDashboard() {
     var mtd = getMTDRange();
     var prev = getPrevMTDRange();
     var current = await fetchData(mtd.from, mtd.to);
 
-    if (current.assets.length === 0 || (current.fuel.length === 0 && current.tel.length === 0)) {
+    if (current.assets.length === 0) {
+      document.getElementById('empty-state').hidden = false;
+      document.getElementById('dashboard-content').hidden = true;
+      return;
+    }
+
+    var hasHistoricalData = await hasAnyHistoricalData(currentUser.id);
+    if (!hasHistoricalData) {
       document.getElementById('empty-state').hidden = false;
       document.getElementById('dashboard-content').hidden = true;
       return;
