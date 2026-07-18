@@ -433,6 +433,7 @@
       .from('assets')
       .select('*')
       .eq('user_id', currentUser.id)
+      .eq('is_ignored', false)
       .order('asset_name');
     if (error || !data) return;
     assetsList = data;

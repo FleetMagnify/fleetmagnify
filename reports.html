@@ -362,7 +362,7 @@
   }
 
   async function loadAssets() {
-    var result = await supabase.from('assets').select('*').eq('user_id', currentUser.id).order('asset_name');
+    var result = await supabase.from('assets').select('*').eq('user_id', currentUser.id).eq('is_ignored', false).order('asset_name');
     allAssets = result.data || [];
     var options = '<option value="">Select an asset...</option>' +
       allAssets.map(function(a) { return '<option value="' + a.id + '">' + esc(a.asset_name) + '</option>'; }).join('');

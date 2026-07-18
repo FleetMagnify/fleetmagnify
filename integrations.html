@@ -587,6 +587,7 @@
       .from('assets')
       .select('id, asset_name, asset_type, eroad_machine_id, bp_card_number')
       .eq('user_id', currentUser.id)
+      .eq('is_ignored', false)
       .order('asset_name');
 
     if (result.error) {

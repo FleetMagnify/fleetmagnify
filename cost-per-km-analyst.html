@@ -785,6 +785,7 @@
       .from('assets')
       .select('*')
       .eq('user_id', currentUser.id)
+      .eq('is_ignored', false)
       .in('asset_type', ON_ROAD_TYPES)
       .order('asset_name');
 
