@@ -297,6 +297,7 @@
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var FCM = window.FleetCostModel;
   var currentUser = null;
+  var effectiveAccountId = null;
   var companyName = '';
   var allAssets = [];
 
@@ -338,10 +339,24 @@
     fleet: 'Full Fleet Summary Report'
   };
 
+  async function resolveAccountId(supabase, authUserId) {
+    var memberResult = await supabase
+      .from('account_members')
+      .select('account_owner_user_id')
+      .eq('member_auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (memberResult.data && memberResult.data.account_owner_user_id) {
+      return memberResult.data.account_owner_user_id;
+    }
+    return authUserId;
+  }
+
   async function init() {
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
+    effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, currentUser.id);
     if (!hasAccess) return;
     companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name)
@@ -363,7 +378,7 @@
   }
 
   async function loadAssets() {
-    var result = await supabase.from('assets').select('*').eq('user_id', currentUser.id).eq('is_ignored', false).order('asset_name');
+    var result = await supabase.from('assets').select('*').eq('user_id', effectiveAccountId).eq('is_ignored', false).order('asset_name');
     allAssets = result.data || [];
     var options = '<option value="">Select an asset...</option>' +
       allAssets.map(function(a) { return '<option value="' + a.id + '">' + esc(a.asset_name) + '</option>'; }).join('');
@@ -418,9 +433,9 @@
 
   async function fetchRecords(assetIds, dateFrom, dateTo) {
     var fuelQ = supabase.from('fuel_records').select('asset_id, record_date, litres, total_cost')
-      .eq('user_id', currentUser.id).gte('record_date', dateFrom).lte('record_date', dateTo);
+      .eq('user_id', effectiveAccountId).gte('record_date', dateFrom).lte('record_date', dateTo);
     var telQ = supabase.from('telematics_records').select('asset_id, record_date, operating_hours, idle_hours, total_engine_hours')
-      .eq('user_id', currentUser.id).gte('record_date', dateFrom).lte('record_date', dateTo);
+      .eq('user_id', effectiveAccountId).gte('record_date', dateFrom).lte('record_date', dateTo);
     if (assetIds.length === 1) {
       fuelQ = fuelQ.eq('asset_id', assetIds[0]);
       telQ = telQ.eq('asset_id', assetIds[0]);

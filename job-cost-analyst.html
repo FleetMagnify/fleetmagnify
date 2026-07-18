@@ -474,6 +474,7 @@
   var FCM = window.FleetCostModel;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
+  var effectiveAccountId = null;
   var companyName = '';
   var allAssets = [];
   var allJobs = [];
@@ -501,7 +502,7 @@
     var result = await supabase
       .from('user_settings')
       .select('machinery_fuel_cost_per_litre')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .maybeSingle();
     if (result.data && result.data.machinery_fuel_cost_per_litre != null) {
       var val = parseFloat(result.data.machinery_fuel_cost_per_litre);
@@ -509,10 +510,24 @@
     }
   }
 
+  async function resolveAccountId(supabase, authUserId) {
+    var memberResult = await supabase
+      .from('account_members')
+      .select('account_owner_user_id')
+      .eq('member_auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (memberResult.data && memberResult.data.account_owner_user_id) {
+      return memberResult.data.account_owner_user_id;
+    }
+    return authUserId;
+  }
+
   async function init() {
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
+    effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, currentUser.id);
     if (!hasAccess) return;
     companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name)
@@ -525,7 +540,7 @@
   }
 
   async function loadAssets() {
-    var result = await supabase.from('assets').select('*').eq('user_id', currentUser.id).eq('is_ignored', false).order('asset_name');
+    var result = await supabase.from('assets').select('*').eq('user_id', effectiveAccountId).eq('is_ignored', false).order('asset_name');
     allAssets = result.data || [];
     var opts = '<option value="">Select an asset...</option>' +
       allAssets.map(function(a) { return '<option value="' + a.id + '">' + esc(a.asset_name) + '</option>'; }).join('');
@@ -533,7 +548,7 @@
   }
 
   async function loadJobs() {
-    var result = await supabase.from('jobs').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
+    var result = await supabase.from('jobs').select('*').eq('user_id', effectiveAccountId).order('created_at', { ascending: false });
     allJobs = result.data || [];
     await renderJobsList();
   }
@@ -545,7 +560,7 @@
     var countResult = await supabase
       .from('job_assets')
       .select('job_id, asset_id, work_date')
-      .eq('user_id', currentUser.id);
+      .eq('user_id', effectiveAccountId);
     var daysByJob = {};
     (countResult.data || []).forEach(function(r) {
       daysByJob[r.job_id] = daysByJob[r.job_id] || new Set();
@@ -641,7 +656,7 @@
       .from('job_assets')
       .delete()
       .eq('job_id', jobId)
-      .eq('user_id', currentUser.id);
+      .eq('user_id', effectiveAccountId);
     if (deleteAssignments.error) {
       showToast('Failed to delete job assignments: ' + 
         deleteAssignments.error.message, 'error');
@@ -651,7 +666,7 @@
       .from('jobs')
       .delete()
       .eq('id', jobId)
-      .eq('user_id', currentUser.id);
+      .eq('user_id', effectiveAccountId);
     if (jobDeleteResult.error) {
       showToast('Failed to delete job: ' + jobDeleteResult.error.message, 'error');
       return false;
@@ -714,7 +729,7 @@
       var val = parseFloat(document.getElementById('job-tonnes-input').value);
       if (isNaN(val) || val <= 0) { showToast('Please enter a valid number of tonnes.', 'error'); return; }
       if (!currentJob) return;
-      var result = await supabase.from('jobs').update({ tonnes_moved: val }).eq('id', currentJob.id).eq('user_id', currentUser.id);
+      var result = await supabase.from('jobs').update({ tonnes_moved: val }).eq('id', currentJob.id).eq('user_id', effectiveAccountId);
       if (result.error) { showToast(result.error.message, 'error'); return; }
       jobTonnes = val;
       currentJob.tonnes_moved = val;
@@ -765,7 +780,7 @@
 
   async function refreshJobDetail() {
     if (!currentJob) return;
-    var result = await supabase.from('job_assets').select('*').eq('job_id', currentJob.id).eq('user_id', currentUser.id).order('work_date');
+    var result = await supabase.from('job_assets').select('*').eq('job_id', currentJob.id).eq('user_id', effectiveAccountId).order('work_date');
     jobAssignments = result.data || [];
     renderAssignedAssets();
     await calculateCosts();
@@ -816,7 +831,7 @@
 
   async function removeAssetFromJob(assetId) {
     if (!currentJob || !confirm('Remove this asset and all its assigned days from this job?')) return;
-    var result = await supabase.from('job_assets').delete().eq('job_id', currentJob.id).eq('asset_id', assetId).eq('user_id', currentUser.id);
+    var result = await supabase.from('job_assets').delete().eq('job_id', currentJob.id).eq('asset_id', assetId).eq('user_id', effectiveAccountId);
     if (result.error) { showToast(result.error.message, 'error'); return; }
     showToast('Asset removed from job.', 'success');
     await refreshJobDetail();
@@ -825,7 +840,7 @@
   async function updateJobStatus() {
     if (!currentJob) return;
     var status = document.getElementById('detail-status').value;
-    var result = await supabase.from('jobs').update({ status: status }).eq('id', currentJob.id).eq('user_id', currentUser.id);
+    var result = await supabase.from('jobs').update({ status: status }).eq('id', currentJob.id).eq('user_id', effectiveAccountId);
     if (result.error) { showToast(result.error.message, 'error'); return; }
     currentJob.status = status;
     showToast('Job status updated.', 'success');
@@ -854,18 +869,18 @@
     var dates = Array.from(new Set(jobAssignments.map(function(r) { return r.work_date; })));
 
     var fuelResult = await supabase.from('fuel_records').select('asset_id, record_date, litres, total_cost')
-      .eq('user_id', currentUser.id).in('asset_id', assetIds).in('record_date', dates);
+      .eq('user_id', effectiveAccountId).in('asset_id', assetIds).in('record_date', dates);
     var minDate = dates.reduce(function(a,b){ return a < b ? a : b; });
     var maxDate = dates.reduce(function(a,b){ return a > b ? a : b; });
 
     var telResult = await supabase.from('telematics_records')
       .select('asset_id, record_date, idle_hours, operating_hours, total_engine_hours')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .in('asset_id', assetIds)
       .gte('record_date', minDate)
       .lte('record_date', maxDate);
     var latestTelResult = await supabase.from('telematics_records').select('asset_id, total_engine_hours, record_date')
-      .eq('user_id', currentUser.id).in('asset_id', assetIds).order('record_date', { ascending: false });
+      .eq('user_id', effectiveAccountId).in('asset_id', assetIds).order('record_date', { ascending: false });
 
     var engineHoursMap = {};
     (latestTelResult.data || []).forEach(function(r) {
@@ -1179,7 +1194,7 @@
     btn.disabled = true; btn.textContent = 'Creating...';
     var startDate = document.getElementById('new-job-start').value || null;
     var endDate = document.getElementById('new-job-end').value || null;
-    var result = await supabase.from('jobs').insert({ user_id: currentUser.id, job_name: name, status: status, start_date: startDate, end_date: endDate }).select().single();
+    var result = await supabase.from('jobs').insert({ user_id: effectiveAccountId, job_name: name, status: status, start_date: startDate, end_date: endDate }).select().single();
     btn.disabled = false; btn.textContent = 'Create Job';
     if (result.error) { errEl.textContent = result.error.message; errEl.classList.add('visible'); return; }
     closeCreateModal();
@@ -1313,10 +1328,10 @@
     var btn = document.getElementById('save-add-asset');
     btn.disabled = true; btn.textContent = 'Saving...';
 
-    await supabase.from('job_assets').delete().eq('job_id', currentJob.id).eq('asset_id', addAssetId).eq('user_id', currentUser.id);
+    await supabase.from('job_assets').delete().eq('job_id', currentJob.id).eq('asset_id', addAssetId).eq('user_id', effectiveAccountId);
 
     var rows = Array.from(selectedDates).map(function(d) {
-      return { job_id: currentJob.id, asset_id: addAssetId, user_id: currentUser.id, work_date: d };
+      return { job_id: currentJob.id, asset_id: addAssetId, user_id: effectiveAccountId, work_date: d };
     });
     var result = await supabase.from('job_assets').insert(rows);
 
