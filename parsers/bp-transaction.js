@@ -218,6 +218,16 @@ async function parseBpTransactionReport(supabase, options) {
       if (!cardNumber || !dateStr || litres === null || litres <= 0) return;
       if (costExGst === null) return;
 
+      var pricePerLitre = costExGst / litres;
+      if (pricePerLitre < 0.50 || pricePerLitre > 6.00) {
+        console.warn(
+          'bp-transaction: skipped implausible transaction: date=' + dateStr +
+          ', litres=' + litres + ', cost=' + costExGst +
+          ', price/litre=' + pricePerLitre.toFixed(2)
+        );
+        return;
+      }
+
       var assetEntry = cardMap[cardNumber];
       if (!assetEntry) return;
 

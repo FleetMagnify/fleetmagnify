@@ -328,6 +328,19 @@ function buildFuelPurchases(userId, cardMap, nameMap, rows) {
       continue;
     }
 
+    if (costNzd !== null && litres > 0) {
+      var pricePerLitre = costNzd / litres;
+      if (pricePerLitre < 0.50 || pricePerLitre > 6.00) {
+        console.warn(
+          'bp: skipped implausible transaction: date=' + purchaseDate +
+          ', litres=' + litres + ', cost=' + costNzd +
+          ', price/litre=' + pricePerLitre.toFixed(2)
+        );
+        skipped++;
+        continue;
+      }
+    }
+
     records.push({
       user_id: userId,
       vehicle_id: Number(vehicleId),
