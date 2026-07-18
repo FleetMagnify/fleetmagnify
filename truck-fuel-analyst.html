@@ -328,13 +328,11 @@
     for (var i = 1; i < fuelRows.length; i++) {
       var first = fuelRows[i - 1];
       var second = fuelRows[i];
-      var km = 0;
-      for (var j = 0; j < mileageRows.length; j++) {
-        var m = mileageRows[j];
-        if (m.reading_date > first.purchase_date && m.reading_date <= second.purchase_date) {
-          km += parseFloat(m.odometer_km) || 0;
-        }
-      }
+      var odo1 = closestReading(mileageRows, first.purchase_date);
+      var odo2 = closestReading(mileageRows, second.purchase_date);
+      if (!odo1 || !odo2) continue;
+
+      var km = parseFloat(odo2.odometer_km) - parseFloat(odo1.odometer_km);
       if (km <= 0) continue;
 
       var idleHours = 0;
