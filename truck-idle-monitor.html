@@ -69,6 +69,7 @@
   .kpi-value.white { color: #D8DFE8; }
   .kpi-sub { font-size: 11px; color: #3A4A5C; }
   .kpi-sub-rate { font-size: 10.5px; color: #6B7785; margin-top: 6px; }
+  .kpi-sub-warn { font-size: 10.5px; color: #EF9F27; margin-top: 6px; line-height: 1.4; }
 
   .badge-rate { display: inline-flex; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 100px; letter-spacing: 0.03em; }
   .badge-rate.calibrated { color: #0EA57A; background: rgba(14,165,122,0.12); border: 1px solid rgba(14,165,122,0.25); }
@@ -173,7 +174,7 @@
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this is calculated:</strong> Idle litres for each fill-to-fill fuel period are <strong>idle hours × calibrated idle burn rate (L/hr)</strong>. Idle fuel cost prices those litres at that period's own fuel rate; travel fuel cost is the remainder. The idle burn rate comes from the fuel regression engine when calibrated, or a default rate otherwise. Days are flagged as unusually high when idle hours exceed <strong>3 hours</strong> — using daily telematics readings directly, not fuel-period buckets.</p>
+      <p><strong>How this is calculated:</strong> Idle litres for the selected date range are <strong>idle hours × calibrated idle burn rate (L/hr)</strong>, using daily telematics idle-hour totals directly. Idle fuel cost prices those litres at the vehicle's <strong>average price per litre over the trailing 6 months</strong> (or all-time if less) — not just the selected range — so results stay stable even when few fuel fills fall within it. Travel fuel cost is total real fuel cost in the range minus idle fuel cost, floored at zero. The idle burn rate comes from the fuel regression engine when calibrated, or a default rate otherwise. Days are flagged as unusually high when idle hours exceed <strong>3 hours</strong>.</p>
     </div>
 
     <div class="filter-bar">
@@ -196,7 +197,7 @@
     <div id="empty-state" class="empty-state" hidden>
       <span class="icon">⏸</span>
       <h2>Not enough data yet</h2>
-      <p>At least two fuel fills and corresponding odometer readings are needed to calculate idle cost for this vehicle. This will populate automatically once your eROAD and BP integrations are connected.</p>
+      <p id="empty-state-message">Telematics idle-hour data is needed to calculate idle cost for this vehicle. This will populate automatically once Navman telematics data is available for this date range.</p>
     </div>
 
     <div id="fleet-view">
@@ -253,6 +254,7 @@
           <div class="kpi-label">Total Travel Fuel Cost</div>
           <div class="kpi-value teal" id="kpi-travel-cost">—</div>
           <div class="kpi-sub">selected date range</div>
+          <div class="kpi-sub-warn" id="travel-cost-clamp-note" hidden>Travel fuel cost estimate — idle cost may be overestimated for this range</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Idle Burn Rate</div>
@@ -327,8 +329,8 @@
   var fleetSortDir = 'desc';
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
-  var DATE_BUFFER_DAYS = 21;
   var ELEVATED_IDLE_THRESHOLD_HOURS = 3;
+  var PRICE_HISTORY_MONTHS = 6;
   var DEFAULT_IDLE_RATES = {
     'Light Vehicle': 1.2, 'Rigid Truck': 2.5, 'Truck and Trailer / B-Train': 3.0
   };
@@ -337,9 +339,9 @@
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
-  function addDays(dateStr, days) {
+  function addMonths(dateStr, months) {
     var d = new Date(dateStr + 'T00:00:00');
-    d.setDate(d.getDate() + days);
+    d.setMonth(d.getMonth() + months);
     return fmtDate(d);
   }
 
@@ -350,85 +352,6 @@
   function fmtDateShort(dateStr) {
     var d = new Date(dateStr + 'T00:00:00');
     return d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
-  }
-
-  // ── Reused verbatim from truck-fuel-analyst.html (corrected odometer-diff version) ──
-  function closestReading(readings, targetDate) {
-    if (!readings.length) return null;
-    var target = new Date(targetDate + 'T00:00:00').getTime();
-    var best = null;
-    var bestDiff = Infinity;
-    readings.forEach(function(r) {
-      var odo = parseFloat(r.odometer_km);
-      if (isNaN(odo) || odo <= 0) return;
-      var t = new Date(r.reading_date + 'T00:00:00').getTime();
-      var diff = Math.abs(t - target);
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        best = r;
-      }
-    });
-    return best;
-  }
-
-  function computePeriods(fuelRows, mileageRows, idleRows, idleBurnRateLph) {
-    if (fuelRows.length < 2) {
-      return { periods: [], error: 'insufficient_fuel' };
-    }
-    if (!mileageRows.length) {
-      return { periods: [], error: 'no_mileage' };
-    }
-
-    var safeIdleRows = idleRows || [];
-    var periods = [];
-    for (var i = 1; i < fuelRows.length; i++) {
-      var first = fuelRows[i - 1];
-      var second = fuelRows[i];
-      var odo1 = closestReading(mileageRows, first.purchase_date);
-      var odo2 = closestReading(mileageRows, second.purchase_date);
-      if (!odo1 || !odo2) continue;
-
-      var km = parseFloat(odo2.odometer_km) - parseFloat(odo1.odometer_km);
-      if (km <= 0) continue;
-
-      var idleHours = 0;
-      for (var k = 0; k < safeIdleRows.length; k++) {
-        var ir = safeIdleRows[k];
-        if (ir.record_date > first.purchase_date && ir.record_date <= second.purchase_date) {
-          idleHours += parseFloat(ir.idle_hours) || 0;
-        }
-      }
-
-      var totalCost = parseFloat(second.cost_nzd) || 0;
-      var litres = parseFloat(second.litres) || 0;
-      var pricePerLitre = litres > 0 ? totalCost / litres : 0;
-      var idleLitres = idleHours * (idleBurnRateLph || 0);
-      var idleFuelCost = idleLitres * pricePerLitre;
-      var travelCost = Math.max(0, totalCost - idleFuelCost);
-      var costPerKm = travelCost / km;
-
-      periods.push({
-        periodStart: first.purchase_date,
-        periodEnd: second.purchase_date,
-        litresUsed: litres,
-        kmDriven: km,
-        totalCost: totalCost,
-        idleHours: idleHours,
-        idleFuelCost: idleFuelCost,
-        costPerKm: costPerKm
-      });
-    }
-
-    if (periods.length === 0) {
-      return { periods: [], error: 'no_periods' };
-    }
-    return { periods: periods, error: null };
-  }
-
-  function filterPeriodsByRange(periods, dateFrom, dateTo) {
-    return periods.filter(function(p) {
-      return p.periodEnd >= dateFrom && p.periodEnd <= dateTo;
-    });
   }
 
   function esc(str) {
@@ -453,6 +376,41 @@
       calibrated: false,
       label: 'Estimated',
       sub: asset.idle_burn_rate_lph != null ? 'Manually set rate' : ('Default rate for ' + (asset.asset_type || 'vehicle type'))
+    };
+  }
+
+  // Rate × activity idle cost model. Replaces the old computePeriods-based
+  // fill-to-fill split, which produced negative travel cost when few/no
+  // fuel purchases fell within the selected range.
+  function computeIdlePeriodCost(asset, allFuelRows, idleHoursInRange, dateFrom, dateTo, priceWindowFrom) {
+    var rate = effectiveIdleRate(asset);
+
+    var rangeFuelRows = allFuelRows.filter(function(r) {
+      return r.purchase_date >= dateFrom && r.purchase_date <= dateTo;
+    });
+    var priceWindowRows = allFuelRows.filter(function(r) {
+      return r.purchase_date >= priceWindowFrom && r.purchase_date <= dateTo;
+    });
+
+    var totalRangeFuelCost = rangeFuelRows.reduce(function(sum, r) { return sum + (parseFloat(r.cost_nzd) || 0); }, 0);
+    var priceWindowCost = priceWindowRows.reduce(function(sum, r) { return sum + (parseFloat(r.cost_nzd) || 0); }, 0);
+    var priceWindowLitres = priceWindowRows.reduce(function(sum, r) { return sum + (parseFloat(r.litres) || 0); }, 0);
+    var avgPricePerLitre = priceWindowLitres > 0 ? priceWindowCost / priceWindowLitres : 0;
+
+    var idleLitres = idleHoursInRange * rate;
+    var idleFuelCost = idleLitres * avgPricePerLitre;
+    var travelFuelCostRaw = totalRangeFuelCost - idleFuelCost;
+    var travelFuelCost = Math.max(0, travelFuelCostRaw);
+
+    return {
+      rate: rate,
+      idleHours: idleHoursInRange,
+      idleLitres: idleLitres,
+      avgPricePerLitre: avgPricePerLitre,
+      totalRangeFuelCost: totalRangeFuelCost,
+      idleFuelCost: idleFuelCost,
+      travelFuelCost: travelFuelCost,
+      isClamped: travelFuelCostRaw < 0
     };
   }
 
@@ -536,66 +494,31 @@
     document.getElementById('empty-state').hidden = name !== 'empty';
   }
 
-  // ── Reused verbatim from truck-fuel-analyst.html ──
-  async function fetchVehicleData(vehicleId, dateFrom, dateTo) {
-    var bufferFrom = addDays(dateFrom, -DATE_BUFFER_DAYS);
-    var bufferTo = addDays(dateTo, DATE_BUFFER_DAYS);
+  function showEmptyState(message) {
+    document.getElementById('empty-state-message').textContent = message;
+    setView('empty');
+  }
 
-    var fuelResult = await supabase
+  // Fetches fuel purchases across the union of: the trailing PRICE_HISTORY_MONTHS
+  // window ending at dateTo (for average price per litre), and the selected
+  // range itself (for real in-range fuel cost) — in a single query.
+  async function fetchFuelForIdleCost(vehicleId, dateFrom, dateTo) {
+    var priceWindowFrom = addMonths(dateTo, -PRICE_HISTORY_MONTHS);
+    var queryFrom = priceWindowFrom < dateFrom ? priceWindowFrom : dateFrom;
+
+    var result = await supabase
       .from('fuel_purchases')
       .select('purchase_date, litres, cost_nzd')
       .eq('vehicle_id', Number(vehicleId))
       .eq('user_id', currentUser.id)
-      .gte('purchase_date', bufferFrom)
-      .lte('purchase_date', bufferTo)
+      .gte('purchase_date', queryFrom)
+      .lte('purchase_date', dateTo)
       .order('purchase_date');
 
-    var mileageResult = await supabase
-      .from('eroad_mileage')
-      .select('reading_date, odometer_km')
-      .eq('vehicle_id', Number(vehicleId))
-      .eq('user_id', currentUser.id)
-      .gte('reading_date', bufferFrom)
-      .lte('reading_date', bufferTo)
-      .order('reading_date');
-
-    var telOdoResult = await supabase
-      .from('telematics_records')
-      .select('asset_id, record_date, odometer_km')
-      .eq('asset_id', Number(vehicleId))
-      .eq('user_id', currentUser.id)
-      .gte('record_date', bufferFrom)
-      .lte('record_date', bufferTo)
-      .not('odometer_km', 'is', null)
-      .order('record_date');
-
-    var normalizedTel = (telOdoResult.data || []).map(function(r) {
-      return {
-        reading_date: r.record_date,
-        odometer_km: r.odometer_km
-      };
-    });
-    var mileage = (mileageResult.data || []).concat(normalizedTel);
-    mileage.sort(function(a, b) {
-      return String(a.reading_date).localeCompare(String(b.reading_date));
-    });
-
-    var idleResult = await supabase
-      .from('telematics_records')
-      .select('record_date, idle_hours')
-      .eq('asset_id', Number(vehicleId))
-      .eq('user_id', currentUser.id)
-      .gte('record_date', bufferFrom)
-      .lte('record_date', bufferTo)
-      .order('record_date');
-
     return {
-      fuel: fuelResult.data || [],
-      mileage: mileage,
-      idle: idleResult.data || [],
-      fuelError: fuelResult.error,
-      mileageError: mileageResult.error,
-      idleError: idleResult.error
+      fuel: result.data || [],
+      fuelError: result.error,
+      priceWindowFrom: priceWindowFrom
     };
   }
 
@@ -623,53 +546,45 @@
     btn.disabled = true;
     btn.textContent = 'Loading...';
 
-    var data = await fetchVehicleData(selectedVehicle.id, dateFrom, dateTo);
+    var fuelData = await fetchFuelForIdleCost(selectedVehicle.id, dateFrom, dateTo);
     var dailyRows = await fetchDailyIdle(selectedVehicle.id, dateFrom, dateTo);
 
     btn.disabled = false;
     btn.textContent = 'Apply Filters';
 
-    if (data.fuelError || data.mileageError) {
+    if (fuelData.fuelError) {
       setView('empty');
       return;
     }
 
-    var rate = effectiveIdleRate(selectedVehicle);
-    var computed = computePeriods(data.fuel, data.mileage, data.idle, rate);
-    if (computed.error === 'insufficient_fuel' || computed.error === 'no_mileage' || computed.error === 'no_periods') {
-      setView('empty');
+    if (fuelData.fuel.length === 0) {
+      showEmptyState('No fuel purchase history available for this vehicle — idle cost cannot be calculated until fuel data exists.');
       return;
     }
 
-    var inRange = filterPeriodsByRange(computed.periods, dateFrom, dateTo);
-    if (inRange.length === 0) {
-      setView('empty');
+    if (dailyRows.length === 0) {
+      showEmptyState('Telematics idle-hour data is needed to calculate idle cost for this vehicle. This will populate automatically once Navman telematics data is available for this date range.');
       return;
     }
 
     setView('vehicle');
     var dailyInfo = computeFlaggedDays(dailyRows);
-    renderSummary(selectedVehicle, inRange);
-    renderPieChart(inRange);
+    var idleHoursInRange = dailyRows.reduce(function(sum, r) { return sum + (parseFloat(r.idle_hours) || 0); }, 0);
+    var summary = computeIdlePeriodCost(selectedVehicle, fuelData.fuel, idleHoursInRange, dateFrom, dateTo, fuelData.priceWindowFrom);
+    renderSummary(selectedVehicle, summary);
+    renderPieChart({ idleCost: summary.idleFuelCost, travelCost: summary.travelFuelCost });
     renderIdleLineChart(dailyInfo);
     renderFlaggedTable(selectedVehicle, dailyInfo);
   }
 
-  function renderSummary(asset, periods) {
-    var totalIdleHours = 0, totalIdleCost = 0, totalTravelCost = 0;
-    periods.forEach(function(p) {
-      totalIdleHours += p.idleHours;
-      totalIdleCost += p.idleFuelCost;
-      totalTravelCost += (p.totalCost - p.idleFuelCost);
-    });
+  function renderSummary(asset, summary) {
+    document.getElementById('kpi-idle-hours').textContent = summary.idleHours.toFixed(1) + ' hrs';
+    document.getElementById('kpi-idle-cost').textContent = fmtMoney(summary.idleFuelCost);
+    document.getElementById('kpi-travel-cost').textContent = fmtMoney(summary.travelFuelCost);
+    document.getElementById('travel-cost-clamp-note').hidden = !summary.isClamped;
 
-    document.getElementById('kpi-idle-hours').textContent = totalIdleHours.toFixed(1) + ' hrs';
-    document.getElementById('kpi-idle-cost').textContent = fmtMoney(totalIdleCost);
-    document.getElementById('kpi-travel-cost').textContent = fmtMoney(totalTravelCost);
-
-    var rate = effectiveIdleRate(asset);
     var status = calibrationStatus(asset);
-    document.getElementById('kpi-idle-rate').textContent = rate.toFixed(2) + ' L/hr';
+    document.getElementById('kpi-idle-rate').textContent = summary.rate.toFixed(2) + ' L/hr';
 
     var badgeEl = document.getElementById('idle-rate-badge');
     badgeEl.textContent = status.label;
@@ -679,17 +594,12 @@
     document.getElementById('anomaly-confirmed-badge').hidden = asset.idle_anomaly_confirmed !== true;
   }
 
-  function renderPieChart(periods, opts) {
+  function renderPieChart(costs, opts) {
     opts = opts || {};
     var canvasId = opts.canvasId || 'idle-pie-chart';
     var isFleet = !!opts.fleet;
-    var idleCost = 0, travelCost = 0;
-    periods.forEach(function(p) {
-      idleCost += p.idleFuelCost;
-      travelCost += (p.totalCost - p.idleFuelCost);
-    });
-    idleCost = Math.max(0, idleCost);
-    travelCost = Math.max(0, travelCost);
+    var idleCost = Math.max(0, costs.idleCost || 0);
+    var travelCost = Math.max(0, costs.travelCost || 0);
 
     var ctx = document.getElementById(canvasId).getContext('2d');
     if (isFleet) {
@@ -738,10 +648,7 @@
       idleCost += r.idleFuelCost;
       travelCost += r.travelFuelCost;
     });
-    renderPieChart([{
-      idleFuelCost: idleCost,
-      totalCost: idleCost + travelCost
-    }], { canvasId: 'fleet-idle-pie-chart', fleet: true });
+    renderPieChart({ idleCost: idleCost, travelCost: travelCost }, { canvasId: 'fleet-idle-pie-chart', fleet: true });
   }
 
   function renderIdleLineChart(dailyInfo) {
@@ -861,30 +768,22 @@
     var rows = [];
     for (var i = 0; i < vehiclesList.length; i++) {
       var v = vehiclesList[i];
-      var data = await fetchVehicleData(v.id, dateFrom, dateTo);
-      if (data.fuel.length < 2 || !data.mileage.length) continue;
+      var fuelData = await fetchFuelForIdleCost(v.id, dateFrom, dateTo);
+      if (fuelData.fuelError || fuelData.fuel.length === 0) continue;
 
-      var rate = effectiveIdleRate(v);
-      var computed = computePeriods(data.fuel, data.mileage, data.idle, rate);
-      if (!computed.periods.length) continue;
+      var dailyRows = await fetchDailyIdle(v.id, dateFrom, dateTo);
+      if (dailyRows.length === 0) continue;
 
-      var inRange = filterPeriodsByRange(computed.periods, dateFrom, dateTo);
-      if (!inRange.length) continue;
-
-      var idleHours = 0, idleFuelCost = 0, travelFuelCost = 0;
-      inRange.forEach(function(p) {
-        idleHours += p.idleHours;
-        idleFuelCost += p.idleFuelCost;
-        travelFuelCost += (p.totalCost - p.idleFuelCost);
-      });
+      var idleHoursInRange = dailyRows.reduce(function(sum, r) { return sum + (parseFloat(r.idle_hours) || 0); }, 0);
+      var summary = computeIdlePeriodCost(v, fuelData.fuel, idleHoursInRange, dateFrom, dateTo, fuelData.priceWindowFrom);
 
       rows.push({
         asset: v,
         name: v.asset_name,
-        idleHours: idleHours,
-        idleFuelCost: idleFuelCost,
-        travelFuelCost: travelFuelCost,
-        idleRate: rate,
+        idleHours: summary.idleHours,
+        idleFuelCost: summary.idleFuelCost,
+        travelFuelCost: summary.travelFuelCost,
+        idleRate: summary.rate,
         status: calibrationStatus(v)
       });
     }
