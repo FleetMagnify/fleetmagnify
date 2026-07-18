@@ -1,6 +1,9 @@
 {
   "name": "fleetmagnify",
   "private": true,
+  "scripts": {
+    "fuel-regression": "node lib/fuel-regression.js"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
     "busboy": "^1.6.0",
