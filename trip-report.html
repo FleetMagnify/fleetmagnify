@@ -157,11 +157,11 @@
   <div class="page-content">
     <div class="page-eyebrow"><div class="dash"></div> Truck Fleet</div>
     <h1 class="page-title">Trip Cost Report</h1>
-    <p class="page-sub">Generate a full cost and emissions summary for a specific trip window using eROAD mileage, rolling fuel rates, and asset cost data.</p>
+    <p class="page-sub">Generate a full cost and emissions summary for a specific trip window using Navman telematics, rolling fuel rates, and asset cost data.</p>
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this works:</strong> Trip distance comes from the closest eROAD odometer readings to your start and end times. Fuel cost uses the truck's <strong>most recent fill-to-fill rate</strong> before the trip ends — not fuel bought during the trip itself. Depreciation, servicing, and maintenance are applied per km from your asset profile.</p>
+      <p><strong>How this works:</strong> Trip distance comes from the closest Navman odometer readings to your start and end times. Fuel cost uses the truck's <strong>most recent fill-to-fill rate</strong> before the trip ends — not fuel bought during the trip itself. Depreciation, servicing, and maintenance are applied per km from your asset profile.</p>
     </div>
 
     <div class="filter-bar">
@@ -329,7 +329,7 @@
     readings.forEach(function(r) {
       var odo = parseFloat(r.odometer_km);
       if (isNaN(odo) || odo <= 0) return;
-      var t = new Date(r.reading_date + 'T12:00:00').getTime();
+      var t = new Date(r.record_date + 'T12:00:00').getTime();
       var diff = Math.abs(t - target);
       if (diff < bestDiff) {
         bestDiff = diff;
@@ -383,7 +383,7 @@
     }
     var computed = computePeriods(eligible, mileageRows);
     if (computed.error === 'no_mileage') {
-      return { error: 'No eROAD mileage data to calculate fill-to-fill fuel rates' };
+      return { error: 'No Navman telematics data to calculate fill-to-fill fuel rates' };
     }
     if (computed.error) {
       return { error: 'Could not calculate a fill-to-fill fuel period from available purchases' };
@@ -502,13 +502,14 @@
 
   async function fetchMileage(vehicleId, fromDate, toDate) {
     var result = await supabase
-      .from('eroad_mileage')
-      .select('reading_date, odometer_km')
-      .eq('vehicle_id', Number(vehicleId))
+      .from('telematics_records')
+      .select('record_date, odometer_km')
+      .eq('asset_id', Number(vehicleId))
       .eq('user_id', currentUser.id)
-      .gte('reading_date', fromDate)
-      .lte('reading_date', toDate)
-      .order('reading_date');
+      .gte('record_date', fromDate)
+      .lte('record_date', toDate)
+      .not('odometer_km', 'is', null)
+      .order('record_date');
     return result.data || [];
   }
 
@@ -557,14 +558,14 @@
       return;
     }
     if (!mileageRows.length) {
-      showError('No eROAD mileage data covering the trip window.');
+      showError('No Navman telematics data covering the trip window.');
       return;
     }
 
     var startReading = closestReadingToDatetime(mileageRows, startDt);
     var endReading = closestReadingToDatetime(mileageRows, endDt);
     if (!startReading || !endReading) {
-      showError('Could not find eROAD odometer readings near the trip start and end times.');
+      showError('Could not find Navman odometer readings near the trip start and end times.');
       return;
     }
 

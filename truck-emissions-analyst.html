@@ -167,7 +167,7 @@
   <div class="page-content">
     <div class="page-eyebrow"><div class="dash"></div> Truck Fleet</div>
     <h1 class="page-title">Emissions Per Kilometre</h1>
-    <p class="page-sub">Fill-to-fill CO₂ analysis for on-road vehicles using fuel consumption and eROAD odometer readings.</p>
+    <p class="page-sub">Fill-to-fill CO₂ analysis for on-road vehicles using fuel consumption and Navman odometer readings.</p>
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
@@ -194,7 +194,7 @@
     <div id="empty-state" class="empty-state" hidden>
       <span class="icon">🌿</span>
       <h2>Not enough data yet</h2>
-      <p>At least two fuel fills and corresponding eROAD odometer readings are needed to calculate emissions per km. This will populate automatically once your fuel purchase and mileage data is available.</p>
+      <p>At least two fuel fills and corresponding Navman odometer readings are needed to calculate emissions per km. This will populate automatically once your fuel purchase and mileage data is available.</p>
     </div>
 
     <div id="dashboard-content" class="dashboard-content" hidden>
@@ -361,7 +361,7 @@
     readings.forEach(function(r) {
       var odo = parseFloat(r.odometer_km);
       if (isNaN(odo) || odo <= 0) return;
-      var t = new Date(r.reading_date + 'T00:00:00').getTime();
+      var t = new Date(r.record_date + 'T00:00:00').getTime();
       var diff = Math.abs(t - target);
       if (diff < bestDiff) {
         bestDiff = diff;
@@ -507,13 +507,14 @@
       .order('purchase_date');
 
     var mileageResult = await supabase
-      .from('eroad_mileage')
-      .select('reading_date, odometer_km')
-      .eq('vehicle_id', Number(vehicleId))
+      .from('telematics_records')
+      .select('record_date, odometer_km')
+      .eq('asset_id', Number(vehicleId))
       .eq('user_id', currentUser.id)
-      .gte('reading_date', bufferFrom)
-      .lte('reading_date', bufferTo)
-      .order('reading_date');
+      .gte('record_date', bufferFrom)
+      .lte('record_date', bufferTo)
+      .not('odometer_km', 'is', null)
+      .order('record_date');
 
     return {
       fuel: fuelResult.data || [],

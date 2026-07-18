@@ -213,7 +213,7 @@
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this is calculated:</strong> Fuel cost per km comes from fill-to-fill periods (BP purchases and eROAD odometer). Depreciation per km is <strong>(current value − end of life value) ÷ remaining km</strong>. Maintenance per km is <strong>annual repair cost ÷ estimated annual km</strong>. Use overrides when a calculated figure doesn't reflect reality for a specific period.</p>
+      <p><strong>How this is calculated:</strong> Fuel cost per km comes from fill-to-fill periods (BP purchases and Navman odometer). Depreciation per km is <strong>(current value − end of life value) ÷ remaining km</strong>. Maintenance per km is <strong>annual repair cost ÷ estimated annual km</strong>. Use overrides when a calculated figure doesn't reflect reality for a specific period.</p>
     </div>
 
     <div class="filter-bar">
@@ -241,7 +241,7 @@
     <div id="empty-state" class="empty-state" hidden>
       <span class="icon">🚛</span>
       <h2>Not enough data yet</h2>
-      <p>At least two fuel fills and corresponding odometer readings are needed to calculate cost per km. This will populate automatically once your eROAD and BP integrations are connected.</p>
+      <p>At least two fuel fills and corresponding odometer readings are needed to calculate cost per km. This will populate automatically once your Navman telematics and BP integrations are connected.</p>
     </div>
 
     <div id="dashboard-content" class="dashboard-content" hidden>
@@ -419,7 +419,7 @@
     readings.forEach(function(r) {
       var odo = parseFloat(r.odometer_km);
       if (isNaN(odo) || odo <= 0) return;
-      var t = new Date(r.reading_date + 'T00:00:00').getTime();
+      var t = new Date(r.record_date + 'T00:00:00').getTime();
       var diff = Math.abs(t - target);
       if (diff < bestDiff) {
         bestDiff = diff;
@@ -466,10 +466,10 @@
     if (!realPeriods.length) return null;
     var lastReal = realPeriods[realPeriods.length - 1];
 
-    var eligibleReadings = mileageRows.filter(function(r) { return r.reading_date <= dateTo; });
+    var eligibleReadings = mileageRows.filter(function(r) { return r.record_date <= dateTo; });
     var endReading = closestReading(eligibleReadings, dateTo);
     if (!endReading) return null;
-    if (endReading.reading_date <= lastReal.periodEnd) return null;
+    if (endReading.record_date <= lastReal.periodEnd) return null;
 
     var startOdoReading = closestReading(mileageRows, lastReal.periodEnd);
     if (!startOdoReading) return null;
@@ -481,7 +481,7 @@
 
     return {
       periodStart: lastReal.periodEnd,
-      periodEnd: endReading.reading_date,
+      periodEnd: endReading.record_date,
       litresUsed: null,
       kmDriven: kmSinceLastFill,
       totalCost: estimatedCost,
@@ -826,13 +826,14 @@
       .order('purchase_date');
 
     var mileageResult = await supabase
-      .from('eroad_mileage')
-      .select('reading_date, odometer_km')
-      .eq('vehicle_id', Number(vehicleId))
+      .from('telematics_records')
+      .select('record_date, odometer_km')
+      .eq('asset_id', Number(vehicleId))
       .eq('user_id', currentUser.id)
-      .gte('reading_date', bufferFrom)
-      .lte('reading_date', bufferTo)
-      .order('reading_date');
+      .gte('record_date', bufferFrom)
+      .lte('record_date', bufferTo)
+      .not('odometer_km', 'is', null)
+      .order('record_date');
 
     return {
       fuel: fuelResult.data || [],
