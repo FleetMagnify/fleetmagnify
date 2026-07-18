@@ -260,6 +260,7 @@
   var FCM = window.FleetCostModel;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
+  var effectiveAccountId = null;
   var companyName = '';
   var vehiclesList = [];
   var selectedVehicle = null;
@@ -433,10 +434,24 @@
     document.getElementById('error-panel').classList.remove('visible');
   }
 
+  async function resolveAccountId(supabase, authUserId) {
+    var memberResult = await supabase
+      .from('account_members')
+      .select('account_owner_user_id')
+      .eq('member_auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (memberResult.data && memberResult.data.account_owner_user_id) {
+      return memberResult.data.account_owner_user_id;
+    }
+    return authUserId;
+  }
+
   async function init() {
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
+    effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, currentUser.id);
     if (!hasAccess) return;
     companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name)
@@ -456,7 +471,7 @@
     var result = await supabase
       .from('assets')
       .select('*')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .eq('is_ignored', false)
       .in('asset_type', ON_ROAD_TYPES)
       .order('asset_name');
@@ -494,7 +509,7 @@
       .from('fuel_purchases')
       .select('purchase_date, litres, cost_nzd')
       .eq('vehicle_id', Number(vehicleId))
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .lte('purchase_date', throughDate)
       .order('purchase_date');
     return result.data || [];
@@ -505,7 +520,7 @@
       .from('telematics_records')
       .select('record_date, odometer_km')
       .eq('asset_id', Number(vehicleId))
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .gte('record_date', fromDate)
       .lte('record_date', toDate)
       .not('odometer_km', 'is', null)

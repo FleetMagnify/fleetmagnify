@@ -368,6 +368,7 @@
   var FCM = window.FleetCostModel;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
+  var effectiveAccountId = null;
   var vehiclesList = [];
   var selectedVehicle = null;
   var currentOverrides = [];
@@ -431,7 +432,7 @@
       .from('fuel_purchases')
       .select('litres, cost_nzd')
       .eq('vehicle_id', Number(vehicleId))
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .gte('purchase_date', priceWindowFrom)
       .lte('purchase_date', dateTo)
       .order('purchase_date');
@@ -787,10 +788,24 @@
     el.title = '';
   }
 
+  async function resolveAccountId(supabase, authUserId) {
+    var memberResult = await supabase
+      .from('account_members')
+      .select('account_owner_user_id')
+      .eq('member_auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (memberResult.data && memberResult.data.account_owner_user_id) {
+      return memberResult.data.account_owner_user_id;
+    }
+    return authUserId;
+  }
+
   async function init() {
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
+    effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, currentUser.id);
     if (!hasAccess) return;
     var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
@@ -820,7 +835,7 @@
         await supabase.from('truck_payloads').update({ payload_tonnes: num }).eq('id', existing.id);
       } else {
         await supabase.from('truck_payloads').insert({
-          user_id: currentUser.id,
+          user_id: effectiveAccountId,
           vehicle_id: Number(selectedVehicle.id),
           period_start: latestPeriod.periodStart,
           period_end: latestPeriod.periodEnd,
@@ -842,7 +857,7 @@
     var result = await supabase
       .from('assets')
       .select('*')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .eq('is_ignored', false)
       .in('asset_type', ON_ROAD_TYPES)
       .order('asset_name');
@@ -877,7 +892,7 @@
       .from('fuel_purchases')
       .select('purchase_date, litres, cost_nzd')
       .eq('vehicle_id', Number(vehicleId))
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .gte('purchase_date', bufferFrom)
       .lte('purchase_date', bufferTo)
       .order('purchase_date');
@@ -886,7 +901,7 @@
       .from('telematics_records')
       .select('record_date, odometer_km')
       .eq('asset_id', Number(vehicleId))
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .gte('record_date', bufferFrom)
       .lte('record_date', bufferTo)
       .not('odometer_km', 'is', null)
@@ -905,7 +920,7 @@
       .from('truck_cost_overrides')
       .select('*')
       .eq('vehicle_id', Number(vehicleId))
-      .eq('user_id', currentUser.id);
+      .eq('user_id', effectiveAccountId);
     return result.data || [];
   }
 
@@ -914,7 +929,7 @@
       .from('truck_payloads')
       .select('*')
       .eq('vehicle_id', Number(vehicleId))
-      .eq('user_id', currentUser.id);
+      .eq('user_id', effectiveAccountId);
     return result.data || [];
   }
 
@@ -1216,7 +1231,7 @@
       .from('truck_cost_overrides')
       .delete()
       .eq('id', ov.id)
-      .eq('user_id', currentUser.id);
+      .eq('user_id', effectiveAccountId);
 
     btn.disabled = false;
     if (result.error) {
@@ -1248,7 +1263,7 @@
 
       if (!valRaw) {
         if (existing) {
-          await supabase.from('truck_cost_overrides').delete().eq('id', existing.id).eq('user_id', currentUser.id);
+          await supabase.from('truck_cost_overrides').delete().eq('id', existing.id).eq('user_id', effectiveAccountId);
         }
         continue;
       }
@@ -1267,10 +1282,10 @@
           reason: reason || null,
           period_start: p.periodStart,
           period_end: p.periodEnd
-        }).eq('id', existing.id).eq('user_id', currentUser.id);
+        }).eq('id', existing.id).eq('user_id', effectiveAccountId);
       } else {
         await supabase.from('truck_cost_overrides').insert({
-          user_id: currentUser.id,
+          user_id: effectiveAccountId,
           vehicle_id: Number(selectedVehicle.id),
           period_start: p.periodStart,
           period_end: p.periodEnd,
@@ -1295,7 +1310,7 @@
           await supabase
             .from('truck_payloads')
             .insert({
-              user_id: currentUser.id,
+              user_id: effectiveAccountId,
               vehicle_id: Number(selectedVehicle.id),
               period_start: p.periodStart,
               period_end: p.periodEnd,
