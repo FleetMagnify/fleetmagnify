@@ -173,7 +173,7 @@
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this is calculated:</strong> Idle litres for each fill-to-fill fuel period are <strong>idle hours × calibrated idle burn rate (L/hr)</strong>. Idle fuel cost prices those litres at that period's own fuel rate; travel fuel cost is the remainder. The idle burn rate comes from the fuel regression engine when calibrated, or a default rate otherwise. Days are flagged as unusually high when idle hours exceed <strong>1.5× this vehicle's own average daily idle hours</strong> over the selected range — using daily telematics readings directly, not fuel-period buckets.</p>
+      <p><strong>How this is calculated:</strong> Idle litres for each fill-to-fill fuel period are <strong>idle hours × calibrated idle burn rate (L/hr)</strong>. Idle fuel cost prices those litres at that period's own fuel rate; travel fuel cost is the remainder. The idle burn rate comes from the fuel regression engine when calibrated, or a default rate otherwise. Days are flagged as unusually high when idle hours exceed <strong>3 hours</strong> — using daily telematics readings directly, not fuel-period buckets.</p>
     </div>
 
     <div class="filter-bar">
@@ -269,7 +269,7 @@
             <div class="chart-card-title">Daily Idle Hours</div>
             <div class="chart-legend">
               <div class="legend-item"><div class="legend-dot" style="background:#0EA57A;"></div> Normal</div>
-              <div class="legend-item"><div class="legend-dot" style="background:#EF9F27;"></div> Unusually high (&gt;1.5× avg)</div>
+              <div class="legend-item"><div class="legend-dot" style="background:#EF9F27;"></div> Unusually high (&gt;3 hrs)</div>
               <div class="legend-item"><div class="legend-line"></div> Elevated threshold</div>
             </div>
           </div>
@@ -317,6 +317,7 @@
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var DATE_BUFFER_DAYS = 21;
+  var ELEVATED_IDLE_THRESHOLD_HOURS = 3;
   var DEFAULT_IDLE_RATES = {
     'Light Vehicle': 1.2, 'Rigid Truck': 2.5, 'Truck and Trailer / B-Train': 3.0
   };
@@ -446,20 +447,11 @@
 
   function computeFlaggedDays(dailyRows) {
     var valid = dailyRows.filter(function(r) { return r.idle_hours != null && !isNaN(parseFloat(r.idle_hours)); });
-    if (!valid.length) return { rows: [], avg: 0, threshold: 0, flaggedDates: {} };
-
-    var total = 0;
-    valid.forEach(function(r) { total += parseFloat(r.idle_hours); });
-    var avg = total / valid.length;
-    var threshold = avg * 1.5;
-
     var flaggedDates = {};
-    if (avg > 0) {
-      valid.forEach(function(r) {
-        if (parseFloat(r.idle_hours) > threshold) flaggedDates[r.record_date] = true;
-      });
-    }
-    return { rows: valid, avg: avg, threshold: threshold, flaggedDates: flaggedDates };
+    valid.forEach(function(r) {
+      if (parseFloat(r.idle_hours) > ELEVATED_IDLE_THRESHOLD_HOURS) flaggedDates[r.record_date] = true;
+    });
+    return { rows: valid, flaggedDates: flaggedDates };
   }
 
   async function init() {
@@ -734,7 +726,7 @@
     var labels = dailyInfo.rows.map(function(r) { return fmtDateShort(r.record_date); });
     var values = dailyInfo.rows.map(function(r) { return Math.round(parseFloat(r.idle_hours) * 100) / 100; });
     var pointColors = dailyInfo.rows.map(function(r) { return dailyInfo.flaggedDates[r.record_date] ? '#EF9F27' : '#0EA57A'; });
-    var thresholdLine = dailyInfo.rows.map(function() { return Math.round(dailyInfo.threshold * 100) / 100; });
+    var thresholdLine = dailyInfo.rows.map(function() { return ELEVATED_IDLE_THRESHOLD_HOURS; });
 
     var ctx = canvas.getContext('2d');
     lineChart = new Chart(ctx, {
@@ -776,7 +768,7 @@
           tooltip: {
             callbacks: {
               label: function(ctx) {
-                if (ctx.datasetIndex === 1) return 'Elevated threshold: ' + ctx.parsed.y.toFixed(2) + ' hrs (1.5× avg)';
+                if (ctx.datasetIndex === 1) return 'Elevated threshold: ' + ELEVATED_IDLE_THRESHOLD_HOURS + ' hrs';
                 return 'Idle: ' + ctx.parsed.y.toFixed(2) + ' hrs';
               }
             }
