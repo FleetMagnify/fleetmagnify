@@ -180,6 +180,17 @@ async function parseNavmanMileageReport(supabase, options) {
       } else if (entry.assetEntry.current_odometer !== null) {
         cumulativeOdometer = entry.assetEntry.current_odometer + dailyDistanceKm;
         odoMap[String(entry.assetId)] = cumulativeOdometer;
+      } else {
+        // No running total and no known current_odometer for this asset yet.
+        // Fall back to a 0 baseline so cumulative distance can still be tracked
+        // and used for relative (fill-to-fill) calculations. This baseline is
+        // arbitrary and only affects the ABSOLUTE odometer value shown until a
+        // real reading is entered later — it does not affect relative distance
+        // calculations used elsewhere (e.g. the fuel regression engine, which
+        // only ever computes differences between two odometer points, not the
+        // absolute value).
+        cumulativeOdometer = dailyDistanceKm;
+        odoMap[String(entry.assetId)] = cumulativeOdometer;
       }
 
       records.push({
