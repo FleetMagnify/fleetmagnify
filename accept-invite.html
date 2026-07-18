@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Accept Invite | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/mobile-responsive.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #080C12; color: #E2E8F0;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+
+  .page-glow {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background: radial-gradient(ellipse 55% 45% at 50% 0%, rgba(14,165,122,0.08) 0%, transparent 70%);
+  }
+  .page-grid {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+    background-size: 64px 64px;
+  }
+
+  header {
+    position: relative; z-index: 1;
+    padding: 24px 3rem;
+    border-bottom: 1px solid #2D3748;
+    background: rgba(8,12,18,0.90);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+  .header-inner {
+    max-width: 1280px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .logo-mark {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: #0EA57A;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 800; color: #080C12; letter-spacing: -0.5px;
+  }
+  .logo-name { font-size: 17px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
+  .logo-name span { color: #0EA57A; }
+  .nav-links { display: flex; align-items: center; gap: 32px; }
+  .nav-links a { font-size: 13.5px; font-weight: 500; color: #9BA4B0; text-decoration: none; transition: color 0.2s; }
+  .nav-links a:hover { color: #F0F2F5; }
+  .nav-actions { display: flex; align-items: center; gap: 12px; }
+  .btn-ghost {
+    background: none; border: 1px solid #2D3748;
+    color: #C8D0DB; font-size: 13px; font-weight: 500;
+    padding: 8px 20px; border-radius: 8px; cursor: pointer;
+    transition: all 0.2s; font-family: inherit; text-decoration: none;
+  }
+  .btn-ghost:hover { border-color: rgba(255,255,255,0.25); color: #F0F2F5; }
+  .btn-primary {
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 13px; font-weight: 700; padding: 9px 22px;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+    text-decoration: none; display: inline-block;
+  }
+  .btn-primary:hover { background: #0BC48E; }
+
+  main {
+    position: relative; z-index: 1; flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    padding: 48px 1.5rem 64px;
+  }
+
+  .auth-card {
+    width: 100%; max-width: 460px;
+    background: rgba(10,16,26,0.96);
+    border: 1px solid #2D3748;
+    border-radius: 20px; padding: 44px 40px 40px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.45);
+  }
+
+  .card-eyebrow {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #0EA57A; margin-bottom: 14px;
+  }
+  .card-eyebrow .dash { width: 14px; height: 1.5px; background: #0EA57A; border-radius: 2px; }
+  .auth-card h1 {
+    font-size: 28px; font-weight: 800; letter-spacing: -1.2px;
+    color: #F0F2F5; margin-bottom: 8px;
+  }
+  .card-sub {
+    font-size: 14px; color: #5A6474; line-height: 1.6; margin-bottom: 32px;
+  }
+
+  .form-error {
+    display: none;
+    background: rgba(226,75,74,0.10);
+    border: 1px solid rgba(226,75,74,0.28);
+    color: #F0A8A7;
+    font-size: 13.5px; line-height: 1.5;
+    padding: 12px 14px; border-radius: 10px; margin-bottom: 20px;
+  }
+  .form-error.is-visible { display: block; }
+
+  .form-success {
+    display: none;
+    background: rgba(14,165,122,0.10);
+    border: 1px solid rgba(14,165,122,0.28);
+    color: #7DD4B8;
+    font-size: 13.5px; line-height: 1.5;
+    padding: 12px 14px; border-radius: 10px; margin-bottom: 20px;
+  }
+  .form-success.is-visible { display: block; }
+
+  .form-group { margin-bottom: 18px; }
+  .form-group label {
+    display: block; font-size: 12px; font-weight: 600;
+    color: #9BA4B0; margin-bottom: 7px; letter-spacing: 0.02em;
+  }
+  .form-group input {
+    width: 100%; padding: 12px 14px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid #2D3748;
+    border-radius: 10px; color: #F0F2F5;
+    font-size: 14px; font-family: inherit;
+    transition: border-color 0.2s, background 0.2s;
+    outline: none;
+  }
+  .form-group input::placeholder { color: #3D4F62; }
+  .form-group input:focus {
+    border-color: rgba(14,165,122,0.45);
+    background: rgba(14,165,122,0.04);
+  }
+  .form-hint {
+    font-size: 12px; color: #5A6474; margin-top: 6px;
+  }
+
+  .btn-submit {
+    width: 100%; margin-top: 8px;
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 15px; font-weight: 700; padding: 14px 24px;
+    border-radius: 10px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-submit:hover:not(:disabled) { background: #0BC48E; transform: translateY(-1px); }
+  .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  .auth-prompt {
+    text-align: center; margin-top: 26px;
+    font-size: 13.5px; color: #5A6474;
+  }
+  .auth-prompt a {
+    color: #0EA57A; font-weight: 600; text-decoration: none;
+    transition: color 0.2s;
+  }
+  .auth-prompt a:hover { color: #0BC48E; }
+
+  .view-panel[hidden] { display: none; }
+
+  .loading-spinner {
+    width: 28px; height: 28px; margin: 8px auto 0;
+    border: 2.5px solid rgba(14,165,122,0.2);
+    border-top-color: #0EA57A;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 600px) {
+    header { padding: 20px 1.5rem; }
+    .auth-card { padding: 32px 24px 28px; }
+    .auth-card h1 { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page-glow"></div>
+<div class="page-grid"></div>
+
+<header>
+  <div class="header-inner">
+    <a class="logo" href="index.html">
+      <div class="logo-mark">FM</div>
+      <span class="logo-name">Fleet<span>Magnify</span></span>
+    </a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="features.html">Features</a>
+      <a href="platform-guide.html">Platform Guide</a>
+      <a href="pricing.html">Pricing</a>
+    </div>
+    <div class="nav-actions">
+      <a class="btn-ghost" href="login.html">Sign in</a>
+      <a class="btn-primary" href="signup.html">Sign Up</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="auth-card">
+    <div id="loading-view" class="view-panel">
+      <div class="card-eyebrow"><div class="dash"></div> Team Invite</div>
+      <h1>Checking your invite…</h1>
+      <p class="card-sub">Please wait a moment while we verify your invite link.</p>
+      <div class="loading-spinner"></div>
+    </div>
+
+    <div id="error-view" class="view-panel" hidden>
+      <div class="card-eyebrow"><div class="dash"></div> Team Invite</div>
+      <h1>Invite link not valid</h1>
+      <div id="error-message" class="form-error is-visible" role="alert"></div>
+      <p class="auth-prompt">
+        <a href="login.html">Back to sign in</a>
+      </p>
+    </div>
+
+    <div id="set-password-view" class="view-panel" hidden>
+      <div class="card-eyebrow"><div class="dash"></div> Team Invite</div>
+      <h1>Set your password</h1>
+      <p class="card-sub">You've been invited to join a FleetMagnify account. Choose a password to finish setting up your login.</p>
+
+      <div id="form-error" class="form-error" role="alert"></div>
+
+      <form id="set-password-form" novalidate>
+        <div class="form-group">
+          <label for="new-password">New Password</label>
+          <input type="password" id="new-password" name="newPassword" placeholder="At least 8 characters" required autocomplete="new-password" minlength="8">
+        </div>
+        <div class="form-group">
+          <label for="confirm-password">Confirm Password</label>
+          <input type="password" id="confirm-password" name="confirmPassword" placeholder="Re-enter your password" required autocomplete="new-password" minlength="8">
+          <div class="form-hint">Must be at least 8 characters.</div>
+        </div>
+        <button type="submit" class="btn-submit" id="submit-btn">Set Password &amp; Continue</button>
+      </form>
+    </div>
+  </div>
+</main>
+
+<script src="js/supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  (function() {
+    var loadingView = document.getElementById('loading-view');
+    var errorView = document.getElementById('error-view');
+    var setPasswordView = document.getElementById('set-password-view');
+    var errorMessageEl = document.getElementById('error-message');
+    var formErrorEl = document.getElementById('form-error');
+    var form = document.getElementById('set-password-form');
+    var submitBtn = document.getElementById('submit-btn');
+    var newPasswordInput = document.getElementById('new-password');
+    var confirmPasswordInput = document.getElementById('confirm-password');
+
+    function showView(view) {
+      loadingView.hidden = (view !== loadingView);
+      errorView.hidden = (view !== errorView);
+      setPasswordView.hidden = (view !== setPasswordView);
+    }
+
+    function showInviteError(message) {
+      errorMessageEl.textContent = message;
+      showView(errorView);
+    }
+
+    function showFormError(message) {
+      formErrorEl.textContent = message;
+      formErrorEl.classList.add('is-visible');
+    }
+
+    function hideFormError() {
+      formErrorEl.textContent = '';
+      formErrorEl.classList.remove('is-visible');
+    }
+
+    if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY ||
+        window.SUPABASE_URL === 'YOUR_SUPABASE_URL') {
+      showInviteError('This invite link is invalid or has expired. Please contact your account administrator for a new invite.');
+      return;
+    }
+
+    var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+    async function init() {
+      var sessionResult = await supabase.auth.getSession();
+
+      if (sessionResult.error || !sessionResult.data.session) {
+        showInviteError('This invite link is invalid or has expired. Please contact your account administrator for a new invite.');
+        return;
+      }
+
+      showView(setPasswordView);
+      newPasswordInput.focus();
+    }
+
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      hideFormError();
+
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+
+      var newPassword = newPasswordInput.value;
+      var confirmPassword = confirmPasswordInput.value;
+
+      if (newPassword.length < 8) {
+        showFormError('Password must be at least 8 characters.');
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        showFormError('Passwords do not match.');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Setting password…';
+
+      try {
+        var result = await supabase.auth.updateUser({ password: newPassword });
+
+        if (result.error) {
+          throw result.error;
+        }
+
+        window.location.href = 'home.html';
+      } catch (err) {
+        showFormError((err && err.message) || 'Could not set your password. Please try again or request a new invite.');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Set Password & Continue';
+      }
+    });
+
+    init();
+  })();
+</script>
+
+<script src="js/mobile-nav.js" defer></script>
+<script defer src="/_vercel/insights/script.js"></script>
+
+<footer style="text-align:center; padding:24px; font-size:12px; color:#3A4A5C;">
+  <a href="terms-of-service.html" style="color:#0EA57A; text-decoration:none;">Terms</a>
+  <span style="margin:0 6px;">·</span>
+  <a href="privacy-policy.html" style="color:#0EA57A; text-decoration:none;">Privacy</a>
+</footer>
+</body>
+</html>
