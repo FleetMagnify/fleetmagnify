@@ -765,6 +765,10 @@
     currentUser = sessionResult.data.session.user;
     effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
     window.FleetMagnifySidebar.inject('cost-per-km-analyst.html', supabase, effectiveAccountId);
+    document.getElementById('signout-btn').addEventListener('click', async function() {
+      await supabase.auth.signOut();
+      window.location.href = 'login.html';
+    });
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
     var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
@@ -1368,11 +1372,6 @@
   function esc(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
-
-  document.getElementById('signout-btn').addEventListener('click', async function() {
-    await supabase.auth.signOut();
-    window.location.href = 'login.html';
-  });
 
   init();
 })();
