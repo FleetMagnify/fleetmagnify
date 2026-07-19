@@ -69,6 +69,28 @@
   .toast.show { transform: translateY(0); opacity: 1; }
   .toast.success { border-color: rgba(14,165,122,0.3); }
   .toast.error { border-color: rgba(226,75,74,0.3); }
+
+  .form-group select { width: 100%; max-width: 420px; padding: 11px 14px; background: rgba(255,255,255,0.04); border: 1px solid #2D3748; border-radius: 9px; color: #F0F2F5; font-size: 13.5px; font-family: inherit; outline: none; transition: border-color 0.2s; }
+  .form-group select:focus { border-color: rgba(14,165,122,0.45); }
+
+  .subsection-title { font-size: 14px; font-weight: 700; color: #D8DFE8; margin-bottom: 14px; letter-spacing: -0.2px; }
+  .subsection-divider { margin-top: 24px; padding-top: 20px; border-top: 1px solid #2D3748; }
+
+  .member-list { margin-bottom: 4px; }
+  .member-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid #1E293B; }
+  .member-row:last-child { border-bottom: none; }
+  .member-info { display: flex; flex-direction: column; gap: 6px; }
+  .member-email { font-size: 13.5px; font-weight: 600; color: #E2E8F0; }
+  .member-meta { font-size: 11.5px; color: #5A6474; display: flex; align-items: center; gap: 6px; }
+  .member-role { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #9BA4B0; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 100px; }
+  .member-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+  .perm-badge { font-size: 10.5px; font-weight: 600; color: #7DD4B8; background: rgba(14,165,122,0.10); border: 1px solid rgba(14,165,122,0.22); padding: 2px 9px; border-radius: 100px; }
+
+  .loading-state, .empty-state { font-size: 13px; color: #4A5568; padding: 18px 0; text-align: center; }
+
+  .checkbox-row { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; }
+  .checkbox-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: #0EA57A; cursor: pointer; }
+  .checkbox-row label { font-size: 13px; color: #C8D0DB; margin-bottom: 0; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -156,6 +178,51 @@
         </p>
       </div>
     </div>
+
+    <div class="section-card" id="manage-users-section" hidden>
+      <div class="section-header">
+        <div class="section-tag">👥 Team</div>
+        <div class="section-title">Manage Users</div>
+        <div class="section-desc">Invite team members to access your FleetMagnify account, and control what they can edit.</div>
+      </div>
+      <div class="section-body">
+        <div class="member-list" id="members-list">
+          <div class="loading-state">Loading team members…</div>
+        </div>
+
+        <div class="subsection-divider">
+          <div class="subsection-title">Invite Team Member</div>
+          <form id="invite-form">
+            <div class="form-group">
+              <label for="invite-email">Email Address</label>
+              <input type="email" id="invite-email" placeholder="jane@company.com" required>
+            </div>
+            <div class="form-group">
+              <label for="invite-role">Role</label>
+              <select id="invite-role">
+                <option value="Director">Director</option>
+                <option value="Fleet Manager" selected>Fleet Manager</option>
+                <option value="Viewer">Viewer</option>
+              </select>
+              <div class="form-hint">Pre-fills sensible permission defaults below — each can still be adjusted independently.</div>
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="perm-edit-assets">
+              <label for="perm-edit-assets">Edit Assets</label>
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="perm-edit-jobs">
+              <label for="perm-edit-jobs">Edit Jobs</label>
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="perm-view-change-log">
+              <label for="perm-view-change-log">View Change Log</label>
+            </div>
+            <button type="submit" class="btn-save" id="invite-btn">Send Invite</button>
+          </form>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -173,6 +240,12 @@
   var currentUser = null;
   var effectiveAccountId = null;
   var toastTimer;
+
+  var ROLE_DEFAULTS = {
+    'Director': { can_edit_assets: true, can_edit_jobs: true, can_view_change_log: true },
+    'Fleet Manager': { can_edit_assets: true, can_edit_jobs: true, can_view_change_log: false },
+    'Viewer': { can_edit_assets: false, can_edit_jobs: false, can_view_change_log: false }
+  };
 
   function showToast(msg, type) {
     var toast = document.getElementById('toast');
@@ -255,6 +328,132 @@
     showToast('Settings saved', 'success');
   });
 
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  function applyRoleDefaults() {
+    var role = document.getElementById('invite-role').value;
+    var defaults = ROLE_DEFAULTS[role] || ROLE_DEFAULTS['Viewer'];
+    document.getElementById('perm-edit-assets').checked = defaults.can_edit_assets;
+    document.getElementById('perm-edit-jobs').checked = defaults.can_edit_jobs;
+    document.getElementById('perm-view-change-log').checked = defaults.can_view_change_log;
+  }
+
+  function renderMembers(members) {
+    var container = document.getElementById('members-list');
+    if (!members.length) {
+      container.innerHTML = '<div class="empty-state">No team members yet</div>';
+      return;
+    }
+    container.innerHTML = members.map(function(m) {
+      var badges = '';
+      if (m.can_edit_assets) badges += '<span class="perm-badge">Edit Assets</span>';
+      if (m.can_edit_jobs) badges += '<span class="perm-badge">Edit Jobs</span>';
+      if (m.can_view_change_log) badges += '<span class="perm-badge">View Change Log</span>';
+      var joined = m.created_at
+        ? new Date(m.created_at).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
+        : '';
+      return '<div class="member-row">' +
+          '<div class="member-info">' +
+            '<div class="member-email">' + escapeHtml(m.email || 'Unknown') + '</div>' +
+            '<div class="member-meta">' +
+              '<span class="member-role">' + escapeHtml(m.role || '') + '</span>' +
+              (joined ? '<span>Joined ' + joined + '</span>' : '') +
+            '</div>' +
+            (badges ? '<div class="member-badges">' + badges + '</div>' : '') +
+          '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  async function loadMembers() {
+    var container = document.getElementById('members-list');
+    container.innerHTML = '<div class="loading-state">Loading team members…</div>';
+    try {
+      var sessionResult = await supabase.auth.getSession();
+      var token = sessionResult.data.session ? sessionResult.data.session.access_token : null;
+      if (!token) {
+        container.innerHTML = '<div class="empty-state">Not signed in</div>';
+        return;
+      }
+      var res = await fetch('/api/list-account-members', {
+        method: 'GET',
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (!res.ok || !data.ok) {
+        container.innerHTML = '<div class="empty-state">Could not load team members</div>';
+        return;
+      }
+      renderMembers(data.members || []);
+    } catch (err) {
+      container.innerHTML = '<div class="empty-state">Could not load team members</div>';
+    }
+  }
+
+  document.getElementById('invite-role').addEventListener('change', applyRoleDefaults);
+
+  document.getElementById('invite-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var email = document.getElementById('invite-email').value.trim();
+    var role = document.getElementById('invite-role').value;
+    var canEditAssets = document.getElementById('perm-edit-assets').checked;
+    var canEditJobs = document.getElementById('perm-edit-jobs').checked;
+    var canViewChangeLog = document.getElementById('perm-view-change-log').checked;
+
+    if (!email) {
+      showToast('Please enter an email address', 'error');
+      return;
+    }
+
+    var btn = document.getElementById('invite-btn');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    try {
+      var sessionResult = await supabase.auth.getSession();
+      var token = sessionResult.data.session ? sessionResult.data.session.access_token : null;
+      if (!token) {
+        showToast('Not signed in', 'error');
+        return;
+      }
+
+      var res = await fetch('/api/invite-account-member', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email: email,
+          role: role,
+          can_edit_assets: canEditAssets,
+          can_edit_jobs: canEditJobs,
+          can_view_change_log: canViewChangeLog
+        })
+      });
+      var data = await res.json();
+
+      if (!res.ok || data.error) {
+        showToast(data.error || 'Failed to send invite', 'error');
+        return;
+      }
+
+      showToast('Invite sent', 'success');
+      document.getElementById('invite-form').reset();
+      applyRoleDefaults();
+      await loadMembers();
+    } catch (err) {
+      showToast('Something went wrong', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Send Invite';
+    }
+  });
+
   async function resolveAccountId(supabase, authUserId) {
     var memberResult = await supabase
       .from('account_members')
@@ -282,6 +481,18 @@
     document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
 
     await loadSettings();
+
+    // A caller is the account owner (not a delegated member) exactly when
+    // resolveAccountId returned their own ID rather than someone else's —
+    // this mirrors the same check api/invite-account-member.js performs
+    // server-side, so the section is hidden client-side but never trusted
+    // as the actual authorization boundary.
+    var isAccountOwner = (effectiveAccountId === currentUser.id);
+    if (isAccountOwner) {
+      document.getElementById('manage-users-section').hidden = false;
+      applyRoleDefaults();
+      await loadMembers();
+    }
 
     document.getElementById('signout-btn').addEventListener('click', async function() {
       await supabase.auth.signOut();
