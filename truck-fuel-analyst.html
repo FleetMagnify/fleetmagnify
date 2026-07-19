@@ -7,24 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/mobile-responsive.css">
+<link rel="stylesheet" href="css/sidebar.css">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #E2E8F0; min-height: 100vh; display: flex; }
-
-  .sidebar { width: 240px; flex-shrink: 0; background: rgba(10,16,26,0.95); border-right: 1px solid #2D3748; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 50; overflow-y: auto; }
-  .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 24px 20px; border-bottom: 1px solid #2D3748; text-decoration: none; }
-  .logo-mark { width: 34px; height: 34px; border-radius: 9px; background: #0EA57A; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #080C12; }
-  .logo-name { font-size: 16px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
-  .logo-name span { color: #0EA57A; }
-  .sidebar-nav { flex: 1; padding: 16px 12px; }
-  .nav-label { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #FFFFFF; padding: 0 8px; margin-bottom: 8px; margin-top: 16px; }
-  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; margin-bottom: 2px; text-decoration: none; font-size: 13.5px; font-weight: 500; color: #6B7785; transition: all 0.2s; }
-  .nav-item:hover { background: rgba(255,255,255,0.04); color: #C8D0DB; }
-  .nav-item.active { background: rgba(14,165,122,0.10); color: #0EA57A; }
-  .nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
-  .sidebar-footer { padding: 16px 12px; border-top: 1px solid #2D3748; }
-  .btn-signout { width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 8px; border: none; background: none; font-size: 13px; font-weight: 500; color: #4A5568; cursor: pointer; transition: all 0.2s; font-family: inherit; }
-  .btn-signout:hover { background: rgba(226,75,74,0.08); color: #F0A8A7; }
 
   .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
   .topbar { padding: 20px 36px; border-bottom: 1px solid #2D3748; display: flex; align-items: center; justify-content: space-between; background: rgba(8,12,18,0.80); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 40; }
@@ -113,36 +99,7 @@
 </head>
 <body>
 
-<aside class="sidebar">
-  <a class="sidebar-logo" href="home.html">
-    <div class="logo-mark">FM</div>
-    <span class="logo-name">Fleet<span>Magnify</span></span>
-  </a>
-  <nav class="sidebar-nav">
-    <a class="nav-item" href="home.html"><span class="nav-icon">🏠</span> Overview</a>
-    <div class="nav-label">Machinery Modules</div>
-    <a class="nav-item" href="fuel-analyst.html"><span class="nav-icon">⛽</span> Fuel Analyst</a>
-    <a class="nav-item" href="idle-cost-analyst.html"><span class="nav-icon">⏱</span> Idle Cost Analyst</a>
-    <a class="nav-item" href="emissions-intelligence.html"><span class="nav-icon">🌍</span> Emissions Intelligence</a>
-    <a class="nav-item" href="utilisation-analyst.html"><span class="nav-icon">📊</span> Utilisation Analyst</a>
-    <a class="nav-item" href="job-cost-analyst.html"><span class="nav-icon">🏗</span> Job Cost Analyst</a>
-    <a class="nav-item" href="reports.html"><span class="nav-icon">📋</span> Reports</a>
-    <div class="nav-label">Truck Modules</div>
-    <a class="nav-item active" href="truck-fuel-analyst.html"><span class="nav-icon">🚛</span> Fuel Cost Analyst</a>
-    <a class="nav-item" href="truck-idle-monitor.html"><span class="nav-icon">⏸</span> Idle Monitor</a>
-    <a class="nav-item" href="cost-per-km-analyst.html"><span class="nav-icon">📏</span> Cost Per KM Analyst</a>
-    <a class="nav-item" href="truck-emissions-analyst.html"><span class="nav-icon">🌿</span> Emissions Analyst</a>
-    <a class="nav-item" href="trip-report.html"><span class="nav-icon">🗺️</span> Trip Report</a>
-    <div class="nav-label">Fleet Management</div>
-    <a class="nav-item" href="assets.html"><span class="nav-icon">🚧</span> Assets</a>
-    <a class="nav-item" href="upload.html"><span class="nav-icon">📤</span> Upload Data</a>
-    <a class="nav-item" href="integrations.html"><span class="nav-icon">🔌</span> Integrations</a>
-    <a class="nav-item" href="settings.html"><span class="nav-icon">⚙️</span> Settings</a>
-  </nav>
-  <div class="sidebar-footer">
-    <button class="btn-signout" id="signout-btn">↩ Sign Out</button>
-  </div>
-</aside>
+<div id="sidebar-placeholder"></div>
 
 <div class="main">
   <div class="topbar">
@@ -269,8 +226,10 @@
 <script src="js/subscription-guard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="js/sidebar-nav.js"></script>
 <script>
 (function() {
+  window.FleetMagnifySidebar.inject('truck-fuel-analyst.html');
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
   var effectiveAccountId = null;
