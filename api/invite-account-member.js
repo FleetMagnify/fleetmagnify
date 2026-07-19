@@ -34,6 +34,16 @@ module.exports = async function handler(req, res) {
     }
   );
 
+  // Temporary: auth.admin.* methods are incompatible with the newer sb_secret_
+  // key format, so this dedicated client uses the legacy service_role JWT
+  // solely for the inviteUserByEmail call below. Everything else in this file
+  // stays on the regular `supabase` client and its new-format key.
+  var supabaseLegacyAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY_LEGACY,
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  );
+
   var userResult = await supabase.auth.getUser();
   if (userResult.error || !userResult.data.user) {
     return res.status(401).json({ error: 'Invalid session' });
@@ -62,7 +72,7 @@ module.exports = async function handler(req, res) {
 
     // Creates the new person's auth account with no password and sends them
     // a real invite email.
-    var inviteResult = await supabase.auth.admin.inviteUserByEmail(email, {
+    var inviteResult = await supabaseLegacyAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: 'https://fleetmagnify.com/accept-invite.html'
     });
 
