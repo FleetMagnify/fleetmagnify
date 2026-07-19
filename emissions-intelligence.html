@@ -395,7 +395,7 @@
     }
     currentUser = sessionResult.data.session.user;
     effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
-    var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, currentUser.id);
+    var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
     var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
       ? currentUser.user_metadata.company_name
