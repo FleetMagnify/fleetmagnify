@@ -274,7 +274,6 @@
 <script src="js/sidebar-nav.js"></script>
 <script>
 (function() {
-  window.FleetMagnifySidebar.inject('emissions-intelligence.html');
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
   var effectiveAccountId = null;
@@ -324,6 +323,7 @@
     }
     currentUser = sessionResult.data.session.user;
     effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
+    window.FleetMagnifySidebar.inject('emissions-intelligence.html', supabase, effectiveAccountId);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
     var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)

@@ -1,5 +1,7 @@
 window.FleetMagnifySidebar = (function() {
 
+  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
+
   var NAV_ITEMS = [
     { type: 'link', href: 'home.html', icon: '🏠', text: 'Overview' },
     { type: 'label', text: 'Machinery Modules' },
@@ -48,13 +50,68 @@ window.FleetMagnifySidebar = (function() {
       '</aside>';
   }
 
-  function inject(activePage) {
+  async function detectFleetComposition(supabase, effectiveAccountId) {
+    try {
+      var result = await supabase
+        .from('assets')
+        .select('asset_type')
+        .eq('user_id', effectiveAccountId)
+        .eq('is_ignored', false);
+
+      if (result.error) {
+        console.warn('FleetMagnifySidebar: failed to detect fleet composition', result.error);
+        return { hasTrucks: true, hasMachinery: true };
+      }
+
+      var hasTrucks = false;
+      var hasMachinery = false;
+      (result.data || []).forEach(function(row) {
+        if (!row.asset_type) return;
+        if (ON_ROAD_TYPES.indexOf(row.asset_type) !== -1) {
+          hasTrucks = true;
+        } else {
+          hasMachinery = true;
+        }
+      });
+
+      return { hasTrucks: hasTrucks, hasMachinery: hasMachinery };
+    } catch (err) {
+      console.warn('FleetMagnifySidebar: failed to detect fleet composition', err);
+      return { hasTrucks: true, hasMachinery: true };
+    }
+  }
+
+  function setSectionVisibility(nav, labelText, visible) {
+    var labels = nav.querySelectorAll('.nav-label');
+    for (var i = 0; i < labels.length; i++) {
+      if (labels[i].textContent !== labelText) continue;
+      labels[i].style.display = visible ? '' : 'none';
+      var node = labels[i].nextElementSibling;
+      while (node && !node.classList.contains('nav-label')) {
+        node.style.display = visible ? '' : 'none';
+        node = node.nextElementSibling;
+      }
+      break;
+    }
+  }
+
+  async function inject(activePage, supabase, effectiveAccountId) {
     var placeholder = document.getElementById('sidebar-placeholder');
     if (!placeholder) {
       console.warn('FleetMagnifySidebar: no #sidebar-placeholder element found on this page');
       return;
     }
     placeholder.outerHTML = render(activePage);
+
+    if (!supabase || !effectiveAccountId) return;
+
+    var composition = await detectFleetComposition(supabase, effectiveAccountId);
+    if (!composition.hasTrucks && !composition.hasMachinery) return;
+
+    var nav = document.querySelector('.sidebar-nav');
+    if (!nav) return;
+    if (!composition.hasMachinery) setSectionVisibility(nav, 'Machinery Modules', false);
+    if (!composition.hasTrucks) setSectionVisibility(nav, 'Truck Modules', false);
   }
 
   return { render: render, inject: inject };

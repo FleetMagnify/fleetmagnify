@@ -230,12 +230,6 @@
   var EMISSION_FACTORS = { 'Diesel': 2.68, 'Petrol': 2.31, 'Electric': 0, 'Hybrid': 1.5 };
   var DEFAULT_HOURS_PER_WEEK = 40;
 
-  // Injected first, synchronously, since #sidebar-placeholder is already in
-  // the DOM by the time this script runs (it's near the top of <body>) —
-  // this guarantees #signout-btn exists before init() wires up its click
-  // listener below, and doesn't need to wait on the async auth/session flow.
-  window.FleetMagnifySidebar.inject('home.html');
-
   function fmtDate(d) {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
@@ -289,6 +283,7 @@
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
     effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
+    window.FleetMagnifySidebar.inject('home.html', supabase, effectiveAccountId);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
     companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name)
