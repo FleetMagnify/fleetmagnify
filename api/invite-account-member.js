@@ -34,10 +34,21 @@ module.exports = async function handler(req, res) {
     }
   );
 
+  // Clean service-role client with no Authorization header override — this is
+  // the only client used for account_members reads/writes below, so RLS is
+  // actually bypassed via the service_role key rather than being evaluated
+  // against the caller's own JWT (which is what `supabase` above sends).
+  var supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  );
+
   // Temporary: auth.admin.* methods are incompatible with the newer sb_secret_
   // key format, so this dedicated client uses the legacy service_role JWT
   // solely for the inviteUserByEmail call below. Everything else in this file
-  // stays on the regular `supabase` client and its new-format key.
+  // uses supabase (session verification only) or supabaseAdmin (database
+  // reads/writes) with the new-format key.
   var supabaseLegacyAdmin = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY_LEGACY,
@@ -56,7 +67,7 @@ module.exports = async function handler(req, res) {
     // people. This mirrors the resolveAccountId lookup used elsewhere in the
     // app — if the caller has an account_members row pointing at a different
     // owner, they're a member, not an owner, and can't invite anyone.
-    var memberCheck = await supabase
+    var memberCheck = await supabaseAdmin
       .from('account_members')
       .select('account_owner_user_id')
       .eq('member_auth_user_id', callerId)
@@ -88,7 +99,7 @@ module.exports = async function handler(req, res) {
     // can_manage_users is intentionally hardcoded to false here and never
     // read from the request body — user management is owner-only, not
     // checkbox-grantable.
-    var insertResult = await supabase
+    var insertResult = await supabaseAdmin
       .from('account_members')
       .insert({
         account_owner_user_id: callerId,
