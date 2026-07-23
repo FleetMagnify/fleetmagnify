@@ -4,7 +4,7 @@
  * Customer Value ($), Vehicle Description, Transaction Odometer Reading
  */
 
-const { parseCsvLine, normalizeHeader, parseNumeric, updateImportStatus, detectAssetType } = require('./parser-utils');
+const { parseCsvLine, normalizeHeader, parseNumeric, updateImportStatus, detectAssetType, isKnownFuelProduct } = require('./parser-utils');
 const XLSX = require('xlsx');
 
 var BP_TRANSACTION_SIGNATURE = ['Transaction Effective Date', 'Card Number', 'Litres', 'Customer Value ($)', 'Vehicle Description'];
@@ -207,6 +207,7 @@ async function parseBpTransactionReport(supabase, options) {
     // Build fuel purchase records
     var records = [];
     var seen = {};
+    var skipped = 0;
 
     rows.forEach(function(row) {
       var dateStr = parseDMY(row['Transaction Effective Date']);
@@ -214,9 +215,19 @@ async function parseBpTransactionReport(supabase, options) {
       var costExGst = parseNumeric(row['Customer Value ($)']);
       var cardNumber = normalizeCardNumber(row['Card Number']);
       var odometer = parseNumeric(row['Transaction Odometer Reading']);
+      var product = row['Product'];
 
-      if (!cardNumber || !dateStr || litres === null || litres <= 0) return;
-      if (costExGst === null) return;
+      if (!cardNumber || !dateStr || litres === null || litres <= 0) { skipped++; return; }
+      if (costExGst === null) { skipped++; return; }
+
+      if (!isKnownFuelProduct(product)) {
+        console.warn(
+          'bp-transaction: skipped non-fuel product: date=' + dateStr +
+          ', product="' + product + '", litres=' + litres + ', cost=' + costExGst
+        );
+        skipped++;
+        return;
+      }
 
       var pricePerLitre = costExGst / litres;
       if (pricePerLitre < 0.50 || pricePerLitre > 6.00) {
@@ -225,11 +236,12 @@ async function parseBpTransactionReport(supabase, options) {
           ', litres=' + litres + ', cost=' + costExGst +
           ', price/litre=' + pricePerLitre.toFixed(2)
         );
+        skipped++;
         return;
       }
 
       var assetEntry = cardMap[cardNumber];
-      if (!assetEntry) return;
+      if (!assetEntry) { skipped++; return; }
 
       // Dedup: vehicle + date + litres (in case same transaction appears in overlapping exports)
       var dedupKey = assetEntry.id + '|' + dateStr + '|' + litres;
@@ -260,6 +272,7 @@ async function parseBpTransactionReport(supabase, options) {
     return {
       ok: true,
       recordsUpserted: records.length,
+      rowsSkipped: skipped,
     };
   } catch (err) {
     await updateImportStatus(supabase, importId, 'failed', err.message, 'bp-transaction');

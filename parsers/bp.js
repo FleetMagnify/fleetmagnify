@@ -2,7 +2,7 @@
  * BP Fleet Card transaction CSV parser for the email import pipeline.
  */
 
-const { parseCsvLine, normalizeHeader, parseNumeric, updateImportStatus, detectAssetType } = require('./parser-utils');
+const { parseCsvLine, normalizeHeader, parseNumeric, updateImportStatus, detectAssetType, isKnownFuelProduct } = require('./parser-utils');
 
 var BP_SIGNATURE = [
   'Transaction Effective Date',
@@ -322,8 +322,18 @@ function buildFuelPurchases(userId, cardMap, nameMap, rows) {
     var purchaseDate = parseBpDate(row['Transaction Effective Date']);
     var litres = parseNumeric(row.Litres);
     var costNzd = parseCurrency(row['Customer Value ($)']);
+    var product = row['Product'];
 
     if (!purchaseDate || litres === null) {
+      skipped++;
+      continue;
+    }
+
+    if (!isKnownFuelProduct(product)) {
+      console.warn(
+        'bp: skipped non-fuel product: date=' + purchaseDate +
+        ', product="' + product + '", litres=' + litres + ', cost=' + costNzd
+      );
       skipped++;
       continue;
     }

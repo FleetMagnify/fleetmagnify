@@ -33,6 +33,27 @@ function normalizeHeader(header) {
   return String(header || '').replace(/^\uFEFF/, '').trim();
 }
 
+// Confirmed from 5 real BP export files (Transaction Report XLS and email-
+// import CSV formats both use the exact same "Product" column header and
+// the exact same literal values). Exact-string match only — not
+// partial/normalized — since these are the literal confirmed values.
+// Genuine fuel types:
+//   "NZ Diesel", "NZ Ultimate Diesel", "NZ Ultimate", "NZ Premium Unleaded", "NZ Unleaded"
+// Confirmed non-fuel (rejected):
+//   "NZ AdBlue", "NZ Carwash", "NZ Fee Card Admin", "NZ LPG Bottle Swap",
+//   "NZ Lubricants", "NZ Miscellaneous"
+var BP_FUEL_PRODUCT_ALLOWLIST = [
+  'NZ Diesel',
+  'NZ Ultimate Diesel',
+  'NZ Ultimate',
+  'NZ Premium Unleaded',
+  'NZ Unleaded',
+];
+
+function isKnownFuelProduct(product) {
+  return BP_FUEL_PRODUCT_ALLOWLIST.indexOf(String(product || '').trim()) !== -1;
+}
+
 function parseNumeric(value) {
   if (value === '' || value == null) {
     return null;
@@ -113,4 +134,6 @@ module.exports = {
   parseNumeric: parseNumeric,
   updateImportStatus: updateImportStatus,
   detectAssetType: detectAssetType,
+  BP_FUEL_PRODUCT_ALLOWLIST: BP_FUEL_PRODUCT_ALLOWLIST,
+  isKnownFuelProduct: isKnownFuelProduct,
 };
