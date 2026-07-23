@@ -227,6 +227,9 @@
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
   var EMISSION_FACTORS = { Diesel: 2.68, Petrol: 2.31, Hybrid: 1.5, Electric: 0 };
   var MILEAGE_BUFFER_DAYS = 45;
+  // How far back getLatestFillPeriod will walk past a telematics-gap period
+  // to find a clean one before giving up.
+  var MAX_CLEAN_FILL_LOOKBACK_DAYS = 60;
 
   function num(v) {
     if (v === null || v === undefined || v === '') return null;
@@ -302,9 +305,78 @@
     return closestReadingToDatetime(readings, new Date(dateStr + 'T12:00:00'));
   }
 
-  function computePeriods(fuelRows, mileageRows) {
+  // Ported from lib/fuel-regression.js — same NZ public holiday list and
+  // gap-detection logic (2+ consecutive missing weekdays with no telematics
+  // row = "telematics_gap"). Kept in sync manually; update both if this list changes.
+  var NZ_PUBLIC_HOLIDAYS_2026 = [
+    '2026-01-01', '2026-01-02', // New Year
+    '2026-02-06', // Waitangi Day
+    '2026-04-03', '2026-04-06', // Good Friday, Easter Monday (2026 dates)
+    '2026-04-25', // ANZAC Day
+    '2026-06-01', // King's Birthday (first Monday of June, 2026)
+    '2026-07-10', // Matariki (2026 date)
+  ];
+
+  function toDate(dateStr) {
+    return new Date(dateStr + 'T00:00:00Z');
+  }
+
+  function toDateStr(date) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  function isWeekend(date) {
+    var day = date.getUTCDay();
+    return day === 0 || day === 6;
+  }
+
+  function isNzPublicHoliday(dateStr) {
+    return NZ_PUBLIC_HOLIDAYS_2026.indexOf(dateStr) !== -1;
+  }
+
+  function eachDateBetween(startStr, endStr) {
+    var out = [];
+    var cur = toDate(startStr);
+    var end = toDate(endStr);
+    while (cur < end) {
+      out.push(toDateStr(cur));
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+    return out;
+  }
+
+  // Same rule as fuel-regression.js's evaluateInterval: excluded if the
+  // window contains 2+ consecutive missing weekdays (holidays excluded)
+  // with no telematics row at all. presentDatesSet is a { 'YYYY-MM-DD': true } map.
+  function hasTelematicsGap(startDate, endDate, presentDatesSet) {
+    var datesInWindow = eachDateBetween(startDate, endDate);
+    var missingWeekdays = datesInWindow.filter(function(d) {
+      var date = toDate(d);
+      if (isWeekend(date) || isNzPublicHoliday(d)) return false;
+      return !presentDatesSet[d];
+    });
+
+    var maxRun = 0, curRun = 0, lastDate = null;
+    missingWeekdays.forEach(function(d) {
+      if (lastDate) {
+        var diff = (toDate(d) - toDate(lastDate)) / 86400000;
+        curRun = (diff <= 3) ? curRun + 1 : 1;
+      } else {
+        curRun = 1;
+      }
+      maxRun = Math.max(maxRun, curRun);
+      lastDate = d;
+    });
+
+    return maxRun >= 2;
+  }
+
+  function computePeriods(fuelRows, mileageRows, presenceRows) {
     if (fuelRows.length < 2) return { periods: [], error: 'insufficient_fuel' };
     if (!mileageRows.length) return { periods: [], error: 'no_mileage' };
+
+    var presentDates = {};
+    (presenceRows || []).forEach(function(r) { presentDates[r.record_date] = true; });
 
     var periods = [];
     for (var i = 1; i < fuelRows.length; i++) {
@@ -317,6 +389,8 @@
       var km = parseFloat(odo2.odometer_km) - parseFloat(odo1.odometer_km);
       if (km <= 0) continue;
 
+      var gapExcluded = hasTelematicsGap(first.purchase_date, second.purchase_date, presentDates);
+
       var totalCost = parseFloat(second.cost_nzd) || 0;
       var litres = parseFloat(second.litres) || 0;
 
@@ -325,7 +399,9 @@
         periodEnd: second.purchase_date,
         litresUsed: litres,
         kmDriven: km,
-        totalCost: totalCost
+        totalCost: totalCost,
+        excluded: gapExcluded,
+        exclusionReason: gapExcluded ? 'telematics_gap' : null
       });
     }
 
@@ -333,14 +409,14 @@
     return { periods: periods, error: null };
   }
 
-  function getLatestFillPeriod(fuelRows, mileageRows, tripEndDateStr) {
+  function getLatestFillPeriod(fuelRows, mileageRows, presenceRows, tripEndDateStr) {
     var eligible = fuelRows.filter(function(f) {
       return String(f.purchase_date) <= tripEndDateStr;
     });
     if (eligible.length < 2) {
       return { error: 'Fewer than two fuel purchase records on or before the trip end date' };
     }
-    var computed = computePeriods(eligible, mileageRows);
+    var computed = computePeriods(eligible, mileageRows, presenceRows);
     if (computed.error === 'no_mileage') {
       return { error: 'No Navman telematics data to calculate fill-to-fill fuel rates' };
     }
@@ -353,15 +429,23 @@
     if (!periods.length) {
       return { error: 'No completed fill-to-fill period available on or before the trip end date' };
     }
-    var latest = periods[periods.length - 1];
-    if (!latest.litresUsed || latest.kmDriven <= 0) {
-      return { error: 'Latest fill-to-fill period has invalid litres or distance data' };
+
+    // Walk backward from the most recent period, skipping any with a
+    // telematics gap or invalid litres/distance — using a gap-affected
+    // period's rate would silently bake bad data into the whole trip estimate.
+    var cutoffDate = addDays(tripEndDateStr, -MAX_CLEAN_FILL_LOOKBACK_DAYS);
+    for (var i = periods.length - 1; i >= 0; i--) {
+      var candidate = periods[i];
+      if (candidate.periodEnd < cutoffDate) break;
+      if (candidate.excluded) continue;
+      if (!candidate.litresUsed || candidate.kmDriven <= 0) continue;
+      return {
+        period: candidate,
+        litresPerKm: candidate.litresUsed / candidate.kmDriven,
+        pricePerLitre: candidate.totalCost / candidate.litresUsed
+      };
     }
-    return {
-      period: latest,
-      litresPerKm: latest.litresUsed / latest.kmDriven,
-      pricePerLitre: latest.totalCost / latest.litresUsed
-    };
+    return { error: 'No reliable recent fill-to-fill period available — the most recent periods within the last ' + MAX_CLEAN_FILL_LOOKBACK_DAYS + ' days all have telematics gaps or invalid data' };
   }
 
   function getAssetFieldGaps(asset) {
@@ -491,6 +575,21 @@
     return result.data || [];
   }
 
+  // Unfiltered presence check for the gap-detection logic only — any
+  // telematics row that day, regardless of null odometer/idle — kept
+  // separate from fetchMileage's odometer-filtered rows.
+  async function fetchTelematicsPresence(vehicleId, fromDate, toDate) {
+    var result = await supabase
+      .from('telematics_records')
+      .select('record_date')
+      .eq('asset_id', Number(vehicleId))
+      .eq('user_id', effectiveAccountId)
+      .gte('record_date', fromDate)
+      .lte('record_date', toDate)
+      .order('record_date');
+    return result.data || [];
+  }
+
   async function generateReport() {
     if (!selectedVehicle) return;
     hideError();
@@ -526,6 +625,7 @@
 
     var fuelRows = await fetchFuelPurchases(selectedVehicle.id, tripEndDate);
     var mileageRows = await fetchMileage(selectedVehicle.id, mileageFrom, mileageTo);
+    var presenceRows = await fetchTelematicsPresence(selectedVehicle.id, mileageFrom, mileageTo);
 
     btn.disabled = false;
     btn.textContent = 'Generate Trip Report';
@@ -553,7 +653,7 @@
       return;
     }
 
-    var fillData = getLatestFillPeriod(fuelRows, mileageRows, tripEndDate);
+    var fillData = getLatestFillPeriod(fuelRows, mileageRows, presenceRows, tripEndDate);
     if (fillData.error) {
       showError(fillData.error);
       return;

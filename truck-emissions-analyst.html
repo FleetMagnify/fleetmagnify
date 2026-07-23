@@ -94,6 +94,9 @@
   tbody td { padding: 12px 16px; font-size: 13px; color: #E2E8F0; }
   .cell-strong { color: #D8DFE8; font-weight: 600; }
   .cell-teal { color: #0EA57A; font-weight: 600; }
+  .status-badge { display: inline-flex; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 100px; letter-spacing: 0.03em; }
+  .status-badge.excluded { color: #6B7785; background: rgba(107,119,133,0.12); border: 1px solid rgba(107,119,133,0.25); cursor: help; }
+  tr.row-excluded { opacity: 0.55; }
   .cell-amber { color: #EF9F27; font-weight: 600; }
 
   .fleet-section { margin-bottom: 28px; }
@@ -385,13 +388,82 @@
     return best;
   }
 
-  function computePeriods(fuelRows, mileageRows, emissionFactor) {
+  // Ported from lib/fuel-regression.js — same NZ public holiday list and
+  // gap-detection logic (2+ consecutive missing weekdays with no telematics
+  // row = "telematics_gap"). Kept in sync manually; update both if this list changes.
+  var NZ_PUBLIC_HOLIDAYS_2026 = [
+    '2026-01-01', '2026-01-02', // New Year
+    '2026-02-06', // Waitangi Day
+    '2026-04-03', '2026-04-06', // Good Friday, Easter Monday (2026 dates)
+    '2026-04-25', // ANZAC Day
+    '2026-06-01', // King's Birthday (first Monday of June, 2026)
+    '2026-07-10', // Matariki (2026 date)
+  ];
+
+  function toDate(dateStr) {
+    return new Date(dateStr + 'T00:00:00Z');
+  }
+
+  function toDateStr(date) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  function isWeekend(date) {
+    var day = date.getUTCDay();
+    return day === 0 || day === 6;
+  }
+
+  function isNzPublicHoliday(dateStr) {
+    return NZ_PUBLIC_HOLIDAYS_2026.indexOf(dateStr) !== -1;
+  }
+
+  function eachDateBetween(startStr, endStr) {
+    var out = [];
+    var cur = toDate(startStr);
+    var end = toDate(endStr);
+    while (cur < end) {
+      out.push(toDateStr(cur));
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+    return out;
+  }
+
+  // Same rule as fuel-regression.js's evaluateInterval: excluded if the
+  // window contains 2+ consecutive missing weekdays (holidays excluded)
+  // with no telematics row at all. presentDatesSet is a { 'YYYY-MM-DD': true } map.
+  function hasTelematicsGap(startDate, endDate, presentDatesSet) {
+    var datesInWindow = eachDateBetween(startDate, endDate);
+    var missingWeekdays = datesInWindow.filter(function(d) {
+      var date = toDate(d);
+      if (isWeekend(date) || isNzPublicHoliday(d)) return false;
+      return !presentDatesSet[d];
+    });
+
+    var maxRun = 0, curRun = 0, lastDate = null;
+    missingWeekdays.forEach(function(d) {
+      if (lastDate) {
+        var diff = (toDate(d) - toDate(lastDate)) / 86400000;
+        curRun = (diff <= 3) ? curRun + 1 : 1;
+      } else {
+        curRun = 1;
+      }
+      maxRun = Math.max(maxRun, curRun);
+      lastDate = d;
+    });
+
+    return maxRun >= 2;
+  }
+
+  function computePeriods(fuelRows, mileageRows, presenceRows, emissionFactor) {
     if (fuelRows.length < 2) {
       return { periods: [], error: 'insufficient_fuel' };
     }
     if (!mileageRows.length) {
       return { periods: [], error: 'no_mileage' };
     }
+
+    var presentDates = {};
+    (presenceRows || []).forEach(function(r) { presentDates[r.record_date] = true; });
 
     var periods = [];
     for (var i = 1; i < fuelRows.length; i++) {
@@ -404,6 +476,8 @@
       var km = parseFloat(odo2.odometer_km) - parseFloat(odo1.odometer_km);
       if (km <= 0) continue;
 
+      var gapExcluded = hasTelematicsGap(first.purchase_date, second.purchase_date, presentDates);
+
       var litres = parseFloat(second.litres) || 0;
       var totalEmissionsKg = litres * emissionFactor;
       var emissionsPerKm = totalEmissionsKg / km;
@@ -414,7 +488,9 @@
         litresUsed: litres,
         kmDriven: km,
         totalEmissionsKg: totalEmissionsKg,
-        emissionsPerKm: emissionsPerKm
+        emissionsPerKm: gapExcluded ? null : emissionsPerKm,
+        excluded: gapExcluded,
+        exclusionReason: gapExcluded ? 'telematics_gap' : null
       });
     }
 
@@ -549,11 +625,25 @@
       .not('odometer_km', 'is', null)
       .order('record_date');
 
+    // Unfiltered presence check (any telematics row that day, regardless of
+    // null odometer/idle) — used only for the gap check, kept separate from
+    // the odometer-filtered mileageResult that closestReading() relies on.
+    var presenceResult = await supabase
+      .from('telematics_records')
+      .select('record_date')
+      .eq('asset_id', Number(vehicleId))
+      .eq('user_id', effectiveAccountId)
+      .gte('record_date', bufferFrom)
+      .lte('record_date', bufferTo)
+      .order('record_date');
+
     return {
       fuel: fuelResult.data || [],
       mileage: mileageResult.data || [],
+      telematicsPresence: presenceResult.data || [],
       fuelError: fuelResult.error,
-      mileageError: mileageResult.error
+      mileageError: mileageResult.error,
+      presenceError: presenceResult.error
     };
   }
 
@@ -572,13 +662,13 @@
     btn.disabled = false;
     btn.textContent = 'Apply Filters';
 
-    if (data.fuelError || data.mileageError) {
+    if (data.fuelError || data.mileageError || data.presenceError) {
       showEmpty();
       return;
     }
 
     var factor = getEmissionFactor(selectedVehicle.fuel_type);
-    var computed = computePeriods(data.fuel, data.mileage, factor);
+    var computed = computePeriods(data.fuel, data.mileage, data.telematicsPresence, factor);
     if (computed.error) {
       showEmpty();
       return;
@@ -676,7 +766,7 @@
   function renderEmissionsChart(periods) {
     var ctx = document.getElementById('emissions-chart').getContext('2d');
     var labels = periods.map(function(p) { return fmtDateShort(p.periodEnd); });
-    var values = periods.map(function(p) { return Math.round(p.emissionsPerKm * 1000) / 1000; });
+    var values = periods.map(function(p) { return p.excluded ? null : Math.round(p.emissionsPerKm * 1000) / 1000; });
 
     if (emissionsChart) emissionsChart.destroy();
     emissionsChart = new Chart(ctx, {
@@ -724,6 +814,16 @@
   function renderTable(periods) {
     var tbody = document.getElementById('periods-tbody');
     tbody.innerHTML = periods.map(function(p) {
+      if (p.excluded) {
+        return '<tr class="row-excluded">' +
+          '<td class="cell-strong">' + fmtDateShort(p.periodStart) + '</td>' +
+          '<td class="cell-strong">' + fmtDateShort(p.periodEnd) + '</td>' +
+          '<td>' + fmtNum(p.litresUsed, 1) + ' L</td>' +
+          '<td>' + fmtNum(p.kmDriven, 1) + ' km</td>' +
+          '<td>' + fmtNum(p.totalEmissionsKg, 2) + ' kg</td>' +
+          '<td><span class="status-badge excluded" title="2+ consecutive weekdays with no telematics data in this fill-to-fill window">Excluded — Telematics Gap</span></td>' +
+        '</tr>';
+      }
       return '<tr>' +
         '<td class="cell-strong">' + fmtDateShort(p.periodStart) + '</td>' +
         '<td class="cell-strong">' + fmtDateShort(p.periodEnd) + '</td>' +
@@ -745,7 +845,7 @@
         p.litresUsed.toFixed(1),
         p.kmDriven.toFixed(1),
         p.totalEmissionsKg.toFixed(2),
-        p.emissionsPerKm.toFixed(4)
+        p.excluded ? 'Excluded - Telematics Gap' : p.emissionsPerKm.toFixed(4)
       ];
     });
     var csv = [headers.join(',')].concat(rows.map(function(r) { return r.join(','); })).join('\n');
@@ -851,7 +951,7 @@
           fmtNum(p.litresUsed, 1),
           Math.round(p.kmDriven).toLocaleString(),
           fmtNum(p.totalEmissionsKg, 2),
-          fmtNum(p.emissionsPerKm, 4)
+          p.excluded ? 'Excluded - Telematics Gap' : fmtNum(p.emissionsPerKm, 4)
         ];
       }),
       styles: { fontSize: 9, cellPadding: 3 },
@@ -888,9 +988,11 @@
       var data = await fetchVehicleData(v.id, wideFrom, wideTo);
       if (data.fuel.length < 2 || !data.mileage.length) continue;
       var factor = getEmissionFactor(v.fuel_type);
-      var computed = computePeriods(data.fuel, data.mileage, factor);
+      var computed = computePeriods(data.fuel, data.mileage, data.telematicsPresence, factor);
       if (!computed.periods.length) continue;
-      var latest = computed.periods[computed.periods.length - 1];
+      var nonExcluded = computed.periods.filter(function(p) { return !p.excluded; });
+      if (!nonExcluded.length) continue;
+      var latest = nonExcluded[nonExcluded.length - 1];
       fleetData.push({ name: vehicleLabel(v), emissionsPerKm: latest.emissionsPerKm });
     }
 

@@ -109,6 +109,8 @@
   .cell-teal { color: #0EA57A; font-weight: 600; }
   .cell-overridden { color: #EF9F27; font-weight: 600; cursor: help; text-decoration: underline dotted rgba(239,159,39,0.5); text-underline-offset: 3px; }
   .cell-missing { color: #5A6474; font-style: italic; font-size: 12px; }
+  .cell-excluded { color: #6B7785; font-style: italic; font-size: 12px; cursor: help; }
+  tr.row-excluded { opacity: 0.55; }
   .cell-amber { color: #EF9F27; font-weight: 600; cursor: help; }
   .badge-estimate { display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #4A9EFF; background: rgba(74,158,255,0.12); border: 1px solid rgba(74,158,255,0.3); border-radius: 5px; padding: 2px 6px; margin-left: 6px; vertical-align: middle; }
   .cell-partial-suffix { font-size: 10.5px; font-weight: 600; margin-left: 4px; }
@@ -445,9 +447,78 @@
     return best;
   }
 
-  function computePeriods(fuelRows, mileageRows) {
+  // Ported from lib/fuel-regression.js — same NZ public holiday list and
+  // gap-detection logic (2+ consecutive missing weekdays with no telematics
+  // row = "telematics_gap"). Kept in sync manually; update both if this list changes.
+  var NZ_PUBLIC_HOLIDAYS_2026 = [
+    '2026-01-01', '2026-01-02', // New Year
+    '2026-02-06', // Waitangi Day
+    '2026-04-03', '2026-04-06', // Good Friday, Easter Monday (2026 dates)
+    '2026-04-25', // ANZAC Day
+    '2026-06-01', // King's Birthday (first Monday of June, 2026)
+    '2026-07-10', // Matariki (2026 date)
+  ];
+
+  function toDate(dateStr) {
+    return new Date(dateStr + 'T00:00:00Z');
+  }
+
+  function toDateStr(date) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  function isWeekend(date) {
+    var day = date.getUTCDay();
+    return day === 0 || day === 6;
+  }
+
+  function isNzPublicHoliday(dateStr) {
+    return NZ_PUBLIC_HOLIDAYS_2026.indexOf(dateStr) !== -1;
+  }
+
+  function eachDateBetween(startStr, endStr) {
+    var out = [];
+    var cur = toDate(startStr);
+    var end = toDate(endStr);
+    while (cur < end) {
+      out.push(toDateStr(cur));
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+    return out;
+  }
+
+  // Same rule as fuel-regression.js's evaluateInterval: excluded if the
+  // window contains 2+ consecutive missing weekdays (holidays excluded)
+  // with no telematics row at all. presentDatesSet is a { 'YYYY-MM-DD': true } map.
+  function hasTelematicsGap(startDate, endDate, presentDatesSet) {
+    var datesInWindow = eachDateBetween(startDate, endDate);
+    var missingWeekdays = datesInWindow.filter(function(d) {
+      var date = toDate(d);
+      if (isWeekend(date) || isNzPublicHoliday(d)) return false;
+      return !presentDatesSet[d];
+    });
+
+    var maxRun = 0, curRun = 0, lastDate = null;
+    missingWeekdays.forEach(function(d) {
+      if (lastDate) {
+        var diff = (toDate(d) - toDate(lastDate)) / 86400000;
+        curRun = (diff <= 3) ? curRun + 1 : 1;
+      } else {
+        curRun = 1;
+      }
+      maxRun = Math.max(maxRun, curRun);
+      lastDate = d;
+    });
+
+    return maxRun >= 2;
+  }
+
+  function computePeriods(fuelRows, mileageRows, presenceRows) {
     if (fuelRows.length < 2) return { periods: [], error: 'insufficient_fuel' };
     if (!mileageRows.length) return { periods: [], error: 'no_mileage' };
+
+    var presentDates = {};
+    (presenceRows || []).forEach(function(r) { presentDates[r.record_date] = true; });
 
     var periods = [];
     for (var i = 1; i < fuelRows.length; i++) {
@@ -460,6 +531,8 @@
       var km = parseFloat(odo2.odometer_km) - parseFloat(odo1.odometer_km);
       if (km <= 0) continue;
 
+      var gapExcluded = hasTelematicsGap(first.purchase_date, second.purchase_date, presentDates);
+
       var totalCost = parseFloat(second.cost_nzd) || 0;
       var litres = parseFloat(second.litres) || 0;
       var costPerKm = totalCost / km;
@@ -470,7 +543,9 @@
         litresUsed: litres,
         kmDriven: km,
         totalCost: totalCost,
-        costPerKm: costPerKm
+        costPerKm: gapExcluded ? null : costPerKm,
+        excluded: gapExcluded,
+        exclusionReason: gapExcluded ? 'telematics_gap' : null
       });
     }
 
@@ -481,6 +556,9 @@
   function buildEstimatedTrailingPeriod(realPeriods, mileageRows, dateTo) {
     if (!realPeriods.length) return null;
     var lastReal = realPeriods[realPeriods.length - 1];
+    // Don't extrapolate a trailing estimate from a period whose own fuel
+    // rate is unreliable due to a telematics gap.
+    if (lastReal.excluded || lastReal.costPerKm == null) return null;
 
     var eligibleReadings = mileageRows.filter(function(r) { return r.record_date <= dateTo; });
     var endReading = closestReading(eligibleReadings, dateTo);
@@ -611,7 +689,7 @@
       var maintOv = findOverride(overrides, 'maintenance', p.periodStart, p.periodEnd);
       var servOv = findOverride(overrides, 'servicing', p.periodStart, p.periodEnd);
 
-      var fuelPerKm = fuelOv ? FCM.num(fuelOv.override_value_per_km) : p.costPerKm;
+      var fuelPerKm = fuelOv ? FCM.num(fuelOv.override_value_per_km) : (p.excluded ? null : p.costPerKm);
       var deprPerKm = null;
       var maintPerKm = null;
       var servPerKm = null;
@@ -655,6 +733,8 @@
         totalCost: p.totalCost,
         costPerKm: p.costPerKm,
         fuelPerKm: fuelPerKm,
+        excluded: !!p.excluded,
+        exclusionReason: p.exclusionReason || null,
         deprPerKm: deprPerKm,
         maintPerKm: maintPerKm,
         servPerKm: servPerKm,
@@ -870,11 +950,25 @@
       .not('odometer_km', 'is', null)
       .order('record_date');
 
+    // Unfiltered presence check (any telematics row that day, regardless of
+    // null odometer/idle) — used only for the gap check, kept separate from
+    // the odometer-filtered mileageResult that closestReading() relies on.
+    var presenceResult = await supabase
+      .from('telematics_records')
+      .select('record_date')
+      .eq('asset_id', Number(vehicleId))
+      .eq('user_id', effectiveAccountId)
+      .gte('record_date', bufferFrom)
+      .lte('record_date', bufferTo)
+      .order('record_date');
+
     return {
       fuel: fuelResult.data || [],
       mileage: mileageResult.data || [],
+      telematicsPresence: presenceResult.data || [],
       fuelError: fuelResult.error,
-      mileageError: mileageResult.error
+      mileageError: mileageResult.error,
+      presenceError: presenceResult.error
     };
   }
 
@@ -914,12 +1008,12 @@
     btn.disabled = false;
     btn.textContent = 'Apply Filters';
 
-    if (data.fuelError || data.mileageError) {
+    if (data.fuelError || data.mileageError || data.presenceError) {
       showEmpty();
       return;
     }
 
-    var computed = computePeriods(data.fuel, data.mileage);
+    var computed = computePeriods(data.fuel, data.mileage, data.telematicsPresence);
     if (computed.error) {
       showEmpty();
       return;
@@ -1090,12 +1184,14 @@
   function renderTable(periods) {
     var tbody = document.getElementById('periods-tbody');
     tbody.innerHTML = periods.map(function(p, idx) {
-      return '<tr>' +
+      return '<tr' + (p.excluded && !p.fuelOverride ? ' class="row-excluded"' : '') + '>' +
         '<td class="cell-strong">' + fmtDateShort(p.periodStart) + '</td>' +
         '<td class="cell-strong">' + fmtDateShort(p.periodEnd) +
           (p.isEstimate ? ' <span class="badge-estimate" title="Estimated using the fuel rate from the period ending ' + fmtDateShort(p.estimateBasis) + '. Depreciation, maintenance, and servicing figures are calculated fresh, not estimated.">Estimate</span>' : '') +
         '</td>' +
-        '<td>' + renderCellValue(p.fuelPerKm, p.fuelOverride, null, false) + '</td>' +
+        '<td>' + (p.excluded && !p.fuelOverride
+          ? '<span class="cell-excluded" title="2+ consecutive weekdays with no telematics data in this fill-to-fill window">Excluded — Telematics Gap</span>'
+          : renderCellValue(p.fuelPerKm, p.fuelOverride, null, false)) + '</td>' +
         '<td>' + renderCellValue(p.deprPerKm, p.deprOverride, p.deprMissing, false, p.deprLifeExceeded, p.deprLifeNearLimit) + '</td>' +
         '<td>' + renderCellValue(p.maintPerKm, p.maintOverride, p.maintMissing, false) + '</td>' +
         '<td>' + renderCellValue(p.servPerKm, p.servOverride, p.servMissing, false) + '</td>' +
@@ -1306,7 +1402,7 @@
       var overrides = await fetchOverrides(v.id);
       var data = await fetchVehicleData(v.id, wideFrom, wideTo);
       if (data.fuel.length < 2 || !data.mileage.length) continue;
-      var computed = computePeriods(data.fuel, data.mileage);
+      var computed = computePeriods(data.fuel, data.mileage, data.telematicsPresence);
       if (!computed.periods.length) continue;
       var latest = enrichPeriods(v, [computed.periods[computed.periods.length - 1]], overrides)[0];
 
