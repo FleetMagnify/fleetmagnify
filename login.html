@@ -400,7 +400,7 @@
 
       try {
         var result = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: new URL('login.html', window.location.href).href
+          redirectTo: 'https://fleetmagnify.com/accept-invite.html'
         });
 
         if (result.error) {
