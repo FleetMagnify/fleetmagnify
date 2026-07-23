@@ -371,12 +371,46 @@
     return maxRun >= 2;
   }
 
+  // Second, separate presence check: the device can be reporting every day
+  // (present in presentDatesSet) while odometer_km specifically is null for
+  // an extended stretch — closestReading() then has to reach past the whole
+  // stretch to find a valid boundary reading, producing a real but
+  // meaningless near-zero distance. mileageDatesSet is the set of dates
+  // that actually have a usable (non-null) odometer reading — a date
+  // present in presentDatesSet but absent from mileageDatesSet is exactly
+  // that blind spot.
+  function hasOdometerGap(startDate, endDate, presentDatesSet, mileageDatesSet) {
+    var datesInWindow = eachDateBetween(startDate, endDate);
+    var missingOdoWeekdays = datesInWindow.filter(function(d) {
+      var date = toDate(d);
+      if (isWeekend(date) || isNzPublicHoliday(d)) return false;
+      return !!presentDatesSet[d] && !mileageDatesSet[d];
+    });
+
+    var maxRun = 0, curRun = 0, lastDate = null;
+    missingOdoWeekdays.forEach(function(d) {
+      if (lastDate) {
+        var diff = (toDate(d) - toDate(lastDate)) / 86400000;
+        curRun = (diff <= 3) ? curRun + 1 : 1;
+      } else {
+        curRun = 1;
+      }
+      maxRun = Math.max(maxRun, curRun);
+      lastDate = d;
+    });
+
+    return maxRun >= 2;
+  }
+
   function computePeriods(fuelRows, mileageRows, presenceRows) {
     if (fuelRows.length < 2) return { periods: [], error: 'insufficient_fuel' };
     if (!mileageRows.length) return { periods: [], error: 'no_mileage' };
 
     var presentDates = {};
     (presenceRows || []).forEach(function(r) { presentDates[r.record_date] = true; });
+
+    var mileageDates = {};
+    mileageRows.forEach(function(r) { mileageDates[r.record_date] = true; });
 
     var periods = [];
     for (var i = 1; i < fuelRows.length; i++) {
@@ -390,6 +424,11 @@
       if (km <= 0) continue;
 
       var gapExcluded = hasTelematicsGap(first.purchase_date, second.purchase_date, presentDates);
+      var exclusionReason = gapExcluded ? 'telematics_gap' : null;
+      if (!gapExcluded && hasOdometerGap(first.purchase_date, second.purchase_date, presentDates, mileageDates)) {
+        gapExcluded = true;
+        exclusionReason = 'odometer_gap';
+      }
 
       var totalCost = parseFloat(second.cost_nzd) || 0;
       var litres = parseFloat(second.litres) || 0;
@@ -401,7 +440,7 @@
         kmDriven: km,
         totalCost: totalCost,
         excluded: gapExcluded,
-        exclusionReason: gapExcluded ? 'telematics_gap' : null
+        exclusionReason: exclusionReason
       });
     }
 
