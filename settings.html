@@ -66,12 +66,31 @@
   .member-role { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #9BA4B0; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 100px; }
   .member-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
   .perm-badge { font-size: 10.5px; font-weight: 600; color: #7DD4B8; background: rgba(14,165,122,0.10); border: 1px solid rgba(14,165,122,0.22); padding: 2px 9px; border-radius: 100px; }
+  .member-row-actions { display: flex; align-items: center; flex-shrink: 0; }
+  .btn-remove-member { background: none; border: 1px solid transparent; color: #3A4A5C; font-size: 11px; font-weight: 500; padding: 4px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-remove-member:hover { border-color: rgba(226,75,74,0.3); color: #F0A8A7; background: rgba(226,75,74,0.08); }
 
   .loading-state, .empty-state { font-size: 13px; color: #4A5568; padding: 18px 0; text-align: center; }
 
   .checkbox-row { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; }
   .checkbox-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: #0EA57A; cursor: pointer; }
   .checkbox-row label { font-size: 13px; color: #C8D0DB; margin-bottom: 0; cursor: pointer; }
+
+  .modal-overlay { display: none; position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: 24px; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: #0A101A; border: 1px solid #2D3748; border-radius: 18px; padding: 36px; width: 100%; max-width: 480px; box-shadow: 0 32px 80px rgba(0,0,0,0.5); max-height: 90vh; overflow-y: auto; }
+  .modal h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.8px; color: #F0F2F5; margin-bottom: 6px; }
+  .modal-sub { font-size: 13.5px; color: #5A6474; margin-bottom: 28px; }
+  .confirm-modal { max-width: 400px; text-align: center; }
+  .confirm-icon { font-size: 36px; margin-bottom: 14px; }
+  .confirm-modal h2 { font-size: 20px; }
+  .confirm-modal .modal-sub { margin-bottom: 24px; }
+  .modal-actions { display: flex; align-items: center; gap: 10px; margin-top: 24px; }
+  .btn-cancel { flex: 1; background: none; border: 1px solid #2D3748; color: #6B7785; font-size: 14px; font-weight: 500; padding: 12px; border-radius: 9px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-cancel:hover { border-color: rgba(255,255,255,0.18); color: #C8D0DB; }
+  .btn-danger { flex: 1; background: rgba(226,75,74,0.15); border: 1px solid rgba(226,75,74,0.30); color: #F0A8A7; font-size: 14px; font-weight: 700; padding: 12px; border-radius: 9px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-danger:hover:not(:disabled) { background: rgba(226,75,74,0.25); }
+  .btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -178,6 +197,18 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="remove-member-modal">
+  <div class="modal confirm-modal">
+    <div class="confirm-icon">🗑</div>
+    <h2>Remove Team Member?</h2>
+    <p class="modal-sub" id="remove-member-modal-text"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel" id="remove-member-cancel-btn">Cancel</button>
+      <button type="button" class="btn-danger" id="remove-member-confirm-btn">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast">
   <span id="toast-icon">✓</span>
   <span id="toast-msg"></span>
@@ -193,6 +224,8 @@
   var currentUser = null;
   var effectiveAccountId = null;
   var toastTimer;
+  var lastLoadedMembers = [];
+  var pendingRemoveMemberId = null;
 
   var ROLE_DEFAULTS = {
     'Director': { can_edit_assets: true, can_edit_jobs: true, can_view_change_log: true },
@@ -296,6 +329,7 @@
   }
 
   function renderMembers(members) {
+    lastLoadedMembers = members || [];
     var container = document.getElementById('members-list');
     if (!members.length) {
       container.innerHTML = '<div class="empty-state">No team members yet</div>';
@@ -318,8 +352,23 @@
             '</div>' +
             (badges ? '<div class="member-badges">' + badges + '</div>' : '') +
           '</div>' +
+          '<div class="member-row-actions">' +
+            '<button type="button" class="btn-remove-member remove-member-btn" data-id="' + escapeHtml(String(m.id)) + '">Remove</button>' +
+          '</div>' +
         '</div>';
     }).join('');
+
+    container.querySelectorAll('.remove-member-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var memberId = btn.dataset.id;
+        var member = lastLoadedMembers.find(function(m) { return String(m.id) === memberId; });
+        pendingRemoveMemberId = memberId;
+        document.getElementById('remove-member-modal-text').textContent =
+          'Remove ' + (member && member.email ? member.email : 'this member') +
+          '? This will permanently delete their login and revoke all access to this account. This cannot be undone — they would need to be invited again from scratch.';
+        document.getElementById('remove-member-modal').classList.add('open');
+      });
+    });
   }
 
   async function loadMembers() {
@@ -404,6 +453,54 @@
     } finally {
       btn.disabled = false;
       btn.textContent = 'Send Invite';
+    }
+  });
+
+  document.getElementById('remove-member-cancel-btn').addEventListener('click', function() {
+    pendingRemoveMemberId = null;
+    document.getElementById('remove-member-modal').classList.remove('open');
+  });
+
+  document.getElementById('remove-member-confirm-btn').addEventListener('click', async function() {
+    if (!pendingRemoveMemberId) return;
+    var memberId = pendingRemoveMemberId;
+    pendingRemoveMemberId = null;
+    document.getElementById('remove-member-modal').classList.remove('open');
+
+    var btn = document.getElementById('remove-member-confirm-btn');
+    btn.disabled = true;
+    btn.textContent = 'Removing…';
+
+    try {
+      var sessionResult = await supabase.auth.getSession();
+      var token = sessionResult.data.session ? sessionResult.data.session.access_token : null;
+      if (!token) {
+        showToast('Not signed in', 'error');
+        return;
+      }
+
+      var res = await fetch('/api/remove-account-member', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ member_id: memberId })
+      });
+      var data = await res.json();
+
+      if (!res.ok || data.error) {
+        showToast(data.error || 'Failed to remove team member', 'error');
+        return;
+      }
+
+      showToast('Member removed', 'success');
+      await loadMembers();
+    } catch (err) {
+      showToast('Something went wrong', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Confirm';
     }
   });
 
