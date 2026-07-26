@@ -72,6 +72,14 @@ function isCsvAttachment(filename, mimeType) {
   return mime === 'text/csv' || mime === 'application/csv' || mime === 'text/comma-separated-values';
 }
 
+function isXlsAttachment(filename, mimeType) {
+  var name = (filename || '').toLowerCase();
+  if (/\.xlsx?$/.test(name)) return true;
+  var mime = (mimeType || '').toLowerCase();
+  return mime === 'application/vnd.ms-excel' ||
+    mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+}
+
 function parseMultipart(req) {
   return new Promise(function (resolve, reject) {
     var fields = {};
@@ -221,8 +229,13 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true, message: 'Received — unknown upload address' });
     }
 
+    // Now includes XLS/XLSX attachments alongside CSV — BP is the only
+    // provider currently known to send XLS (see bp-transaction.js /
+    // bulk-import.js for the same XLS-via-SheetJS pattern already proven
+    // there). Variable name kept as csvFiles to minimize diff footprint
+    // elsewhere in this file, even though it now covers both formats.
     var csvFiles = files.filter(function (f) {
-      return isCsvAttachment(f.filename, f.mimeType);
+      return isCsvAttachment(f.filename, f.mimeType) || isXlsAttachment(f.filename, f.mimeType);
     });
 
     if (csvFiles.length === 0) {
@@ -234,7 +247,16 @@ module.exports = async function handler(req, res) {
 
     for (var i = 0; i < csvFiles.length; i++) {
       var attachment = csvFiles[i];
-      var rawCsv = attachment.buffer.toString('utf8');
+      var isXls = isXlsAttachment(attachment.filename, attachment.mimeType);
+      // XLS is binary — decoding it as utf8 text would produce corrupted
+      // garbage, not something anyone could inspect later. Store the
+      // actual original bytes as base64 instead, tagged with a prefix so
+      // it's clearly distinguishable from plain-text CSV content when
+      // browsing email_imports directly. This preserves the same "go back
+      // and inspect exactly what arrived" audit trail CSV imports already
+      // have.
+      var rawCsv = isXls ? '' : attachment.buffer.toString('utf8');
+      var storedRaw = isXls ? ('BASE64_XLS:' + attachment.buffer.toString('base64')) : rawCsv;
 
       var insertResult = await supabase.from('email_imports').insert({
         user_id: userResult.data.user_id,
@@ -242,7 +264,7 @@ module.exports = async function handler(req, res) {
         from_email: fromEmail || null,
         to_email: toEmail,
         filename: attachment.filename || null,
-        raw_csv: rawCsv,
+        raw_csv: storedRaw,
         status: 'pending',
       }).select('id').single();
 
@@ -257,7 +279,31 @@ module.exports = async function handler(req, res) {
 
       var importId = insertResult.data.id;
 
-      if (isNavmanCsv(rawCsv)) {
+      if (isXls) {
+        try {
+          var bpXlsResult = await parseBpTransactionReport(supabase, {
+            userId: userResult.data.user_id,
+            importId: importId,
+            fileBuffer: attachment.buffer,
+          });
+          console.log(
+            'email-inbound: BP transaction (XLS) parse complete',
+            attachment.filename,
+            bpXlsResult.recordsUpserted + ' purchases'
+          );
+        } catch (bpXlsErr) {
+          console.error(
+            'email-inbound: BP transaction (XLS) parse failed',
+            attachment.filename,
+            bpXlsErr.message
+          );
+          await sendFailureAlert(
+            attachment.filename,
+            bpXlsErr.message,
+            userResult.data.user_id
+          );
+        }
+      } else if (isNavmanCsv(rawCsv)) {
         try {
           var parseResult = await parseNavmanReport(supabase, {
             userId: userResult.data.user_id,
