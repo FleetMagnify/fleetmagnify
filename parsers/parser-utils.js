@@ -59,12 +59,18 @@ function isKnownFuelProduct(product) {
 // filtering mechanism, but a different provider's product catalogue, so the
 // two should never be merged even where a value happens to overlap.
 // Genuine fuel types:
-//   "Diesel", "Mobil Diesel Efficient"
+//   "Diesel", "Mobil Diesel Efficient", "Synergy Diesel\Extra Diesel" (diesel),
+//   "Unleaded 91", "Premium Unleaded", "Synergy Extra Unleaded" (petrol, for
+//   non-diesel utes/cars on this fleet)
 // Confirmed non-fuel (rejected):
-//   "Diesel Exhaust Fluid", "Shop"
+//   "Diesel Exhaust Fluid", "Shop", "Lubricants", "Car Wash"
 var MOBIL_FUEL_PRODUCT_ALLOWLIST = [
   'Diesel',
   'Mobil Diesel Efficient',
+  'Synergy Diesel\\Extra Diesel',
+  'Unleaded 91',
+  'Premium Unleaded',
+  'Synergy Extra Unleaded',
 ];
 
 function isKnownMobilFuelProduct(product) {

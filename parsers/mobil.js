@@ -121,6 +121,20 @@ function resolveStubAssetName(row, cardNumber) {
   return 'Card ••••' + cardNumber.slice(-4);
 }
 
+function inferMobilFuelType(product) {
+  return /diesel/i.test(String(product || '')) ? 'Diesel' : 'Petrol';
+}
+
+function findFuelProductForCard(rows, cardNumber) {
+  for (var k = 0; k < rows.length; k++) {
+    if (normalizeCardNumber(rows[k]['Card No.']) === cardNumber &&
+        isKnownMobilFuelProduct(rows[k]['Product Description'])) {
+      return rows[k]['Product Description'];
+    }
+  }
+  return null;
+}
+
 async function ensureAssets(supabase, userId, rows) {
   var loaded = await loadAssetMap(supabase, userId);
   var cardMap = loaded.cardMap;
@@ -132,11 +146,13 @@ async function ensureAssets(supabase, userId, rows) {
     seen[cardNumber] = true;
 
     var stubName = resolveStubAssetName(rows[i], cardNumber);
+    var fuelProduct = findFuelProductForCard(rows, cardNumber);
+    var stubFuelType = fuelProduct ? inferMobilFuelType(fuelProduct) : 'Diesel';
     var insertResult = await supabase.from('assets').insert({
       user_id: userId,
       asset_name: stubName,
       asset_type: detectAssetType(stubName),
-      fuel_type: 'Diesel',
+      fuel_type: stubFuelType,
       mobil_card_number: cardNumber,
     }).select('id').single();
 
