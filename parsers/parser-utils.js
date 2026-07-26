@@ -54,6 +54,23 @@ function isKnownFuelProduct(product) {
   return BP_FUEL_PRODUCT_ALLOWLIST.indexOf(String(product || '').trim()) !== -1;
 }
 
+// Confirmed from real Mobil export samples ("Product Description" column).
+// Kept as its own separate list from BP_FUEL_PRODUCT_ALLOWLIST above — same
+// filtering mechanism, but a different provider's product catalogue, so the
+// two should never be merged even where a value happens to overlap.
+// Genuine fuel types:
+//   "Diesel", "Mobil Diesel Efficient"
+// Confirmed non-fuel (rejected):
+//   "Diesel Exhaust Fluid", "Shop"
+var MOBIL_FUEL_PRODUCT_ALLOWLIST = [
+  'Diesel',
+  'Mobil Diesel Efficient',
+];
+
+function isKnownMobilFuelProduct(product) {
+  return MOBIL_FUEL_PRODUCT_ALLOWLIST.indexOf(String(product || '').trim()) !== -1;
+}
+
 function parseNumeric(value) {
   if (value === '' || value == null) {
     return null;
@@ -136,4 +153,6 @@ module.exports = {
   detectAssetType: detectAssetType,
   BP_FUEL_PRODUCT_ALLOWLIST: BP_FUEL_PRODUCT_ALLOWLIST,
   isKnownFuelProduct: isKnownFuelProduct,
+  MOBIL_FUEL_PRODUCT_ALLOWLIST: MOBIL_FUEL_PRODUCT_ALLOWLIST,
+  isKnownMobilFuelProduct: isKnownMobilFuelProduct,
 };

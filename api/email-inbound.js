@@ -7,6 +7,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { isNavmanCsv, parseNavmanReport } = require('../parsers/navman');
 const { isBpCsv, parseBpReport } = require('../parsers/bp');
 const { isBpTransactionCsv, parseBpTransactionReport } = require('../parsers/bp-transaction');
+const { isMobilCsv, parseMobilReport } = require('../parsers/mobil');
 const { isNavmanMileageCsv, parseNavmanMileageReport } = require('../parsers/navman-mileage');
 const { isNavmanIdleCsv, parseNavmanIdleReport } = require('../parsers/navman-idle');
 
@@ -329,6 +330,30 @@ module.exports = async function handler(req, res) {
           await sendFailureAlert(
             attachment.filename,
             bpErr.message,
+            userResult.data.user_id
+          );
+        }
+      } else if (isMobilCsv(rawCsv)) {
+        try {
+          var mobilResult = await parseMobilReport(supabase, {
+            userId: userResult.data.user_id,
+            importId: importId,
+            rawCsv: rawCsv,
+          });
+          console.log(
+            'email-inbound: Mobil parse complete',
+            attachment.filename,
+            mobilResult.recordsUpserted + ' purchases'
+          );
+        } catch (mobilErr) {
+          console.error(
+            'email-inbound: Mobil parse failed',
+            attachment.filename,
+            mobilErr.message
+          );
+          await sendFailureAlert(
+            attachment.filename,
+            mobilErr.message,
             userResult.data.user_id
           );
         }

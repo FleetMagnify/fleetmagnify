@@ -692,9 +692,14 @@
       </div>
     </div>
     <div class="form-group">
-      <label for="asset-bp-card">Fuel Card Number</label>
+      <label for="asset-bp-card">BP Fuel Card Number</label>
       <input type="text" id="asset-bp-card" placeholder="e.g. 7824339271724028">
       <div class="form-hint" style="font-size:11px; color:#3A4A5C; margin-top:5px;">Enter the BP fuel card number for this vehicle so future fuel imports attach automatically. Leave blank if none.</div>
+    </div>
+    <div class="form-group">
+      <label for="asset-mobil-card">Mobil Fuel Card Number</label>
+      <input type="text" id="asset-mobil-card" placeholder="e.g. 4606969">
+      <div class="form-hint" style="font-size:11px; color:#3A4A5C; margin-top:5px;">Enter the Mobil fuel card number for this vehicle so future fuel imports attach automatically. Leave blank if none. A vehicle can have both a BP and a Mobil card.</div>
     </div>
     <div class="form-group">
       <label for="asset-idle-rate">Idle Burn Rate (litres per hour)</label>
@@ -1087,14 +1092,28 @@
     await loadCardMatching();
   }
 
+  function cardValue(v) {
+    return (v != null && String(v).trim() !== '') ? String(v).trim() : null;
+  }
+
+  function getCardProvider(a) {
+    if (cardValue(a.bp_card_number)) return 'bp';
+    if (cardValue(a.mobil_card_number)) return 'mobil';
+    return null;
+  }
+
+  function getCardNumberForProvider(a, provider) {
+    return provider === 'mobil' ? cardValue(a.mobil_card_number) : cardValue(a.bp_card_number);
+  }
+
   async function loadCardMatching() {
     var section = document.getElementById('card-match-section');
     unmatchedCards = allAssets.filter(function(a) {
-      var hasCard = a.bp_card_number != null && String(a.bp_card_number).trim() !== '';
+      var hasCard = cardValue(a.bp_card_number) != null || cardValue(a.mobil_card_number) != null;
       return hasCard && !latestTelByAsset[Number(a.id)];
     });
     realVehicles = allAssets.filter(function(a) {
-      return a.bp_card_number == null || String(a.bp_card_number).trim() === '';
+      return cardValue(a.bp_card_number) == null && cardValue(a.mobil_card_number) == null;
     });
 
     fuelTotalsByAsset = {};
@@ -1258,9 +1277,12 @@
       } else {
         context = 'No fuel records yet';
       }
+      var provider = getCardProvider(a);
+      var providerLabel = provider === 'mobil' ? 'Mobil' : 'BP';
+      var cardNumber = getCardNumberForProvider(a, provider) || '—';
       var html = '<div class="fuel-card-item" draggable="true" data-id="' + a.id + '">' +
         '<div class="fuel-card-name">' + esc(a.asset_name || '—') + '</div>' +
-        '<div class="fuel-card-meta">Card ' + esc(a.bp_card_number || '—') + '</div>' +
+        '<div class="fuel-card-meta">' + providerLabel + ' Card ' + esc(cardNumber) + '</div>' +
         '<div class="fuel-card-context">' + esc(context) + '</div>';
       var suggested = findSuggestedMatch(a.asset_name || '', realVehicles);
       if (suggested) {
@@ -1449,12 +1471,14 @@
       moveText + ' and cannot be undone.';
 
     var warnWrap = document.getElementById('merge-confirm-warn-wrap');
-    var stubHasCard = stub.bp_card_number != null && String(stub.bp_card_number).trim() !== '';
-    var targetHasCard = target.bp_card_number != null && String(target.bp_card_number).trim() !== '';
-    if (targetHasCard && stubHasCard) {
-      warnWrap.innerHTML = '<div class="merge-confirm-warn">⚠ This vehicle already has a fuel card linked (ending ' +
-        esc(lastFour(target.bp_card_number)) + '). Merging will replace it with card ending ' +
-        esc(lastFour(stub.bp_card_number)) + '.</div>';
+    var stubProvider = getCardProvider(stub);
+    var targetExistingSameProviderCard = getCardNumberForProvider(target, stubProvider);
+    if (stubProvider && targetExistingSameProviderCard) {
+      var providerLabel = stubProvider === 'mobil' ? 'Mobil' : 'BP';
+      warnWrap.innerHTML = '<div class="merge-confirm-warn">⚠ This vehicle already has a ' + providerLabel +
+        ' fuel card linked (ending ' + esc(lastFour(targetExistingSameProviderCard)) +
+        '). Merging will replace it with card ending ' +
+        esc(lastFour(getCardNumberForProvider(stub, stubProvider))) + '.</div>';
     } else {
       warnWrap.innerHTML = '';
     }
@@ -1517,9 +1541,16 @@
       return;
     }
 
+    var mergeProvider = getCardProvider(stub);
+    var mergeCardPatch = {};
+    if (mergeProvider === 'mobil') {
+      mergeCardPatch.mobil_card_number = stub.mobil_card_number;
+    } else {
+      mergeCardPatch.bp_card_number = stub.bp_card_number;
+    }
     var updateResult = await supabase
       .from('assets')
-      .update({ bp_card_number: stub.bp_card_number })
+      .update(mergeCardPatch)
       .eq('id', Number(target.id))
       .eq('user_id', effectiveAccountId);
 
@@ -1939,7 +1970,7 @@
     if (e.target === this) closeMergeConfirm();
   });
 
-  var ASSET_FIELD_IDS = ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-current-value','asset-eol-value','asset-annual-repair','asset-life-km','asset-service-cost-km','asset-current-odometer','asset-estimated-annual-km','asset-life-hours','asset-service-cost','asset-available-hours','asset-target-utilisation','asset-bp-card'];
+  var ASSET_FIELD_IDS = ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-current-value','asset-eol-value','asset-annual-repair','asset-life-km','asset-service-cost-km','asset-current-odometer','asset-estimated-annual-km','asset-life-hours','asset-service-cost','asset-available-hours','asset-target-utilisation','asset-bp-card','asset-mobil-card'];
 
   function parseOptionalFloat(raw) {
     if (raw === '' || raw == null) return null;
@@ -2166,6 +2197,7 @@
       year: parseOptionalInt(document.getElementById('asset-year').value),
       registration: document.getElementById('asset-rego').value.trim() || null,
       bp_card_number: (function(){ var v = document.getElementById('asset-bp-card').value.trim(); return v === '' ? null : v; })(),
+      mobil_card_number: (function(){ var v = document.getElementById('asset-mobil-card').value.trim(); return v === '' ? null : v; })(),
       idle_burn_rate_lph: parseOptionalFloat(idleRateRaw),
       current_value: parseOptionalFloat(document.getElementById('asset-current-value').value),
       estimated_end_of_life_value: parseOptionalFloat(document.getElementById('asset-eol-value').value),
@@ -2261,6 +2293,7 @@
     document.getElementById('asset-year').value = asset.year != null ? asset.year : '';
     document.getElementById('asset-rego').value = asset.registration || '';
     document.getElementById('asset-bp-card').value = asset.bp_card_number || '';
+    document.getElementById('asset-mobil-card').value = asset.mobil_card_number || '';
     document.getElementById('asset-idle-rate').value = asset.idle_burn_rate_lph != null ? asset.idle_burn_rate_lph : '';
     document.getElementById('asset-current-value').value = asset.current_value != null ? asset.current_value : '';
     document.getElementById('asset-eol-value').value = asset.estimated_end_of_life_value != null ? asset.estimated_end_of_life_value : '';

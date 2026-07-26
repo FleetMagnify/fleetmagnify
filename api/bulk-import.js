@@ -3,6 +3,7 @@ const { isNavmanMileageCsv, parseNavmanMileageReport } = require('../parsers/nav
 const { isNavmanIdleCsv, parseNavmanIdleReport } = require('../parsers/navman-idle');
 const { isBpCsv, parseBpReport } = require('../parsers/bp');
 const { isBpTransactionCsv, parseBpTransactionReport } = require('../parsers/bp-transaction');
+const { isMobilCsv, parseMobilReport } = require('../parsers/mobil');
 const { createClient } = require('@supabase/supabase-js');
 
 module.exports = async function handler(req, res) {
@@ -90,6 +91,9 @@ module.exports = async function handler(req, res) {
     } else if (isBpCsv(rawCsv)) {
       parser = 'BP Fuel';
       result = await parseBpReport(supabase, options);
+    } else if (isMobilCsv(rawCsv)) {
+      parser = 'Mobil';
+      result = await parseMobilReport(supabase, options);
     } else {
       return res.status(400).json({ error: 'Unrecognised CSV format' });
     }
