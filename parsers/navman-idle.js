@@ -140,16 +140,54 @@ async function parseNavmanIdleReport(supabase, options) {
 
     // Batch upsert all idle records in one call instead of one per record
     var records = [];
+    var flaggedHigh = [];
+    var flaggedImpossible = [];
     Object.keys(dailyIdleMap).forEach(function(key) {
       var entry = dailyIdleMap[key];
       if (entry.idleMinutes <= 0) return;
+      var idleHours = entry.idleMinutes / 60;
+
+      // A single calendar day cannot physically contain more than 24 hours
+      // of idle time. Navman's own reports have been observed to
+      // occasionally misattribute a multi-day backlog of idle time to a
+      // single check-in date (confirmed directly against Navman's portal
+      // for a real case: T11/MAP215 on 2026-05-20 showed as "6 days 22
+      // hours" against a single date). Rather than write an impossible
+      // number, flag it and store null instead — matching the
+      // fuel-regression engine's "flag rather than fabricate" pattern for
+      // implausible values.
+      if (idleHours > 24) {
+        flaggedImpossible.push({ assetId: entry.assetId, date: entry.date, idleHours: idleHours });
+        records.push({
+          user_id: userId,
+          asset_id: Number(entry.assetId),
+          record_date: entry.date,
+          idle_hours: null,
+        });
+        return;
+      }
+
+      // Above 10 hours is still physically plausible (long shifts, multi-
+      // driver trucks) but unusual enough to be worth flagging for review
+      // — written through as normal, just logged for visibility.
+      if (idleHours > 10) {
+        flaggedHigh.push({ assetId: entry.assetId, date: entry.date, idleHours: idleHours });
+      }
+
       records.push({
         user_id: userId,
         asset_id: Number(entry.assetId),
         record_date: entry.date,
-        idle_hours: entry.idleMinutes / 60,
+        idle_hours: idleHours,
       });
     });
+
+    if (flaggedImpossible.length > 0) {
+      console.warn('navman-idle: impossible idle_hours (>24h) set to null:', JSON.stringify(flaggedImpossible));
+    }
+    if (flaggedHigh.length > 0) {
+      console.warn('navman-idle: high idle_hours (>10h) flagged for review:', JSON.stringify(flaggedHigh));
+    }
 
     if (records.length === 0) throw new Error('No valid idle records to import');
 
