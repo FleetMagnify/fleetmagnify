@@ -612,56 +612,22 @@
 
   function buildFuelChartRows(assets) {
     var limited = limitTopChartRows(assets, function(a) { return a.fuelCost; });
-    var rows = limited.rows.slice();
-    if (limited.rest) {
-      rows.push({
-        name: 'Other',
-        fuelCost: limited.rest.reduce(function(s, a) { return s + a.fuelCost; }, 0)
-      });
-    }
-    return { rows: rows, showTopNote: limited.showTopNote };
+    return { rows: limited.rows, showTopNote: limited.showTopNote };
   }
 
   function buildIdleChartRows(assets) {
     var limited = limitTopChartRows(assets, function(a) { return a.idleTotal; });
-    var rows = limited.rows.slice();
-    if (limited.rest) {
-      rows.push({
-        name: 'Other',
-        idleFuelCost: limited.rest.reduce(function(s, a) { return s + (a.idleFuelCost || 0); }, 0),
-        deprCost: limited.rest.reduce(function(s, a) { return s + (a.deprCost || 0); }, 0),
-        serviceCost: limited.rest.reduce(function(s, a) { return s + (a.serviceCost || 0); }, 0),
-        maintCost: limited.rest.reduce(function(s, a) { return s + (a.maintCost || 0); }, 0)
-      });
-    }
-    return { rows: rows, showTopNote: limited.showTopNote };
+    return { rows: limited.rows, showTopNote: limited.showTopNote };
   }
 
   function buildEmissionsChartRows(assets) {
     var limited = limitTopChartRows(assets, function(a) { return a.emissionsKg; });
-    var rows = limited.rows.slice();
-    if (limited.rest) {
-      rows.push({
-        name: 'Other',
-        emissionsKg: limited.rest.reduce(function(s, a) { return s + a.emissionsKg; }, 0)
-      });
-    }
-    return { rows: rows, showTopNote: limited.showTopNote };
+    return { rows: limited.rows, showTopNote: limited.showTopNote };
   }
 
   function buildUtilChartRows(assets) {
     var limited = limitTopChartRows(assets, function(a) { return a.utilRate; });
-    var rows = limited.rows.slice();
-    if (limited.rest) {
-      var totalOp = limited.rest.reduce(function(s, a) { return s + a.opHours; }, 0);
-      var totalAvail = limited.rest.reduce(function(s, a) { return s + a.available; }, 0);
-      rows.push({
-        name: 'Other',
-        utilRate: totalAvail > 0 ? (totalOp / totalAvail) * 100 : 0,
-        target: null
-      });
-    }
-    return { rows: rows, showTopNote: limited.showTopNote };
+    return { rows: limited.rows, showTopNote: limited.showTopNote };
   }
 
   function renderCharts(allAssets) {
