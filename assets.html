@@ -1112,8 +1112,17 @@
       var hasCard = cardValue(a.bp_card_number) != null || cardValue(a.mobil_card_number) != null;
       return hasCard && !latestTelByAsset[Number(a.id)];
     });
+    // A "real vehicle" (valid merge target) is defined as anything that
+    // is NOT itself an unmatched-card stub — not by whether it already
+    // has a card number. A genuine, tracked vehicle can legitimately have
+    // zero, one, or two cards (BP and/or Mobil) and should still be a
+    // valid target; what actually makes something a stub is the
+    // combination of having a card AND lacking telematics behind it,
+    // which unmatchedCards above already captures correctly.
+    var unmatchedCardIds = {};
+    unmatchedCards.forEach(function(a) { unmatchedCardIds[Number(a.id)] = true; });
     realVehicles = allAssets.filter(function(a) {
-      return cardValue(a.bp_card_number) == null && cardValue(a.mobil_card_number) == null;
+      return !unmatchedCardIds[Number(a.id)];
     });
 
     fuelTotalsByAsset = {};
