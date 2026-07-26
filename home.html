@@ -468,7 +468,13 @@
   }
 
   async function fetchData(dateFrom, dateTo) {
-    var assetsResult = await supabase.from('assets').select('*').eq('user_id', effectiveAccountId).order('asset_name');
+    // Ignored assets ("Not a Fleet Asset" in the Match Fuel Cards UI) must
+    // never contribute to fleet totals, charts, or KPIs on this dashboard —
+    // confirmed via real data that 41 ignored assets were contributing
+    // $87,072.60 in fuel cost alone before this fix, silently inflating
+    // both the named top-10 bars and the "Other" bucket across every
+    // chart on this page.
+    var assetsResult = await supabase.from('assets').select('*').eq('user_id', effectiveAccountId).eq('is_ignored', false).order('asset_name');
     var assets = assetsResult.data || [];
     if (assets.length === 0) return { assets: [], fuel: [], tel: [], latestTel: [] };
 
