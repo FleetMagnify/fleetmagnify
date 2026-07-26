@@ -132,12 +132,20 @@ function detectAssetType(vehicleName) {
 
   var lightVehicleKeywords = [
     'ranger', 'hilux', 'navara', 'triton', 'colorado', 'd-max', 'bt-50', 'amarok',
-    'ute', 'suv', 'car', 'sedan', 'wagon', 'van', 'transit', 'sprinter', 'hiace',
+    'ute', 'suv', 'sedan', 'wagon', 'van', 'transit', 'sprinter', 'hiace',
   ];
   for (var i = 0; i < lightVehicleKeywords.length; i++) {
     if (name.indexOf(lightVehicleKeywords[i]) !== -1) {
       return 'Light Vehicle';
     }
+  }
+  // 'car' is checked separately with a word-boundary match rather than
+  // plain substring — as a substring it would false-positive on
+  // "Card ••••1234" (the generic fallback stub name used when a real
+  // vehicle code can't be parsed from a fuel import row), which contains
+  // "car" as a substring of "Card".
+  if (/\bcar\b/.test(name)) {
+    return 'Light Vehicle';
   }
 
   if (name.indexOf('bulldozer') !== -1 || name.indexOf('dozer') !== -1) return 'Bulldozer';

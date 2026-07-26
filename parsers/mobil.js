@@ -111,8 +111,14 @@ function isValidCardNumber(cardNumber) {
 function isVehicleCodeLike(value) {
   var trimmed = String(value || '').trim();
   if (!trimmed) return false;
-  if (/\s/.test(trimmed)) return false;
-  return /^[A-Za-z]{1,4}\d{1,4}[A-Za-z]?$/.test(trimmed);
+  // Real Mobil samples sometimes have a stray internal space in an
+  // otherwise-genuine vehicle code (e.g. "T 16" instead of "T16").
+  // Collapse internal whitespace before testing rather than rejecting
+  // outright — this still correctly rejects genuine multi-word values
+  // like driver or company names, since those won't fit the
+  // letter+digit(+letter) shape either way, with or without spaces.
+  var collapsed = trimmed.replace(/\s+/g, '');
+  return /^[A-Za-z]{1,4}\d{1,4}[A-Za-z]?$/.test(collapsed);
 }
 
 function resolveStubAssetName(row, cardNumber) {
