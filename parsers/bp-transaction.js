@@ -154,6 +154,7 @@ async function ensureAssets(supabase, userId, rows) {
   var loaded = await loadAssetMap(supabase, userId);
   var cardMap = loaded.cardMap;
   var seen = {};
+  var newStubs = [];
 
   for (var i = 0; i < rows.length; i++) {
     var cardNumber = normalizeCardNumber(rows[i]['Card Number']);
@@ -161,31 +162,51 @@ async function ensureAssets(supabase, userId, rows) {
     seen[cardNumber] = true;
 
     var stubName = resolveStubAssetName(rows[i], cardNumber);
-    var insertResult = await supabase.from('assets').insert({
+    newStubs.push({
       user_id: userId,
       asset_name: stubName,
       asset_type: detectAssetType(stubName),
       fuel_type: 'Diesel',
       bp_card_number: cardNumber,
-    }).select('id').single();
+    });
+  }
 
-    if (insertResult.error) {
-      // Card may have been created by a concurrent import — fall back to lookup
-      var existing = await supabase
-        .from('assets')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('bp_card_number', cardNumber)
-        .maybeSingle();
-      if (existing.data) {
-        cardMap[cardNumber] = { id: existing.data.id };
-      } else {
-        console.error('bp-transaction: failed to create stub asset for card', cardNumber, insertResult.error.message);
-      }
-      continue;
+  if (newStubs.length > 0) {
+    // Batched instead of one row at a time — a large historical export can
+    // contain dozens of unmatched cards, and doing a sequential
+    // insert-then-fallback-lookup round-trip per card was slow enough to
+    // exceed Vercel's 60s function timeout on large files (confirmed via
+    // Vercel logs: a real 271-row/59-card export consistently timed out
+    // through the email pipeline). onConflict targets bp_card_number alone
+    // to match the actual unique index (assets_bp_card_number_unique is
+    // NOT scoped by user_id — BP card numbers are unique platform-wide).
+    // ignoreDuplicates leaves any already-existing row untouched rather
+    // than overwriting it — same intent as the previous
+    // insert-fails-so-fall-back-to-lookup pattern, just as one batch
+    // instead of up to N sequential round-trips.
+    var upsertResult = await supabase
+      .from('assets')
+      .upsert(newStubs, { onConflict: 'bp_card_number', ignoreDuplicates: true });
+
+    if (upsertResult.error) {
+      console.error('bp-transaction: failed to batch-create stub assets', upsertResult.error.message);
     }
 
-    cardMap[cardNumber] = { id: insertResult.data.id };
+    var newCardNumbers = newStubs.map(function(s) { return s.bp_card_number; });
+    var lookupResult = await supabase
+      .from('assets')
+      .select('id, bp_card_number')
+      .eq('user_id', userId)
+      .in('bp_card_number', newCardNumbers);
+
+    if (lookupResult.error) {
+      console.error('bp-transaction: failed to look up newly-created stub assets', lookupResult.error.message);
+    } else {
+      (lookupResult.data || []).forEach(function(asset) {
+        var card = normalizeCardNumber(asset.bp_card_number);
+        if (card) cardMap[card] = { id: asset.id };
+      });
+    }
   }
 
   return { cardMap: cardMap };
