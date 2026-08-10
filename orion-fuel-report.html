@@ -49,10 +49,14 @@
 
   .mapping-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #1B2431; }
   .mapping-row:last-child { border-bottom: none; }
-  .mapping-raw { font-size: 13px; font-weight: 600; color: #F0F2F5; min-width: 220px; }
-  .mapping-count { font-size: 11px; color: #3A4A5C; min-width: 90px; }
+  .mapping-row.is-ignored { opacity: 0.45; }
+  .mapping-raw { font-size: 13px; font-weight: 600; color: #F0F2F5; min-width: 160px; }
+  .mapping-count { font-size: 11px; color: #3A4A5C; min-width: 70px; }
   .mapping-select { flex: 1; background: rgba(255,255,255,0.04); border: 1px solid #2D3748; border-radius: 8px; padding: 8px 12px; color: #F0F2F5; font-size: 13px; font-family: inherit; outline: none; cursor: pointer; }
   .mapping-select option { background: #0A101A; }
+  .mapping-ignore-btn { flex-shrink: 0; background: none; border: 1px solid #2D3748; color: #6B7785; font-size: 12px; font-weight: 600; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  .mapping-ignore-btn:hover { color: #F87171; border-color: rgba(248,113,113,0.4); }
+  .mapping-row.is-ignored .mapping-ignore-btn { color: #F87171; border-color: rgba(248,113,113,0.35); }
 
   .btn-primary { background: #0EA57A; border: none; color: #080C12; font-size: 13px; font-weight: 700; padding: 11px 24px; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
   .btn-primary:hover:not(:disabled) { background: #0BC48E; }
@@ -145,7 +149,7 @@
 
       <div class="card" id="mapping-card" hidden>
         <div class="card-title">Map unrecognised vehicles</div>
-        <div class="card-sub">These Vehicle IDs from the Orion file don't exactly match an asset in FleetMagnify. Map each one — the mapping is remembered for future uploads.</div>
+        <div class="card-sub">These Vehicle IDs from the Orion file don't exactly match an asset in FleetMagnify. Map each one to an asset, or click <strong>Ignore</strong> to exclude it from this report (remembered for future uploads).</div>
         <div id="mapping-list"></div>
         <div class="btn-row">
           <button class="btn-primary" id="save-mapping-btn">Save Mapping &amp; Continue</button>
@@ -562,6 +566,20 @@
   // ---------------------------------------------------------------------
   // Mapping UI for unmatched vehicles
   // ---------------------------------------------------------------------
+  function setMappingRowIgnored(row, ignored) {
+    var select = row.querySelector('.mapping-select');
+    var btn = row.querySelector('.mapping-ignore-btn');
+    if (ignored) {
+      select.value = '__not_tracked__';
+      row.classList.add('is-ignored');
+      if (btn) btn.textContent = 'Ignored';
+    } else {
+      row.classList.remove('is-ignored');
+      if (btn) btn.textContent = 'Ignore';
+      if (select.value === '__not_tracked__') select.value = '';
+    }
+  }
+
   function showMappingUI(unmatched) {
     var list = document.getElementById('mapping-list');
     list.innerHTML = '';
@@ -587,7 +605,18 @@
       row.innerHTML =
         '<div class="mapping-raw">' + esc(raw) + '</div>' +
         '<div class="mapping-count">' + count + ' row' + (count === 1 ? '' : 's') + '</div>' +
-        '<select class="mapping-select">' + optionsHtml + '</select>';
+        '<select class="mapping-select">' + optionsHtml + '</select>' +
+        '<button type="button" class="mapping-ignore-btn">Ignore</button>';
+
+      var select = row.querySelector('.mapping-select');
+      var ignoreBtn = row.querySelector('.mapping-ignore-btn');
+      ignoreBtn.addEventListener('click', function() {
+        setMappingRowIgnored(row, !row.classList.contains('is-ignored'));
+      });
+      select.addEventListener('change', function() {
+        setMappingRowIgnored(row, select.value === '__not_tracked__');
+      });
+
       list.appendChild(row);
     });
 
