@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orion Fuel Report | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/mobile-responsive.css">
+<link rel="stylesheet" href="css/sidebar.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #E2E8F0; min-height: 100vh; display: flex; }
+
+  .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar { padding: 20px 36px; border-bottom: 1px solid #2D3748; display: flex; align-items: center; justify-content: space-between; background: rgba(8,12,18,0.80); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 40; }
+  .breadcrumb { font-size: 13px; color: #3A4A5C; margin-bottom: 2px; }
+  .breadcrumb a { color: #3A4A5C; text-decoration: none; }
+  .breadcrumb a:hover { color: #6B7785; }
+  .topbar-title { font-size: 18px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.4px; }
+  .user-pill { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.04); border: 1px solid #2D3748; border-radius: 100px; padding: 6px 14px 6px 8px; }
+  .user-avatar { width: 26px; height: 26px; border-radius: 50%; background: rgba(14,165,122,0.20); border: 1px solid rgba(14,165,122,0.30); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #0EA57A; }
+  .user-name { font-size: 12.5px; font-weight: 500; color: #9BA4B0; }
+
+  .page-content { padding: 36px; flex: 1; max-width: 1280px; }
+  .page-eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #0EA57A; margin-bottom: 8px; }
+  .page-eyebrow .dash { width: 14px; height: 1.5px; background: #0EA57A; border-radius: 2px; }
+  .page-title { font-size: 28px; font-weight: 800; letter-spacing: -1px; color: #F0F2F5; margin-bottom: 6px; }
+  .page-sub { font-size: 14px; color: #5A6474; line-height: 1.55; margin-bottom: 28px; max-width: 760px; }
+
+  .method-note { display: flex; align-items: flex-start; gap: 12px; background: rgba(14,165,122,0.05); border: 1px solid rgba(14,165,122,0.14); border-radius: 12px; padding: 14px 18px; margin-bottom: 24px; }
+  .method-note-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .method-note p { font-size: 12.5px; color: #5A6474; line-height: 1.6; }
+  .method-note p strong { color: #C8D0DB; font-weight: 600; }
+  .method-note p + p { margin-top: 6px; }
+
+  .drop-zone { border: 2px dashed #2D3748; border-radius: 14px; padding: 34px 20px; text-align: center; cursor: pointer; transition: all 0.2s; position: relative; background: #111827; margin-bottom: 24px; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: rgba(14,165,122,0.5); background: rgba(14,165,122,0.03); }
+  .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .drop-icon { font-size: 30px; margin-bottom: 10px; opacity: 0.5; }
+  .drop-text { font-size: 13.5px; color: #5A6474; line-height: 1.6; }
+  .drop-text strong { color: #0EA57A; }
+  .drop-formats { font-size: 11px; color: #2E3A4A; margin-top: 4px; }
+  .drop-filename { font-size: 12.5px; color: #0EA57A; margin-top: 10px; font-weight: 600; }
+
+  .card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 22px; margin-bottom: 22px; }
+  .card-title { font-size: 14px; font-weight: 700; color: #C8D0DB; margin-bottom: 4px; }
+  .card-sub { font-size: 12px; color: #5A6474; margin-bottom: 16px; }
+
+  .mapping-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #1B2431; }
+  .mapping-row:last-child { border-bottom: none; }
+  .mapping-raw { font-size: 13px; font-weight: 600; color: #F0F2F5; min-width: 220px; }
+  .mapping-count { font-size: 11px; color: #3A4A5C; min-width: 90px; }
+  .mapping-select { flex: 1; background: rgba(255,255,255,0.04); border: 1px solid #2D3748; border-radius: 8px; padding: 8px 12px; color: #F0F2F5; font-size: 13px; font-family: inherit; outline: none; cursor: pointer; }
+  .mapping-select option { background: #0A101A; }
+
+  .btn-primary { background: #0EA57A; border: none; color: #080C12; font-size: 13px; font-weight: 700; padding: 11px 24px; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-primary:hover:not(:disabled) { background: #0BC48E; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary { background: rgba(255,255,255,0.04); border: 1px solid #2D3748; color: #C8D0DB; font-size: 13px; font-weight: 600; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-family: inherit; }
+  .btn-secondary:hover { border-color: #4A5568; }
+  .btn-row { display: flex; gap: 10px; margin-top: 18px; }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+  .kpi-card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 20px 22px; }
+  .kpi-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3A4A5C; margin-bottom: 10px; }
+  .kpi-value { font-size: 26px; font-weight: 800; letter-spacing: -1px; line-height: 1; margin-bottom: 4px; color: #0EA57A; }
+  .kpi-sub { font-size: 11px; color: #3A4A5C; }
+  .kpi-sub.warn { color: #EF9F27; }
+
+  .table-card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; overflow: hidden; margin-bottom: 24px; }
+  .table-card-header { padding: 18px 22px; border-bottom: 1px solid #2D3748; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  thead th { text-align: left; padding: 10px 16px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #3A4A5C; border-bottom: 1px solid #2D3748; white-space: nowrap; }
+  tbody td { padding: 9px 16px; border-bottom: 1px solid #1B2431; color: #C8D0DB; white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  tr.wo-subtotal td { background: rgba(255,255,255,0.02); font-weight: 700; color: #E2E8F0; }
+  tr.grand-total td { background: rgba(14,165,122,0.08); font-weight: 800; color: #0EA57A; font-size: 13.5px; border-top: 2px solid rgba(14,165,122,0.3); }
+  .cell-missing { color: #EF9F27; font-style: italic; }
+  .badge-alloc { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 100px; background: rgba(74,158,255,0.12); border: 1px solid rgba(74,158,255,0.3); color: #4A9EFF; margin-left: 6px; }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: #3A4A5C; }
+  .empty-state-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
+
+  .toast { position: fixed; bottom: 24px; right: 24px; background: #111827; border: 1px solid #2D3748; border-radius: 10px; padding: 12px 20px; font-size: 13px; color: #F0F2F5; z-index: 100; opacity: 0; transform: translateY(10px); transition: all 0.25s; pointer-events: none; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error { border-color: rgba(239, 68, 68, 0.4); color: #F87171; }
+  .toast.success { border-color: rgba(14,165,122,0.4); color: #0EA57A; }
+
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="sidebar-placeholder"></div>
+
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="breadcrumb"><a href="home.html">Overview</a> / Orion Fuel Report</div>
+      <div class="topbar-title">Orion Fuel Report</div>
+    </div>
+    <div class="user-pill">
+      <div class="user-avatar" id="user-avatar">?</div>
+      <div class="user-name" id="user-name">—</div>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="page-eyebrow"><span class="dash"></span> SVCE ONLY</div>
+    <div class="page-title">Orion Fuel Report</div>
+    <p class="page-sub">Upload the monthly Orion "Customer Hours" work order export. This matches each work order day to the asset's real recorded fuel consumption in FleetMagnify and totals it — for the Orion diesel price fluctuation credit.</p>
+
+    <div class="method-note">
+      <div class="method-note-icon">ℹ️</div>
+      <div>
+        <p><strong>Method:</strong> for every (asset, date) in the Orion file, litres = actual km driven that day (from telematics odometer readings) × the asset's calibrated travel rate, plus that day's actual idle hours × the asset's calibrated idle rate. This is real, calibrated fuel data — not a flat assumed rate — so totals will move month to month as driving and idle patterns change.</p>
+        <p><strong>Same-day, multiple work orders:</strong> if a truck shows on more than one Orion work order on the same date, that day's litres are split between them by Vehicle Hours share. <span class="badge-alloc" style="margin-left:0">flagged in the table</span></p>
+      </div>
+    </div>
+
+    <div id="gate-blocked" class="card" hidden>
+      <div class="empty-state">
+        <div class="empty-state-icon">🔒</div>
+        <div>This report is only available on the directors' fleet account.</div>
+      </div>
+    </div>
+
+    <div id="app-content" hidden>
+
+      <div class="card" id="upload-card">
+        <div class="card-title">Upload Orion work order export</div>
+        <div class="card-sub">The .csv from the Orion "Monthly Customer Hours" query — columns: W/Order #, Date, Vehicle ID, Job #, Vehicle Hours, Hours.</div>
+        <div class="drop-zone" id="csv-drop">
+          <input type="file" id="csv-file" accept=".csv">
+          <div class="drop-icon">📂</div>
+          <div class="drop-text"><strong>Click to browse</strong> or drag and drop</div>
+          <div class="drop-formats">Accepts .csv files only</div>
+          <div class="drop-filename" id="csv-filename"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn-primary" id="process-btn" disabled>Process File</button>
+        </div>
+      </div>
+
+      <div class="card" id="mapping-card" hidden>
+        <div class="card-title">Map unrecognised vehicles</div>
+        <div class="card-sub">These Vehicle IDs from the Orion file don't exactly match an asset in FleetMagnify. Map each one — the mapping is remembered for future uploads.</div>
+        <div id="mapping-list"></div>
+        <div class="btn-row">
+          <button class="btn-primary" id="save-mapping-btn">Save Mapping &amp; Continue</button>
+        </div>
+      </div>
+
+      <div id="results" hidden>
+        <div class="kpi-row">
+          <div class="kpi-card">
+            <div class="kpi-label">Total Orion Fuel Burn</div>
+            <div class="kpi-value" id="kpi-total-litres">—</div>
+            <div class="kpi-sub">litres, for the uploaded period</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Work Orders</div>
+            <div class="kpi-value" id="kpi-wo-count">—</div>
+            <div class="kpi-sub">distinct work orders</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Assets Involved</div>
+            <div class="kpi-value" id="kpi-asset-count">—</div>
+            <div class="kpi-sub">matched trucks</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Rows Missing Data</div>
+            <div class="kpi-value" id="kpi-missing-count" style="color:#EF9F27;">—</div>
+            <div class="kpi-sub warn">no telematics for that day — excluded from total</div>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-card-header">
+            <div class="card-title" style="margin-bottom:0;">Work Order Fuel Detail</div>
+            <div class="btn-row" style="margin-top:0;">
+              <button class="btn-secondary" id="export-csv-btn">Export CSV</button>
+              <button class="btn-secondary" id="export-pdf-btn">Export PDF</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Work Order</th>
+                  <th>Job #</th>
+                  <th>Date</th>
+                  <th>Vehicle</th>
+                  <th>Vehicle Hours</th>
+                  <th>Litres</th>
+                </tr>
+              </thead>
+              <tbody id="report-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/supabase-config.js"></script>
+<script src="js/subscription-guard.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="js/sidebar-nav.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  var SVCE_ACCOUNT_ID = 'd2ed89c3-dcaf-48b3-826a-f73802e4cf74';
+  var DEFAULT_TRAVEL_RATE_LPK = 0.35;
+  var DEFAULT_IDLE_RATE_LPH = 3.0;
+
+  var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var effectiveAccountId = null;
+  var companyName = '';
+
+  var assetsById = {};       // id -> asset row
+  var assetsByName = {};     // normalized asset_name -> asset row
+  var aliasMap = {};         // raw_vehicle_id -> { assetId, notTracked }
+  var pendingUnmatched = []; // raw vehicle ids seen this upload with no match/alias yet
+  var parsedRows = [];       // cleaned Orion rows { woNumber, date, vehicleRaw, jobNum, vehicleHours }
+  var reportRows = [];       // final computed rows for rendering/export
+
+  // ---------------------------------------------------------------------
+  // CSV parsing (quote-aware, matches parsers/parser-utils.js behaviour)
+  // ---------------------------------------------------------------------
+  function parseCsvLine(line) {
+    var result = [], cur = '', inQuotes = false;
+    for (var i = 0; i < line.length; i++) {
+      var ch = line[i];
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
+        else { inQuotes = !inQuotes; }
+      } else if (ch === ',' && !inQuotes) {
+        result.push(cur); cur = '';
+      } else { cur += ch; }
+    }
+    result.push(cur);
+    return result;
+  }
+
+  function normalizeHeader(h) { return String(h || '').replace(/^\uFEFF/, '').trim(); }
+
+  // Orion dates look like "02-Jul-26" (DD-Mon-YY)
+  var MONTHS = { jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12' };
+  function parseOrionDate(s) {
+    var m = String(s || '').trim().match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
+    if (!m) return null;
+    var day = m[1].padStart(2, '0');
+    var mon = MONTHS[m[2].toLowerCase()];
+    if (!mon) return null;
+    var year = m[3].length === 2 ? ('20' + m[3]) : m[3];
+    return year + '-' + mon + '-' + day;
+  }
+
+  function addDays(dateStr, n) {
+    var d = new Date(dateStr + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function parseOrionCsv(text) {
+    var lines = String(text).split(/\r?\n/).filter(function(l) { return l.trim().length > 0; });
+    if (lines.length < 2) throw new Error('File appears to be empty.');
+    var headers = parseCsvLine(lines[0]).map(normalizeHeader);
+    var idx = {
+      wo: headers.indexOf('W/Order #'),
+      date: headers.indexOf('Date'),
+      vehicle: headers.indexOf('Vehicle ID'),
+      job: headers.indexOf('Job #'),
+      vHours: headers.indexOf('Vehicle Hours')
+    };
+    if (idx.wo === -1 || idx.date === -1 || idx.vehicle === -1 || idx.vHours === -1) {
+      throw new Error('Unrecognised column headers. Expected W/Order #, Date, Vehicle ID, Job #, Vehicle Hours.');
+    }
+    var rows = [];
+    for (var i = 1; i < lines.length; i++) {
+      var cols = parseCsvLine(lines[i]);
+      var vehicleRaw = String(cols[idx.vehicle] || '').trim();
+      if (!vehicleRaw) continue; // labour row, not a vehicle
+      var dateIso = parseOrionDate(cols[idx.date]);
+      var vHours = parseFloat(cols[idx.vHours]);
+      if (!dateIso || isNaN(vHours)) continue;
+      rows.push({
+        woNumber: String(cols[idx.wo] || '').trim(),
+        date: dateIso,
+        vehicleRaw: vehicleRaw,
+        jobNum: String(cols[idx.job] || '').trim(),
+        vehicleHours: vHours
+      });
+    }
+    if (rows.length === 0) throw new Error('No usable vehicle rows found in file.');
+    return rows;
+  }
+
+  // ---------------------------------------------------------------------
+  // Vehicle ID -> asset matching
+  // ---------------------------------------------------------------------
+  function normalizeAssetKey(s) {
+    return String(s || '').trim().toLowerCase();
+  }
+
+  // Best-effort fallback if there's no exact match and no saved alias:
+  // Orion sometimes appends a descriptor after the code, e.g.
+  // "T31 Traffic Leased" or "T4 - Leased". Try the leading token.
+  function guessLeadingToken(raw) {
+    var m = String(raw || '').trim().match(/^([A-Za-z]+\d+)/);
+    return m ? m[1] : null;
+  }
+
+  function resolveVehicle(raw) {
+    var exact = assetsByName[normalizeAssetKey(raw)];
+    if (exact) return { assetId: exact.id, notTracked: false, source: 'exact' };
+
+    var alias = aliasMap[raw];
+    if (alias) return { assetId: alias.assetId, notTracked: alias.notTracked, source: 'alias' };
+
+    var guess = guessLeadingToken(raw);
+    if (guess) {
+      var guessed = assetsByName[normalizeAssetKey(guess)];
+      if (guessed) return { assetId: guessed.id, notTracked: false, source: 'guess', suggestedAssetId: guessed.id };
+    }
+    return null;
+  }
+
+  // ---------------------------------------------------------------------
+  // Data loading
+  // ---------------------------------------------------------------------
+  async function loadAssets() {
+    var result = await supabase.from('assets')
+      .select('id, asset_name, asset_type, travel_rate_lpk, idle_burn_rate_lph')
+      .eq('user_id', effectiveAccountId);
+    if (result.error) throw result.error;
+    assetsById = {};
+    assetsByName = {};
+    (result.data || []).forEach(function(a) {
+      assetsById[a.id] = a;
+      if (a.asset_name) assetsByName[normalizeAssetKey(a.asset_name)] = a;
+    });
+  }
+
+  async function loadAliases() {
+    var result = await supabase.from('vehicle_id_aliases')
+      .select('raw_vehicle_id, asset_id, not_tracked')
+      .eq('user_id', effectiveAccountId);
+    if (result.error) {
+      // Table may not exist yet if the SQL hasn't been run — degrade gracefully.
+      console.warn('vehicle_id_aliases not available yet:', result.error.message);
+      aliasMap = {};
+      return;
+    }
+    aliasMap = {};
+    (result.data || []).forEach(function(r) {
+      aliasMap[r.raw_vehicle_id] = { assetId: r.asset_id, notTracked: r.not_tracked };
+    });
+  }
+
+  async function loadTelematics(assetIds, minDate, maxDate) {
+    if (assetIds.length === 0) return {};
+    // Buffer backwards so we can find the prior odometer reading for the
+    // first day in range (daily distance = diff between consecutive reads).
+    var bufferedStart = addDays(minDate, -14);
+    var result = await supabase.from('telematics_records')
+      .select('asset_id, record_date, odometer_km, idle_hours')
+      .eq('user_id', effectiveAccountId)
+      .in('asset_id', assetIds)
+      .gte('record_date', bufferedStart)
+      .lte('record_date', maxDate)
+      .order('record_date', { ascending: true });
+    if (result.error) throw result.error;
+
+    var byAsset = {};
+    (result.data || []).forEach(function(r) {
+      byAsset[r.asset_id] = byAsset[r.asset_id] || [];
+      byAsset[r.asset_id].push(r);
+    });
+    return byAsset;
+  }
+
+  // ---------------------------------------------------------------------
+  // Fuel computation
+  // ---------------------------------------------------------------------
+  function effectiveTravelRate(asset) { return (asset && asset.travel_rate_lpk) || DEFAULT_TRAVEL_RATE_LPK; }
+  function effectiveIdleRate(asset) { return (asset && asset.idle_burn_rate_lph) || DEFAULT_IDLE_RATE_LPH; }
+
+  // Returns { litres, hasData } for one asset on one date, using the
+  // buffered telematics history for that asset.
+  function dailyLitres(asset, records, dateIso) {
+    if (!records || records.length === 0) return { litres: 0, hasData: false };
+    var todayIdx = -1;
+    for (var i = 0; i < records.length; i++) { if (records[i].record_date === dateIso) { todayIdx = i; break; } }
+    if (todayIdx === -1) return { litres: 0, hasData: false };
+
+    var today = records[todayIdx];
+    var prevOdo = null;
+    for (var j = todayIdx - 1; j >= 0; j--) {
+      if (records[j].odometer_km != null) { prevOdo = records[j].odometer_km; break; }
+    }
+    var km = 0;
+    if (prevOdo != null && today.odometer_km != null) {
+      km = Math.max(0, today.odometer_km - prevOdo);
+    }
+    var idleHours = today.idle_hours != null ? today.idle_hours : 0;
+
+    var litres = (km * effectiveTravelRate(asset)) + (idleHours * effectiveIdleRate(asset));
+    return { litres: litres, hasData: (prevOdo != null || today.idle_hours != null) };
+  }
+
+  // ---------------------------------------------------------------------
+  // Report build
+  // ---------------------------------------------------------------------
+  async function buildReport(rows) {
+    // Resolve vehicles; collect unmatched
+    var resolved = [];
+    var unmatchedSet = {};
+    rows.forEach(function(r) {
+      var m = resolveVehicle(r.vehicleRaw);
+      if (!m) { unmatchedSet[r.vehicleRaw] = true; }
+      resolved.push({ row: r, match: m });
+    });
+
+    var unmatched = Object.keys(unmatchedSet);
+    if (unmatched.length > 0) {
+      pendingUnmatched = unmatched;
+      showMappingUI(unmatched);
+      return;
+    }
+
+    // All resolved (excluding not_tracked) — pull telematics
+    var trackedResolved = resolved.filter(function(x) { return x.match && !x.match.notTracked; });
+    var assetIds = Array.from(new Set(trackedResolved.map(function(x) { return x.match.assetId; })));
+    var dates = rows.map(function(r) { return r.date; }).sort();
+    var minDate = dates[0], maxDate = dates[dates.length - 1];
+
+    var telematicsByAsset = await loadTelematics(assetIds, minDate, maxDate);
+
+    // Group by asset+date to split same-day multi-work-order litres by hours share
+    var byAssetDate = {};
+    trackedResolved.forEach(function(x) {
+      var key = x.match.assetId + '|' + x.row.date;
+      byAssetDate[key] = byAssetDate[key] || [];
+      byAssetDate[key].push(x);
+    });
+
+    reportRows = [];
+    var missingCount = 0;
+
+    Object.keys(byAssetDate).forEach(function(key) {
+      var group = byAssetDate[key];
+      var assetId = group[0].match.assetId;
+      var asset = assetsById[assetId];
+      var dateIso = group[0].row.date;
+      var dl = dailyLitres(asset, telematicsByAsset[assetId], dateIso);
+
+      var totalHoursThatDay = group.reduce(function(s, x) { return s + x.row.vehicleHours; }, 0);
+      var splitAcrossMultipleWOs = new Set(group.map(function(x) { return x.row.woNumber; })).size > 1;
+
+      group.forEach(function(x) {
+        var share = totalHoursThatDay > 0 ? (x.row.vehicleHours / totalHoursThatDay) : (1 / group.length);
+        var litres = dl.hasData ? dl.litres * share : null;
+        if (!dl.hasData) missingCount++;
+        reportRows.push({
+          woNumber: x.row.woNumber,
+          jobNum: x.row.jobNum,
+          date: dateIso,
+          vehicleRaw: x.row.vehicleRaw,
+          assetName: asset ? asset.asset_name : x.row.vehicleRaw,
+          vehicleHours: x.row.vehicleHours,
+          litres: litres,
+          split: splitAcrossMultipleWOs
+        });
+      });
+    });
+
+    // Not-tracked vehicles: show explicitly with no litres, not silently dropped
+    resolved.filter(function(x) { return x.match && x.match.notTracked; }).forEach(function(x) {
+      reportRows.push({
+        woNumber: x.row.woNumber, jobNum: x.row.jobNum, date: x.row.date,
+        vehicleRaw: x.row.vehicleRaw, assetName: x.row.vehicleRaw + ' (not tracked)',
+        vehicleHours: x.row.vehicleHours, litres: null, split: false
+      });
+      missingCount++;
+    });
+
+    reportRows.sort(function(a, b) {
+      if (a.woNumber !== b.woNumber) return a.woNumber < b.woNumber ? -1 : 1;
+      return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0);
+    });
+
+    renderReport(missingCount);
+  }
+
+  // ---------------------------------------------------------------------
+  // Mapping UI for unmatched vehicles
+  // ---------------------------------------------------------------------
+  function showMappingUI(unmatched) {
+    var list = document.getElementById('mapping-list');
+    list.innerHTML = '';
+    var assetOptions = Object.values(assetsById)
+      .filter(function(a) { return a.asset_name; })
+      .sort(function(a, b) { return a.asset_name.localeCompare(b.asset_name); });
+
+    unmatched.forEach(function(raw) {
+      var count = parsedRows.filter(function(r) { return r.vehicleRaw === raw; }).length;
+      var row = document.createElement('div');
+      row.className = 'mapping-row';
+      row.setAttribute('data-raw', raw);
+
+      var guess = guessLeadingToken(raw);
+      var guessedAsset = guess ? assetsByName[normalizeAssetKey(guess)] : null;
+
+      var optionsHtml = '<option value="">— select —</option><option value="__not_tracked__">Not tracked (leased/traffic vehicle, no fuel data)</option>';
+      optionsHtml += assetOptions.map(function(a) {
+        var sel = guessedAsset && guessedAsset.id === a.id ? ' selected' : '';
+        return '<option value="' + a.id + '"' + sel + '>' + esc(a.asset_name) + '</option>';
+      }).join('');
+
+      row.innerHTML =
+        '<div class="mapping-raw">' + esc(raw) + '</div>' +
+        '<div class="mapping-count">' + count + ' row' + (count === 1 ? '' : 's') + '</div>' +
+        '<select class="mapping-select">' + optionsHtml + '</select>';
+      list.appendChild(row);
+    });
+
+    document.getElementById('mapping-card').hidden = false;
+    document.getElementById('results').hidden = true;
+    document.getElementById('mapping-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function saveMapping() {
+    var rows = document.querySelectorAll('#mapping-list .mapping-row');
+    var toInsert = [];
+    var incomplete = false;
+    rows.forEach(function(row) {
+      var raw = row.getAttribute('data-raw');
+      var val = row.querySelector('.mapping-select').value;
+      if (!val) { incomplete = true; return; }
+      if (val === '__not_tracked__') {
+        toInsert.push({ user_id: effectiveAccountId, raw_vehicle_id: raw, asset_id: null, not_tracked: true });
+      } else {
+        toInsert.push({ user_id: effectiveAccountId, raw_vehicle_id: raw, asset_id: Number(val), not_tracked: false });
+      }
+    });
+    if (incomplete) { showToast('Please map every vehicle before continuing.', 'error'); return; }
+
+    var btn = document.getElementById('save-mapping-btn');
+    btn.disabled = true; btn.textContent = 'Saving...';
+    try {
+      var result = await supabase.from('vehicle_id_aliases')
+        .upsert(toInsert, { onConflict: 'user_id,raw_vehicle_id' });
+      if (result.error) throw result.error;
+      await loadAliases();
+      document.getElementById('mapping-card').hidden = true;
+      await buildReport(parsedRows);
+    } catch (e) {
+      showToast('Failed to save mapping: ' + e.message, 'error');
+    }
+    btn.disabled = false; btn.textContent = 'Save Mapping & Continue';
+  }
+
+  // ---------------------------------------------------------------------
+  // Rendering
+  // ---------------------------------------------------------------------
+  function fmtLitres(n) { return n == null ? '—' : Number(n).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' L'; }
+  function fmtDateShort(iso) { return new Date(iso + 'T00:00:00').toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: '2-digit' }); }
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function renderReport(missingCount) {
+    var tbody = document.getElementById('report-body');
+    tbody.innerHTML = '';
+
+    var groupedByWO = {};
+    reportRows.forEach(function(r) {
+      groupedByWO[r.woNumber] = groupedByWO[r.woNumber] || [];
+      groupedByWO[r.woNumber].push(r);
+    });
+
+    var grandTotal = 0;
+    var assetSet = new Set();
+
+    Object.keys(groupedByWO).sort().forEach(function(wo) {
+      var rows = groupedByWO[wo];
+      var woTotal = 0;
+      rows.forEach(function(r) {
+        assetSet.add(r.assetName);
+        if (r.litres != null) { woTotal += r.litres; grandTotal += r.litres; }
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' + esc(r.woNumber) + '</td>' +
+          '<td>' + esc(r.jobNum) + '</td>' +
+          '<td>' + fmtDateShort(r.date) + '</td>' +
+          '<td>' + esc(r.assetName) + (r.split ? '<span class="badge-alloc">split</span>' : '') + '</td>' +
+          '<td>' + r.vehicleHours.toFixed(2) + '</td>' +
+          '<td>' + (r.litres == null ? '<span class="cell-missing">no data</span>' : fmtLitres(r.litres)) + '</td>';
+        tbody.appendChild(tr);
+      });
+      var subtotalTr = document.createElement('tr');
+      subtotalTr.className = 'wo-subtotal';
+      subtotalTr.innerHTML = '<td colspan="5">Work Order ' + esc(wo) + ' subtotal</td><td>' + fmtLitres(woTotal) + '</td>';
+      tbody.appendChild(subtotalTr);
+    });
+
+    var grandTr = document.createElement('tr');
+    grandTr.className = 'grand-total';
+    grandTr.innerHTML = '<td colspan="5">TOTAL ORION FUEL BURN</td><td>' + fmtLitres(grandTotal) + '</td>';
+    tbody.appendChild(grandTr);
+
+    document.getElementById('kpi-total-litres').textContent = fmtLitres(grandTotal);
+    document.getElementById('kpi-wo-count').textContent = Object.keys(groupedByWO).length;
+    document.getElementById('kpi-asset-count').textContent = assetSet.size;
+    document.getElementById('kpi-missing-count').textContent = missingCount;
+
+    document.getElementById('results').hidden = false;
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // ---------------------------------------------------------------------
+  // Export
+  // ---------------------------------------------------------------------
+  function exportCsv() {
+    if (!reportRows.length) { showToast('No data to export.', 'error'); return; }
+    var lines = ['Work Order,Job #,Date,Vehicle,Vehicle Hours,Litres'];
+    var groupedByWO = {};
+    reportRows.forEach(function(r) { groupedByWO[r.woNumber] = groupedByWO[r.woNumber] || []; groupedByWO[r.woNumber].push(r); });
+    var grandTotal = 0;
+    Object.keys(groupedByWO).sort().forEach(function(wo) {
+      var woTotal = 0;
+      groupedByWO[wo].forEach(function(r) {
+        if (r.litres != null) { woTotal += r.litres; grandTotal += r.litres; }
+        lines.push([r.woNumber, r.jobNum, r.date, r.assetName, r.vehicleHours.toFixed(2), r.litres == null ? '' : r.litres.toFixed(1)].join(','));
+      });
+      lines.push(['WORK ORDER ' + wo + ' SUBTOTAL', '', '', '', '', woTotal.toFixed(1)].join(','));
+    });
+    lines.push(['TOTAL ORION FUEL BURN', '', '', '', '', grandTotal.toFixed(1)].join(','));
+
+    var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'orion_fuel_report.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('CSV exported.', 'success');
+  }
+
+  function exportPdf() {
+    if (!reportRows.length) { showToast('No data to export.', 'error'); return; }
+    try {
+      var doc = new window.jspdf.jsPDF();
+      var pageW = doc.internal.pageSize.getWidth();
+      var margin = 14;
+      doc.setFillColor(14, 165, 122);
+      doc.rect(0, 0, pageW, 26, 'F');
+      doc.setTextColor(8, 12, 18);
+      doc.setFontSize(15); doc.setFont('helvetica', 'bold');
+      doc.text('FleetMagnify', margin, 12);
+      doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+      doc.text('Orion Work Order Fuel Report', margin, 19);
+      doc.setTextColor(255, 255, 255);
+      doc.text(companyName || '', pageW - margin, 12, { align: 'right' });
+      doc.text(new Date().toLocaleDateString('en-NZ'), pageW - margin, 19, { align: 'right' });
+
+      var groupedByWO = {};
+      reportRows.forEach(function(r) { groupedByWO[r.woNumber] = groupedByWO[r.woNumber] || []; groupedByWO[r.woNumber].push(r); });
+      var body = [];
+      var grandTotal = 0;
+      Object.keys(groupedByWO).sort().forEach(function(wo) {
+        var woTotal = 0;
+        groupedByWO[wo].forEach(function(r) {
+          if (r.litres != null) { woTotal += r.litres; grandTotal += r.litres; }
+          body.push([r.woNumber, r.jobNum, fmtDateShort(r.date), r.assetName, r.vehicleHours.toFixed(2), r.litres == null ? '—' : r.litres.toFixed(1)]);
+        });
+        body.push(['WO ' + wo + ' subtotal', '', '', '', '', woTotal.toFixed(1)]);
+      });
+      body.push(['TOTAL ORION FUEL BURN', '', '', '', '', grandTotal.toFixed(1)]);
+
+      doc.autoTable({
+        startY: 34,
+        head: [['Work Order', 'Job #', 'Date', 'Vehicle', 'Vehicle Hrs', 'Litres']],
+        body: body,
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 8, cellPadding: 2.5 },
+        headStyles: { fillColor: [14, 165, 122], textColor: [8, 12, 18], fontStyle: 'bold' },
+        didParseCell: function(data) {
+          if (data.row.raw[0] === 'TOTAL ORION FUEL BURN') { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [230, 245, 240]; }
+        }
+      });
+
+      doc.save('orion_fuel_report.pdf');
+      showToast('PDF exported.', 'success');
+    } catch (e) {
+      showToast('PDF export failed.', 'error');
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Upload wiring
+  // ---------------------------------------------------------------------
+  function setupDropZone(zoneId, inputId, onFile) {
+    var zone = document.getElementById(zoneId);
+    var input = document.getElementById(inputId);
+    zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', function() { zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop', function(e) {
+      e.preventDefault(); zone.classList.remove('drag-over');
+      if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]);
+    });
+    input.addEventListener('change', function() { if (input.files[0]) onFile(input.files[0]); });
+  }
+
+  function readFileAsText(file) {
+    return new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function(e) { resolve(e.target.result); };
+      reader.onerror = function() { reject(new Error('Failed to read file')); };
+      reader.readAsText(file);
+    });
+  }
+
+  function showToast(msg, type) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (type ? ' ' + type : '');
+    setTimeout(function() { t.className = 'toast'; }, 3200);
+  }
+
+  var selectedFile = null;
+
+  function init() {
+    setupDropZone('csv-drop', 'csv-file', function(file) {
+      selectedFile = file;
+      document.getElementById('csv-filename').textContent = file.name;
+      document.getElementById('process-btn').disabled = false;
+    });
+
+    document.getElementById('process-btn').addEventListener('click', async function() {
+      if (!selectedFile) return;
+      var btn = this;
+      btn.disabled = true; btn.textContent = 'Processing...';
+      try {
+        var text = await readFileAsText(selectedFile);
+        parsedRows = parseOrionCsv(text);
+        await buildReport(parsedRows);
+      } catch (e) {
+        showToast(e.message, 'error');
+      }
+      btn.disabled = false; btn.textContent = 'Process File';
+    });
+
+    document.getElementById('save-mapping-btn').addEventListener('click', saveMapping);
+    document.getElementById('export-csv-btn').addEventListener('click', exportCsv);
+    document.getElementById('export-pdf-btn').addEventListener('click', exportPdf);
+  }
+
+  async function resolveAccountId(authUserId) {
+    var memberResult = await supabase.from('account_members')
+      .select('account_owner_user_id')
+      .eq('member_auth_user_id', authUserId)
+      .maybeSingle();
+    if (memberResult.data && memberResult.data.account_owner_user_id) return memberResult.data.account_owner_user_id;
+    return authUserId;
+  }
+
+  async function boot() {
+    var sessionResult = await supabase.auth.getSession();
+    if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
+    var currentUser = sessionResult.data.session.user;
+
+    effectiveAccountId = await resolveAccountId(currentUser.id);
+    window.FleetMagnifySidebar.inject('orion-fuel-report.html', supabase, effectiveAccountId);
+
+    var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
+    if (!hasAccess) return;
+
+    companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name) ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
+    document.getElementById('user-name').textContent = companyName;
+    document.getElementById('user-avatar').textContent = companyName.charAt(0).toUpperCase();
+
+    if (effectiveAccountId !== SVCE_ACCOUNT_ID) {
+      document.getElementById('gate-blocked').hidden = false;
+      return;
+    }
+
+    await loadAssets();
+    await loadAliases();
+    document.getElementById('app-content').hidden = false;
+    init();
+  }
+
+  boot();
+})();
+</script>
+<script src="js/mobile-nav.js" defer></script>
+<script defer src="/_vercel/insights/script.js"></script>
+</body>
+</html>

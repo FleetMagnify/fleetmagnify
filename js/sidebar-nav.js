@@ -2,6 +2,9 @@ window.FleetMagnifySidebar = (function() {
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
 
+  // toby@svce.co.nz — the directors' fleet, trading as Independent Line Services
+  var ILS_ACCOUNT_ID = 'd2ed89c3-dcaf-48b3-826a-f73802e4cf74';
+
   var NAV_ITEMS = [
     { type: 'link', href: 'home.html', icon: '🏠', text: 'Overview' },
     { type: 'label', text: 'Machinery Modules' },
@@ -17,6 +20,7 @@ window.FleetMagnifySidebar = (function() {
     { type: 'link', href: 'cost-per-km-analyst.html', icon: '📏', text: 'Cost Per KM Analyst' },
     { type: 'link', href: 'truck-emissions-analyst.html', icon: '🌿', text: 'Emissions Analyst' },
     { type: 'link', href: 'trip-report.html', icon: '🗺️', text: 'Trip Report' },
+    { type: 'link', href: 'orion-fuel-report.html', icon: '🧾', text: 'Orion Fuel Report', ilsOnly: true },
     { type: 'label', text: 'Fleet Management' },
     { type: 'link', href: 'assets.html', icon: '🚧', text: 'Assets' },
     { type: 'link', href: 'upload.html', icon: '📤', text: 'Upload Data' },
@@ -30,7 +34,8 @@ window.FleetMagnifySidebar = (function() {
         return '<div class="nav-label">' + item.text + '</div>';
       }
       var cls = (item.href === activePage) ? 'nav-item active' : 'nav-item';
-      return '<a class="' + cls + '" href="' + item.href + '"><span class="nav-icon">' + item.icon + '</span> ' + item.text + '</a>';
+      var attrs = item.ilsOnly ? ' data-ils-only="true" style="display:none"' : '';
+      return '<a class="' + cls + '" href="' + item.href + '"' + attrs + '><span class="nav-icon">' + item.icon + '</span> ' + item.text + '</a>';
     }).join('\n    ');
   }
 
@@ -104,6 +109,11 @@ window.FleetMagnifySidebar = (function() {
     placeholder.outerHTML = render(activePage);
 
     if (!supabase || !effectiveAccountId) return;
+
+    if (effectiveAccountId === ILS_ACCOUNT_ID) {
+      var ilsItems = document.querySelectorAll('[data-ils-only="true"]');
+      for (var i = 0; i < ilsItems.length; i++) { ilsItems[i].style.display = ''; }
+    }
 
     var composition = await detectFleetComposition(supabase, effectiveAccountId);
     if (!composition.hasTrucks && !composition.hasMachinery) return;
