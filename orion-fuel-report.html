@@ -312,12 +312,43 @@
     return String(s || '').trim().toLowerCase();
   }
 
-  // Best-effort fallback if there's no exact match and no saved alias:
-  // Orion sometimes appends a descriptor after the code, e.g.
-  // "T31 Traffic Leased" or "T4 - Leased". Try the leading token.
-  function guessLeadingToken(raw) {
-    var m = String(raw || '').trim().match(/^([A-Za-z]+\d+)/);
-    return m ? m[1] : null;
+  // Tokenize the same way assets.html's findSuggestedMatch does —
+  // strip punctuation, lower-case, split on whitespace.
+  function tokenize(s) {
+    return String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(Boolean);
+  }
+
+  // Port of assets.html findSuggestedMatch: word-overlap score with a
+  // +0.4 bonus when the first token matches (so "T34" strongly matches
+  // "T34 Civils truck"). Threshold score > 0.2.
+  function findBestAssetMatch(raw, assets) {
+    var bestAsset = null;
+    var bestScore = 0;
+    var rawWords = tokenize(raw);
+
+    (assets || []).forEach(function(asset) {
+      var assetWords = tokenize(asset.asset_name);
+      var matchingWords = rawWords.filter(function(w) {
+        return w.length >= 2 && assetWords.indexOf(w) !== -1;
+      });
+      var score = matchingWords.length > 0
+        ? matchingWords.length / Math.max(rawWords.length, assetWords.length)
+        : 0;
+      if (rawWords[0] && assetWords[0] && rawWords[0] === assetWords[0] && rawWords[0].length >= 2) {
+        score += 0.4;
+      }
+      if (score > bestScore && score > 0.2) {
+        bestScore = score;
+        bestAsset = asset;
+      }
+    });
+    return bestAsset;
+  }
+
+  // Leased / traffic-control Orion IDs have no FleetMagnify telematics —
+  // auto-classify as not-tracked so they never hit the mapping screen.
+  function looksNotMonitored(raw) {
+    return /\b(leased|traffic)\b/i.test(String(raw || ''));
   }
 
   function resolveVehicle(raw) {
@@ -327,10 +358,13 @@
     var alias = aliasMap[raw];
     if (alias) return { assetId: alias.assetId, notTracked: alias.notTracked, source: 'alias' };
 
-    var guess = guessLeadingToken(raw);
-    if (guess) {
-      var guessed = assetsByName[normalizeAssetKey(guess)];
-      if (guessed) return { assetId: guessed.id, notTracked: false, source: 'guess', suggestedAssetId: guessed.id };
+    if (looksNotMonitored(raw)) {
+      return { assetId: null, notTracked: true, source: 'auto_not_tracked' };
+    }
+
+    var suggested = findBestAssetMatch(raw, Object.values(assetsById));
+    if (suggested) {
+      return { assetId: suggested.id, notTracked: false, source: 'suggested', suggestedAssetId: suggested.id };
     }
     return null;
   }
@@ -427,7 +461,10 @@
     var unmatchedSet = {};
     rows.forEach(function(r) {
       var m = resolveVehicle(r.vehicleRaw);
-      if (!m) { unmatchedSet[r.vehicleRaw] = true; }
+      // Suggested fuzzy matches still need user confirmation in the
+      // mapping UI (pre-selected, not silently accepted). Auto not-
+      // tracked (leased/traffic) resolves here and is skipped below.
+      if (!m || m.source === 'suggested') { unmatchedSet[r.vehicleRaw] = true; }
       resolved.push({ row: r, match: m });
     });
 
@@ -518,12 +555,12 @@
       row.className = 'mapping-row';
       row.setAttribute('data-raw', raw);
 
-      var guess = guessLeadingToken(raw);
-      var guessedAsset = guess ? assetsByName[normalizeAssetKey(guess)] : null;
+      var match = resolveVehicle(raw);
+      var suggestedId = (match && match.source === 'suggested') ? match.suggestedAssetId : null;
 
       var optionsHtml = '<option value="">— select —</option><option value="__not_tracked__">Not tracked (leased/traffic vehicle, no fuel data)</option>';
       optionsHtml += assetOptions.map(function(a) {
-        var sel = guessedAsset && guessedAsset.id === a.id ? ' selected' : '';
+        var sel = suggestedId && suggestedId === a.id ? ' selected' : '';
         return '<option value="' + a.id + '"' + sel + '>' + esc(a.asset_name) + '</option>';
       }).join('');
 
