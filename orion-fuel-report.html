@@ -226,8 +226,10 @@
   var effectiveAccountId = null;
   var companyName = '';
 
-  var assetsById = {};       // id -> asset row
-  var assetsByName = {};     // normalized asset_name -> asset row
+  var assetsById = {};       // id -> asset row (active / not ignored only)
+  var assetsByName = {};     // normalized asset_name -> asset row (active only)
+  var ignoredAssets = [];    // is_ignored=true rows — used only to auto-skip Orion IDs
+  var ignoredAssetsByName = {}; // normalized asset_name -> ignored asset
   var aliasMap = {};         // raw_vehicle_id -> { assetId, notTracked }
   var pendingUnmatched = []; // raw vehicle ids seen this upload with no match/alias yet
   var parsedRows = [];       // cleaned Orion rows { woNumber, date, vehicleRaw, jobNum, vehicleHours }
@@ -366,6 +368,16 @@
     if (suggested) {
       return { assetId: suggested.id, notTracked: false, source: 'suggested', suggestedAssetId: suggested.id };
     }
+
+    // Ignored assets ("Not a Fleet Asset") are deliberately excluded from
+    // active matching and the mapping dropdown — but if an Orion Vehicle ID
+    // would have matched one, treat it as not-tracked so it never appears
+    // on the mapping screen asking for a decision again.
+    var ignoredExact = ignoredAssetsByName[normalizeAssetKey(raw)];
+    if (ignoredExact || findBestAssetMatch(raw, ignoredAssets)) {
+      return { assetId: null, notTracked: true, source: 'ignored' };
+    }
+
     return null;
   }
 
@@ -374,13 +386,19 @@
   // ---------------------------------------------------------------------
   async function loadAssets() {
     var result = await supabase.from('assets')
-      .select('id, asset_name, asset_type, travel_rate_lpk, idle_burn_rate_lph')
-      .eq('user_id', effectiveAccountId)
-      .eq('is_ignored', false);
+      .select('id, asset_name, asset_type, travel_rate_lpk, idle_burn_rate_lph, is_ignored')
+      .eq('user_id', effectiveAccountId);
     if (result.error) throw result.error;
     assetsById = {};
     assetsByName = {};
+    ignoredAssets = [];
+    ignoredAssetsByName = {};
     (result.data || []).forEach(function(a) {
+      if (a.is_ignored) {
+        ignoredAssets.push(a);
+        if (a.asset_name) ignoredAssetsByName[normalizeAssetKey(a.asset_name)] = a;
+        return;
+      }
       assetsById[a.id] = a;
       if (a.asset_name) assetsByName[normalizeAssetKey(a.asset_name)] = a;
     });
@@ -464,7 +482,8 @@
       var m = resolveVehicle(r.vehicleRaw);
       // Suggested fuzzy matches still need user confirmation in the
       // mapping UI (pre-selected, not silently accepted). Auto not-
-      // tracked (leased/traffic) resolves here and is skipped below.
+      // tracked (leased/traffic) and ignored-asset matches resolve here
+      // and are skipped below — they never appear in the mapping list.
       if (!m || m.source === 'suggested') { unmatchedSet[r.vehicleRaw] = true; }
       resolved.push({ row: r, match: m });
     });
