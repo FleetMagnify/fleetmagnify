@@ -375,7 +375,8 @@
   async function loadAssets() {
     var result = await supabase.from('assets')
       .select('id, asset_name, asset_type, travel_rate_lpk, idle_burn_rate_lph')
-      .eq('user_id', effectiveAccountId);
+      .eq('user_id', effectiveAccountId)
+      .eq('is_ignored', false);
     if (result.error) throw result.error;
     assetsById = {};
     assetsByName = {};
