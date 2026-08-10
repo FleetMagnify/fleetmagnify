@@ -545,15 +545,8 @@
       });
     });
 
-    // Not-tracked vehicles: show explicitly with no litres, not silently dropped
-    resolved.filter(function(x) { return x.match && x.match.notTracked; }).forEach(function(x) {
-      reportRows.push({
-        woNumber: x.row.woNumber, jobNum: x.row.jobNum, date: x.row.date,
-        vehicleRaw: x.row.vehicleRaw, assetName: x.row.vehicleRaw + ' (not tracked)',
-        vehicleHours: x.row.vehicleHours, litres: null, split: false
-      });
-      missingCount++;
-    });
+    // Not-tracked / ignored Orion Vehicle IDs are excluded from the report
+    // entirely — they must not appear in totals, the detail table, or exports.
 
     reportRows.sort(function(a, b) {
       if (a.woNumber !== b.woNumber) return a.woNumber < b.woNumber ? -1 : 1;
