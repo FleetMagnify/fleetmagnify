@@ -222,7 +222,6 @@
 (function() {
   'use strict';
 
-  var SVCE_ACCOUNT_ID = 'd2ed89c3-dcaf-48b3-826a-f73802e4cf74';
   var DEFAULT_TRAVEL_RATE_LPK = 0.35;
   var DEFAULT_IDLE_RATE_LPH = 3.0;
 
@@ -857,11 +856,6 @@
     companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name) ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
     document.getElementById('user-name').textContent = companyName;
     document.getElementById('user-avatar').textContent = companyName.charAt(0).toUpperCase();
-
-    if (effectiveAccountId !== SVCE_ACCOUNT_ID) {
-      document.getElementById('gate-blocked').hidden = false;
-      return;
-    }
 
     await loadAssets();
     await loadAliases();
