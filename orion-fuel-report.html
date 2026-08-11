@@ -457,22 +457,16 @@
   function dailyLitres(asset, records, dateIso) {
     if (!records || records.length === 0) return { litres: 0, hasData: false };
     var todayIdx = -1;
-    for (var i = 0; i < records.length; i++) { if (records[i].record_date === dateIso) { todayIdx = i; break; } }
+    for (var i = 0; i < records.length; i++) {
+      if (records[i].record_date === dateIso) { todayIdx = i; break; }
+    }
     if (todayIdx === -1) return { litres: 0, hasData: false };
-
     var today = records[todayIdx];
-    var prevOdo = null;
-    for (var j = todayIdx - 1; j >= 0; j--) {
-      if (records[j].odometer_km != null) { prevOdo = records[j].odometer_km; break; }
-    }
-    var km = 0;
-    if (prevOdo != null && today.odometer_km != null) {
-      km = Math.max(0, today.odometer_km - prevOdo);
-    }
+    var km = today.daily_distance_km != null ? Math.max(0, today.daily_distance_km) : 0;
     var idleHours = today.idle_hours != null ? today.idle_hours : 0;
-
+    var hasData = (today.daily_distance_km != null || today.idle_hours != null);
     var litres = (km * effectiveTravelRate(asset)) + (idleHours * effectiveIdleRate(asset));
-    return { litres: litres, hasData: (prevOdo != null || today.idle_hours != null) };
+    return { litres: litres, hasData: hasData };
   }
 
   // ---------------------------------------------------------------------
