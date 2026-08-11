@@ -28,13 +28,19 @@ function isNavmanMileageCsv(rawCsv) {
 
 function parseDMY(dateStr) {
   // Parse DD/MM/YYYY explicitly — never use auto-detection
+  // Navman exports with UTC+12 timezone, which causes dates
+  // to be one day behind NZ local time. Add one day to compensate.
   var parts = String(dateStr || '').trim().split('/');
   if (parts.length !== 3) return null;
-  var day = parts[0].padStart(2, '0');
-  var month = parts[1].padStart(2, '0');
-  var year = parts[2];
-  if (year.length !== 4) return null;
-  return year + '-' + month + '-' + day;
+  var day = parseInt(parts[0], 10);
+  var month = parseInt(parts[1], 10);
+  var year = parseInt(parts[2], 10);
+  if (!year || year < 2000) return null;
+  var d = new Date(year, month - 1, day + 1);
+  var yy = d.getFullYear();
+  var mm = String(d.getMonth() + 1).padStart(2, '0');
+  var dd = String(d.getDate()).padStart(2, '0');
+  return yy + '-' + mm + '-' + dd;
 }
 
 function parseNavmanMileageRows(rawCsv) {
