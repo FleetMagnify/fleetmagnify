@@ -217,6 +217,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="js/report-theme.js"></script>
 <script src="js/sidebar-nav.js"></script>
 <script>
 (function() {
@@ -727,46 +728,99 @@
   function exportPdf() {
     if (!reportRows.length) { showToast('No data to export.', 'error'); return; }
     try {
-      var doc = new window.jspdf.jsPDF();
-      var pageW = doc.internal.pageSize.getWidth();
-      var margin = 14;
-      doc.setFillColor(14, 165, 122);
-      doc.rect(0, 0, pageW, 26, 'F');
-      doc.setTextColor(8, 12, 18);
-      doc.setFontSize(15); doc.setFont('helvetica', 'bold');
-      doc.text('FleetMagnify', margin, 12);
-      doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-      doc.text('Orion Work Order Fuel Report', margin, 19);
-      doc.setTextColor(255, 255, 255);
-      doc.text(companyName || '', pageW - margin, 12, { align: 'right' });
-      doc.text(new Date().toLocaleDateString('en-NZ'), pageW - margin, 19, { align: 'right' });
+      var Theme = window.FleetMagnifyReportTheme;
+      var doc = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      var margin = Theme.LAYOUT.margin;
 
       var groupedByWO = {};
-      reportRows.forEach(function(r) { groupedByWO[r.woNumber] = groupedByWO[r.woNumber] || []; groupedByWO[r.woNumber].push(r); });
-      var body = [];
-      var grandTotal = 0;
-      Object.keys(groupedByWO).sort().forEach(function(wo) {
-        var woTotal = 0;
-        groupedByWO[wo].forEach(function(r) {
-          if (r.litres != null) { woTotal += r.litres; grandTotal += r.litres; }
-          body.push([r.woNumber, r.jobNum, fmtDateShort(r.date), r.assetName, r.vehicleHours.toFixed(2), r.litres == null ? '—' : r.litres.toFixed(1)]);
-        });
-        body.push(['WO ' + wo + ' subtotal', '', '', '', '', woTotal.toFixed(1)]);
+      var assetSet = {};
+      var dates = [];
+      reportRows.forEach(function(r) {
+        groupedByWO[r.woNumber] = groupedByWO[r.woNumber] || [];
+        groupedByWO[r.woNumber].push(r);
+        assetSet[r.assetName] = true;
+        if (r.date) dates.push(r.date);
       });
-      body.push(['TOTAL ORION FUEL BURN', '', '', '', '', grandTotal.toFixed(1)]);
-
-      doc.autoTable({
-        startY: 34,
-        head: [['Work Order', 'Job #', 'Date', 'Vehicle', 'Vehicle Hrs', 'Litres']],
-        body: body,
-        margin: { left: margin, right: margin },
-        styles: { fontSize: 8, cellPadding: 2.5 },
-        headStyles: { fillColor: [14, 165, 122], textColor: [8, 12, 18], fontStyle: 'bold' },
-        didParseCell: function(data) {
-          if (data.row.raw[0] === 'TOTAL ORION FUEL BURN') { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [230, 245, 240]; }
+      dates.sort();
+      var periodLabel = '—';
+      if (dates.length) {
+        var from = new Date(dates[0] + 'T00:00:00');
+        var to = new Date(dates[dates.length - 1] + 'T00:00:00');
+        var fmtPeriod = function(d) {
+          return d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' });
+        };
+        periodLabel = fmtPeriod(from) + '–' + fmtPeriod(to);
+        if (from.getFullYear() === to.getFullYear()) {
+          periodLabel = from.getDate() + '–' + to.getDate() + ' ' +
+            to.toLocaleDateString('en-NZ', { month: 'short' });
+          if (from.getMonth() !== to.getMonth()) {
+            periodLabel = fmtPeriod(from) + '–' + fmtPeriod(to);
+          }
         }
+      }
+
+      var grandTotal = 0;
+      var body = [];
+      var colCount = 4;
+      Object.keys(groupedByWO).sort().forEach(function(wo) {
+        var rows = groupedByWO[wo];
+        var woTotal = 0;
+        var jobNum = rows[0] && rows[0].jobNum ? rows[0].jobNum : '';
+        var groupLabel = 'WORK ORDER ' + wo + (jobNum ? '  Job #' + jobNum : '');
+        body.push(Theme.groupRow(groupLabel, colCount));
+        rows.forEach(function(r) {
+          if (r.litres != null) woTotal += r.litres;
+          body.push([
+            fmtDateShort(r.date),
+            r.assetName,
+            Number(r.vehicleHours).toFixed(2),
+            r.litres == null ? '—' : Number(r.litres).toFixed(1)
+          ]);
+        });
+        grandTotal += woTotal;
+        body.push(Theme.subtotalRow('Subtotal — ' + wo, woTotal.toFixed(1) + ' L', colCount));
       });
 
+      var y = Theme.drawHeader(doc, {
+        title: 'Orion Work Order Fuel Report',
+        subtitle: 'Fuel Cost Recovery — Contractor Submission'
+      });
+      y = Theme.drawMetaLine(doc, y, {
+        accountName: companyName,
+        submittedTo: 'Orion Network',
+        generated: Theme.formatGeneratedDate()
+      });
+      y = Theme.drawStatCards(doc, y, [
+        { label: 'Total Fuel Burn', value: grandTotal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' L', accent: true },
+        { label: 'Work Orders', value: String(Object.keys(groupedByWO).length) },
+        { label: 'Assets Covered', value: String(Object.keys(assetSet).length) },
+        { label: 'Reporting Period', value: periodLabel }
+      ]);
+
+      doc.autoTable(Theme.tableOptions({
+        startY: y,
+        head: [['Date', 'Vehicle', 'Veh. Hrs', 'Litres']],
+        body: body,
+        columnStyles: {
+          2: { halign: 'right' },
+          3: { halign: 'right' }
+        }
+      }));
+
+      var afterTableY = (doc.lastAutoTable && doc.lastAutoTable.finalY)
+        ? doc.lastAutoTable.finalY + 3
+        : y + 10;
+      var monthLabel = dates.length
+        ? new Date(dates[0] + 'T00:00:00').toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' }).toUpperCase()
+        : '';
+      Theme.drawGrandTotalBand(
+        doc,
+        afterTableY,
+        'TOTAL ORION FUEL BURN' + (monthLabel ? ' — ' + monthLabel : ''),
+        grandTotal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' L'
+      );
+
+      Theme.applyFooters(doc);
       doc.save('orion_fuel_report.pdf');
       showToast('PDF exported.', 'success');
     } catch (e) {
@@ -853,7 +907,7 @@
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
 
-    companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name) ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
+    companyName = await window.FleetMagnifyReportTheme.resolveAccountDisplayName(supabase, effectiveAccountId);
     document.getElementById('user-name').textContent = companyName;
     document.getElementById('user-avatar').textContent = companyName.charAt(0).toUpperCase();
 

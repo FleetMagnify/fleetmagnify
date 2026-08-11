@@ -255,12 +255,14 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="js/report-theme.js"></script>
 <script src="js/sidebar-nav.js"></script>
 <script>
 (function() {
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
   var effectiveAccountId = null;
+  var companyName = '';
   var vehiclesList = [];
   var selectedVehicle = null;
   var displayPeriods = [];
@@ -570,10 +572,9 @@
     });
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
-    var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
-      ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
-    document.getElementById('user-name').textContent = name;
-    document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+    companyName = await window.FleetMagnifyReportTheme.resolveAccountDisplayName(supabase, effectiveAccountId);
+    document.getElementById('user-name').textContent = companyName;
+    document.getElementById('user-avatar').textContent = companyName.charAt(0).toUpperCase();
 
     var today = new Date();
     var monthAgo = new Date();
@@ -899,29 +900,10 @@
 
   document.getElementById('export-pdf-btn').addEventListener('click', async function() {
     if (!displayPeriods.length || !selectedVehicle) return;
+    var Theme = window.FleetMagnifyReportTheme;
     var { jsPDF } = window.jspdf;
     var doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    var margin = 18;
-    var y = 18;
-
-    // Header
-    doc.setFillColor(14, 165, 122);
-    doc.rect(0, 0, 210, 28, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.text('FleetMagnify — Emissions Report', margin, 12);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text(selectedVehicle.asset_name || '', margin, 20);
-    y = 38;
-
-    // Summary KPIs
-    doc.setTextColor(30, 40, 55);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Summary', margin, y); y += 7;
-    doc.setFont('helvetica', 'normal');
+    var margin = Theme.LAYOUT.margin;
 
     var totalLitres = 0;
     var totalEmissionsKg = 0;
@@ -930,84 +912,71 @@
       totalEmissionsKg += p.totalEmissionsKg;
     });
 
-    // Same stable rate × emission-factor headline used on-screen, so the export
-    // matches what's displayed rather than the old latest-period-based figure.
     var travelRate = effectiveTravelRate(selectedVehicle);
     var factor = getEmissionFactor(selectedVehicle.fuel_type);
     var headlineEmissionsPerKm = travelRate * factor;
 
-    // Same telematics range diff used for the on-screen "Total KM Driven" KPI,
-    // so the exported figure matches exactly instead of being a period-sum.
     var dateFrom = document.getElementById('date-from').value;
     var dateTo = document.getElementById('date-to').value;
     var rangeKm = await fetchRangeDistanceKm(selectedVehicle.id, dateFrom, dateTo);
 
-    var kpis = [
-      ['Total Emissions', fmtNum(totalEmissionsKg / 1000, 2) + ' t CO₂'],
-      ['Emissions Per KM', fmtNum(headlineEmissionsPerKm, 3) + ' kg/km'],
-      ['Total Distance', rangeKm != null ? (Math.round(rangeKm).toLocaleString() + ' km') : '—'],
-      ['Total Fuel Used', fmtNum(totalLitres, 1) + ' L'],
-      ['Periods Analysed', displayPeriods.length + ''],
-    ];
-
-    // Add emissions per tonne-km if payload is available
-    var latestPayloadRow = latestPeriod
-      ? findPayload(currentPayloads, latestPeriod.periodStart, latestPeriod.periodEnd)
-      : null;
-    if (latestPayloadRow && latestPayloadRow.payload_tonnes) {
-      var payloadT = parseFloat(latestPayloadRow.payload_tonnes);
-      var emPerTonneKm = payloadT > 0 ? headlineEmissionsPerKm / payloadT : null;
-      if (emPerTonneKm !== null) {
-        kpis.push(['Emissions Per Tonne-KM', fmtNum(emPerTonneKm, 4) + ' kg/tonne-km']);
-        kpis.push(['Payload Used', fmtNum(payloadT, 1) + ' tonnes']);
-      }
+    var periodLabel = '—';
+    if (dateFrom && dateTo) {
+      var fromD = new Date(dateFrom + 'T00:00:00');
+      var toD = new Date(dateTo + 'T00:00:00');
+      periodLabel = fromD.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) +
+        '–' + toD.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' });
     }
 
-    kpis.forEach(function(pair) {
-      doc.setFont('helvetica', 'bold');
-      doc.text(pair[0], margin, y);
-      doc.setFont('helvetica', 'normal');
-      doc.text(pair[1], 120, y);
-      y += 7;
+    var y = Theme.drawHeader(doc, {
+      title: 'Emissions Report',
+      subtitle: selectedVehicle.asset_name || ''
+    });
+    y = Theme.drawMetaLine(doc, y, {
+      accountName: companyName,
+      generated: Theme.formatGeneratedDate()
+    });
+    y = Theme.drawStatCards(doc, y, [
+      { label: 'Total Emissions', value: fmtNum(totalEmissionsKg / 1000, 2) + ' t', accent: true },
+      { label: 'Emissions Per KM', value: fmtNum(headlineEmissionsPerKm, 3) + ' kg' },
+      { label: 'Total Distance', value: rangeKm != null ? (Math.round(rangeKm).toLocaleString() + ' km') : '—' },
+      { label: 'Reporting Period', value: periodLabel }
+    ]);
+
+    var body = displayPeriods.map(function(p) {
+      return [
+        p.periodStart,
+        p.periodEnd,
+        fmtNum(p.litresUsed, 1),
+        Math.round(p.kmDriven).toLocaleString(),
+        fmtNum(p.totalEmissionsKg, 2),
+        p.excluded ? '—' : fmtNum(p.emissionsPerKm, 4)
+      ];
     });
 
-    y += 6;
-
-    // Period table
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.text('Fill-to-Fill Periods', margin, y);
-    y += 4;
-
-    doc.autoTable({
+    doc.autoTable(Theme.tableOptions({
       startY: y,
-      margin: { left: margin, right: margin },
       head: [['Period Start', 'Period End', 'Litres', 'KM', 'Emissions (kg)', 'kg/km']],
-      body: displayPeriods.map(function(p) {
-        return [
-          p.periodStart,
-          p.periodEnd,
-          fmtNum(p.litresUsed, 1),
-          Math.round(p.kmDriven).toLocaleString(),
-          fmtNum(p.totalEmissionsKg, 2),
-          p.excluded ? 'Excluded - Telematics Gap' : fmtNum(p.emissionsPerKm, 4)
-        ];
-      }),
-      styles: { fontSize: 9, cellPadding: 3 },
-      headStyles: { fillColor: [14, 165, 122], textColor: [255, 255, 255], fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [245, 248, 250] }
-    });
+      body: body,
+      columnStyles: {
+        2: { halign: 'right' },
+        3: { halign: 'right' },
+        4: { halign: 'right' },
+        5: { halign: 'right' }
+      }
+    }));
 
-    // Footer
-    var pageCount = doc.internal.getNumberOfPages();
-    for (var i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      doc.setFontSize(8);
-      doc.setTextColor(160, 170, 180);
-      doc.text('Generated by FleetMagnify · Page ' + i + ' of ' + pageCount,
-        margin, doc.internal.pageSize.height - 8);
-    }
+    var afterTableY = (doc.lastAutoTable && doc.lastAutoTable.finalY)
+      ? doc.lastAutoTable.finalY + 3
+      : y + 10;
+    Theme.drawGrandTotalBand(
+      doc,
+      afterTableY,
+      'TOTAL EMISSIONS',
+      fmtNum(totalEmissionsKg / 1000, 2) + ' t CO₂  ·  ' + fmtNum(totalLitres, 1) + ' L fuel'
+    );
 
+    Theme.applyFooters(doc);
     var safeName = (selectedVehicle.asset_name || 'vehicle').replace(/[^a-z0-9_-]+/gi, '_');
     doc.save('FleetMagnify_Emissions_' + safeName + '.pdf');
   });
