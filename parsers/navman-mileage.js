@@ -84,29 +84,6 @@ async function loadAssetMap(supabase, userId) {
   return { assetMap: map, ignoredSet: ignoredSet };
 }
 
-async function loadAllOdometers(supabase, userId) {
-  // Load the most recent odometer reading for every asset in one query
-  // rather than one query per asset — critical for bulk import performance
-  var result = await supabase
-    .from('telematics_records')
-    .select('asset_id, odometer_km, record_date')
-    .eq('user_id', userId)
-    .not('odometer_km', 'is', null)
-    .order('record_date', { ascending: false });
-
-  if (result.error || !result.data) return {};
-
-  // Keep only the most recent odometer per asset
-  var odoMap = {};
-  result.data.forEach(function(r) {
-    var aid = String(r.asset_id);
-    if (!odoMap[aid]) {
-      odoMap[aid] = parseFloat(r.odometer_km);
-    }
-  });
-  return odoMap;
-}
-
 async function ensureAssets(supabase, userId, rows) {
   var loaded = await loadAssetMap(supabase, userId);
   var assetMap = loaded.assetMap;
@@ -143,7 +120,6 @@ async function parseNavmanMileageReport(supabase, options) {
 
     var assetResult = await ensureAssets(supabase, userId, rows);
     var assetMap = assetResult.assetMap;
-    var odoMap = await loadAllOdometers(supabase, userId);
 
     // Aggregate distance per vehicle per date — deduplicate same-day entries by summing
     // then taking the MAX (same-day duplicates from overlapping exports should be same value)
@@ -162,42 +138,17 @@ async function parseNavmanMileageReport(supabase, options) {
       dailyMap[key].distances.push(distance);
     });
 
-    // Build records
     var records = [];
     var keys = Object.keys(dailyMap);
     for (var i = 0; i < keys.length; i++) {
       var entry = dailyMap[keys[i]];
-      // Take max distance for same-day duplicates (overlapping export dedup)
       var dailyDistanceKm = Math.max.apply(null, entry.distances);
       if (dailyDistanceKm <= 0) continue;
-
-      var cumulativeOdometer = null;
-      var runningOdo = odoMap[String(entry.assetId)] || null;
-      if (runningOdo !== null) {
-        cumulativeOdometer = runningOdo + dailyDistanceKm;
-        // Update odoMap so next record for this asset uses updated value
-        odoMap[String(entry.assetId)] = cumulativeOdometer;
-      } else if (entry.assetEntry.current_odometer !== null) {
-        cumulativeOdometer = entry.assetEntry.current_odometer + dailyDistanceKm;
-        odoMap[String(entry.assetId)] = cumulativeOdometer;
-      } else {
-        // No running total and no known current_odometer for this asset yet.
-        // Fall back to a 0 baseline so cumulative distance can still be tracked
-        // and used for relative (fill-to-fill) calculations. This baseline is
-        // arbitrary and only affects the ABSOLUTE odometer value shown until a
-        // real reading is entered later — it does not affect relative distance
-        // calculations used elsewhere (e.g. the fuel regression engine, which
-        // only ever computes differences between two odometer points, not the
-        // absolute value).
-        cumulativeOdometer = dailyDistanceKm;
-        odoMap[String(entry.assetId)] = cumulativeOdometer;
-      }
-
       records.push({
         user_id: userId,
         asset_id: Number(entry.assetId),
         record_date: entry.date,
-        odometer_km: cumulativeOdometer,
+        daily_distance_km: dailyDistanceKm,
         litres_consumed: null,
       });
     }
@@ -208,7 +159,8 @@ async function parseNavmanMileageReport(supabase, options) {
       .from('telematics_records')
       .upsert(records, { onConflict: 'asset_id,record_date' });
 
-    if (upsertResult.error) throw new Error('Failed to upsert mileage records: ' + upsertResult.error.message);
+    if (upsertResult.error) throw new Error('Failed to upsert mileage records: ' + 
+      upsertResult.error.message);
 
     await updateImportStatus(supabase, importId, 'processed', null, 'navman-mileage');
 
