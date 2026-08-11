@@ -426,11 +426,9 @@
 
   async function loadTelematics(assetIds, minDate, maxDate) {
     if (assetIds.length === 0) return {};
-    // Buffer backwards so we can find the prior odometer reading for the
-    // first day in range (daily distance = diff between consecutive reads).
-    var bufferedStart = addDays(minDate, -14);
+    var bufferedStart = minDate;
     var result = await supabase.from('telematics_records')
-      .select('asset_id, record_date, odometer_km, idle_hours')
+      .select('asset_id, record_date, daily_distance_km, idle_hours')
       .eq('user_id', effectiveAccountId)
       .in('asset_id', assetIds)
       .gte('record_date', bufferedStart)
