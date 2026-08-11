@@ -211,7 +211,9 @@
 <script src="js/subscription-guard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <script src="js/fleet-cost-model.js"></script>
+<script src="js/report-theme.js"></script>
 <script src="js/sidebar-nav.js"></script>
 <script>
 (function() {
@@ -540,8 +542,7 @@
     });
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
-    companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name)
-      ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
+    companyName = await window.FleetMagnifyReportTheme.resolveAccountDisplayName(supabase, effectiveAccountId);
     document.getElementById('user-name').textContent = companyName;
     document.getElementById('user-avatar').textContent = companyName.charAt(0).toUpperCase();
 
@@ -841,129 +842,64 @@
     if (!tripReport) return;
     if (typeof window.jspdf === 'undefined') return;
 
+    var Theme = window.FleetMagnifyReportTheme;
     var r = tripReport;
     var doc = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    var pageW = doc.internal.pageSize.getWidth();
-    var margin = 16;
+    var margin = Theme.LAYOUT.margin;
+    var pdfCostPerKm = r.tripKm > 0 ? r.totalCost / r.tripKm : null;
 
-    doc.setFillColor(14, 165, 122);
-    doc.rect(0, 0, pageW, 32, 'F');
-    doc.setTextColor(8, 12, 18);
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.text('FleetMagnify', margin, 14);
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Trip Cost Report', margin, 22);
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(9);
-    doc.text(companyName, pageW - margin, 14, { align: 'right' });
-    doc.text(new Date().toLocaleDateString('en-NZ'), pageW - margin, 22, { align: 'right' });
+    var y = Theme.drawHeader(doc, {
+      title: 'Trip Cost Report',
+      subtitle: r.assetName || ''
+    });
+    y = Theme.drawMetaLine(doc, y, {
+      accountName: companyName,
+      generated: Theme.formatGeneratedDate()
+    });
+    y = Theme.drawStatCards(doc, y, [
+      { label: 'Trip Distance', value: fmtNum(r.tripKm, 1) + ' km' },
+      { label: 'Total Trip Cost', value: fmtMoney(r.totalCost), accent: true },
+      { label: 'Cost Per KM', value: pdfCostPerKm !== null ? fmtMoney(pdfCostPerKm) : '—' },
+      { label: 'Emissions', value: fmtNum(r.emissionsKg, 1) + ' kg' }
+    ]);
 
-    var y = 44;
-    doc.setTextColor(30, 40, 55);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text(r.assetName, margin, y);
-    y += 8;
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(80, 90, 105);
-    var dateLines = doc.splitTextToSize(r.tripRangeLabel, pageW - margin * 2);
-    doc.text(dateLines, margin, y);
-    y += dateLines.length * 5 + 6;
-
-    doc.setTextColor(14, 165, 122);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text('TRIP DISTANCE', margin, y);
-    y += 7;
-    doc.setTextColor(20, 30, 45);
-    doc.setFontSize(22);
-    doc.text(fmtNum(r.tripKm, 1) + ' km', margin, y);
-    y += 16;
-
-    doc.setFillColor(240, 248, 245);
-    doc.roundedRect(margin, y, pageW - margin * 2, 28, 3, 3, 'F');
-    doc.setTextColor(14, 165, 122);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text('TOTAL TRIP COST', margin + 6, y + 10);
-    doc.setTextColor(20, 30, 45);
-    doc.setFontSize(20);
-    doc.text(fmtMoney(r.totalCost), margin + 6, y + 22);
-    y += 36;
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(30, 40, 55);
-    doc.text('Cost Breakdown', margin, y);
-    y += 7;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    var breakdown = [
+    var breakdownBody = [
       ['Fuel Cost', fmtMoney(r.fuelCost)],
       ['Depreciation Cost', r.deprUnavailable ? '—' : fmtMoney(r.deprCost)],
       ['Servicing Cost', r.servUnavailable ? '—' : fmtMoney(r.servCost)],
       ['Maintenance Cost', fmtMoney(r.maintCost)]
     ];
-    breakdown.forEach(function(row) {
-      doc.setTextColor(100, 110, 125);
-      doc.text(row[0] + ':', margin, y);
-      doc.setTextColor(30, 40, 55);
-      doc.setFont('helvetica', 'bold');
-      doc.text(row[1], margin + 52, y);
-      doc.setFont('helvetica', 'normal');
-      y += 6;
-    });
-    y += 4;
-    doc.setTextColor(30, 40, 55);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Cost Per KM', margin, y);
-    y += 6;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(12);
-    var pdfCostPerKm = r.tripKm > 0 ? r.totalCost / r.tripKm : null;
-    doc.text(pdfCostPerKm !== null ? fmtMoney(pdfCostPerKm) + ' / km' : '—', margin, y);
-    y += 8;
-
     if (r.payloadTonnes) {
       var pdfCostPerTonneKm = pdfCostPerKm !== null ? pdfCostPerKm / r.payloadTonnes : null;
-      doc.setFont('helvetica', 'bold');
-      doc.text('Cost Per Tonne-KM', margin, y);
-      y += 6;
-      doc.setFont('helvetica', 'normal');
-      doc.text(pdfCostPerTonneKm !== null ? fmtMoney(pdfCostPerTonneKm) + ' / tonne-km' : '—', margin, y);
-      doc.setFontSize(9);
-      doc.setTextColor(120, 130, 145);
-      doc.text('Payload: ' + fmtNum(r.payloadTonnes, 1) + ' tonnes', margin + 60, y);
-      y += 10;
+      breakdownBody.push(['Payload', fmtNum(r.payloadTonnes, 1) + ' tonnes']);
+      breakdownBody.push(['Cost Per Tonne-KM', pdfCostPerTonneKm !== null ? fmtMoney(pdfCostPerTonneKm) : '—']);
     }
 
-    y += 4;
+    doc.autoTable(Theme.tableOptions({
+      startY: y,
+      head: [['Cost Component', 'Amount']],
+      body: breakdownBody,
+      columnStyles: {
+        1: { halign: 'right' }
+      }
+    }));
 
-    doc.setTextColor(14, 165, 122);
-    doc.setFont('helvetica', 'bold');
-    doc.text('TOTAL EMISSIONS', margin, y);
-    y += 7;
-    doc.setTextColor(30, 40, 55);
-    doc.setFontSize(14);
-    doc.text(fmtNum(r.emissionsKg, 2) + ' kg CO₂', margin, y);
-    y += 12;
+    var afterTableY = (doc.lastAutoTable && doc.lastAutoTable.finalY)
+      ? doc.lastAutoTable.finalY + 4
+      : y + 10;
+    Theme.drawGrandTotalBand(doc, afterTableY, 'TOTAL TRIP COST', fmtMoney(r.totalCost));
 
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(120, 130, 145);
+    var noteY = afterTableY + 16;
+    doc.setFont(Theme.LAYOUT.font, 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor.apply(doc, Theme.COLORS.slate);
     var refText = 'Fuel rate from fill-to-fill period ' + formatDateShort(r.fillPeriod.periodStart) +
       ' to ' + formatDateShort(r.fillPeriod.periodEnd) + '. Rates applied: ' +
-      fmtNum(r.litresPerKm, 3) + ' L/km at ' + fmtMoney(r.pricePerLitre) + '/L.';
-    doc.text(doc.splitTextToSize(refText, pageW - margin * 2), margin, y);
+      fmtNum(r.litresPerKm, 3) + ' L/km at ' + fmtMoney(r.pricePerLitre) + '/L. Trip range: ' +
+      (r.tripRangeLabel || '');
+    doc.text(doc.splitTextToSize(refText, doc.internal.pageSize.getWidth() - margin * 2), margin, noteY);
 
-    doc.setFontSize(7);
-    doc.setTextColor(160, 170, 185);
-    doc.text('Generated by FleetMagnify · ' + new Date().toLocaleString('en-NZ'), margin, doc.internal.pageSize.getHeight() - 10);
-
+    Theme.applyFooters(doc);
     var safeName = (r.assetName || 'trip').replace(/[^a-z0-9_-]+/gi, '_');
     doc.save('FleetMagnify_Trip_Report_' + safeName + '.pdf');
   });
