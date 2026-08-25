@@ -11,20 +11,30 @@ const { isMobilCsv, parseMobilReport } = require('../parsers/mobil');
 const { isNavmanMileageCsv, parseNavmanMileageReport } = require('../parsers/navman-mileage');
 const { isNavmanIdleCsv, parseNavmanIdleReport } = require('../parsers/navman-idle');
 const { isVisionLinkCsv, parseVisionLinkReport } = require('../parsers/visionlink');
+const { isEroadCsv, parseEroadReport } = require('../parsers/eroad');
 
 function classifyUnknownCsv(rawCsv) {
   var lines = String(rawCsv).split(/\r?\n/);
   var headerLine = '';
+  var scanText = '';
+  var nonEmpty = 0;
   for (var i = 0; i < Math.min(lines.length, 30); i++) {
     if (lines[i] && lines[i].trim()) {
-      headerLine = lines[i];
-      break;
+      if (!headerLine) headerLine = lines[i];
+      scanText += ' ' + lines[i].toLowerCase();
+      nonEmpty++;
+      // eROAD puts a title on row 1 and headers on row 2 — scan both
+      if (nonEmpty >= 3) break;
     }
   }
-  var headerLower = headerLine.toLowerCase();
+  var headerLower = (scanText || headerLine).toLowerCase();
 
   var categories = {
-    on_road_telematics: ['mileage', 'odometer', 'distance', 'trip', 'idle'],
+    on_road_telematics: [
+      'mileage', 'odometer', 'distance', 'trip', 'idle',
+      // eROAD Fleet Summary Report (title often on row 1, headers on row 2)
+      'eroad fleet summary', 'ehubo', 'ruc purchased', 'total idle time', 'rego/plate',
+    ],
     fuel_provider: ['litres', 'card number', 'fuel', 'customer value', 'transaction'],
     oem_machinery_telematics: [
       'productive', 'idle fuel', 'operating fuel', 'engine hours', 'machine',
@@ -483,6 +493,35 @@ module.exports = async function handler(req, res) {
           await sendFailureAlert(
             attachment.filename,
             visionErr.message,
+            userResult.data.user_id
+          );
+        }
+      } else if (isEroadCsv(rawCsv)) {
+        try {
+          var eroadResult = await parseEroadReport(supabase, {
+            userId: userResult.data.user_id,
+            importId: importId,
+            rawCsv: rawCsv,
+            filename: attachment.filename || null,
+            receivedAt: receivedAt,
+          });
+          console.log(
+            'email-inbound: eROAD parse complete',
+            attachment.filename,
+            eroadResult.recordsUpserted + ' records,',
+            eroadResult.unmatched + ' unmatched,',
+            eroadResult.odometerUpdated + ' odometers updated,',
+            'date=' + eroadResult.recordDate
+          );
+        } catch (eroadErr) {
+          console.error(
+            'email-inbound: eROAD parse failed',
+            attachment.filename,
+            eroadErr.message
+          );
+          await sendFailureAlert(
+            attachment.filename,
+            eroadErr.message,
             userResult.data.user_id
           );
         }
