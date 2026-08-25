@@ -10,6 +10,7 @@ const { isBpTransactionCsv, parseBpTransactionReport } = require('../parsers/bp-
 const { isMobilCsv, parseMobilReport } = require('../parsers/mobil');
 const { isNavmanMileageCsv, parseNavmanMileageReport } = require('../parsers/navman-mileage');
 const { isNavmanIdleCsv, parseNavmanIdleReport } = require('../parsers/navman-idle');
+const { isVisionLinkCsv, parseVisionLinkReport } = require('../parsers/visionlink');
 
 function classifyUnknownCsv(rawCsv) {
   var lines = String(rawCsv).split(/\r?\n/);
@@ -455,6 +456,33 @@ module.exports = async function handler(req, res) {
           await sendFailureAlert(
             attachment.filename,
             idleErr.message,
+            userResult.data.user_id
+          );
+        }
+      } else if (isVisionLinkCsv(rawCsv)) {
+        try {
+          var visionResult = await parseVisionLinkReport(supabase, {
+            userId: userResult.data.user_id,
+            importId: importId,
+            rawCsv: rawCsv,
+          });
+          console.log(
+            'email-inbound: VisionLink parse complete',
+            attachment.filename,
+            visionResult.recordsUpserted + ' records,',
+            visionResult.skippedEmpty + ' empty skipped,',
+            visionResult.unmatched + ' unmatched,',
+            visionResult.hoursUpdated + ' hour meters updated'
+          );
+        } catch (visionErr) {
+          console.error(
+            'email-inbound: VisionLink parse failed',
+            attachment.filename,
+            visionErr.message
+          );
+          await sendFailureAlert(
+            attachment.filename,
+            visionErr.message,
             userResult.data.user_id
           );
         }

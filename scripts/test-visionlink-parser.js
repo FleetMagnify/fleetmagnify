@@ -211,7 +211,8 @@ function testEndToEndMock() {
         'operating_hours=' + r.operating_hours,
         'idle_hours=' + r.idle_hours,
         'total_engine_hours=' + r.total_engine_hours,
-        'litres_consumed=' + r.litres_consumed
+        'litres_consumed=' + r.litres_consumed,
+        'data_quality_notes=' + JSON.stringify(r.data_quality_notes)
       );
       assert.strictEqual(r.record_date, '2026-08-18');
       assert.strictEqual(r.user_id, MONRO_USER);
@@ -232,16 +233,22 @@ function testEndToEndMock() {
     assert.strictEqual(byId[101].idle_hours, 1.5);
     assert.strictEqual(byId[101].total_engine_hours, 8483);
     assert.strictEqual(byId[101].litres_consumed, 48.3);
+    assert.strictEqual(byId[101].data_quality_notes, null);
 
-    // Serial fallback GPK00327 → asset 102
+    // Serial fallback GPK00327 → asset 102 — Callouts persisted
     assert.strictEqual(byId[102].operating_hours, 2.3);
     assert.strictEqual(byId[102].idle_hours, 0.8);
     assert.strictEqual(byId[102].total_engine_hours, 7765);
     assert.strictEqual(byId[102].litres_consumed, 22.0);
+    assert.strictEqual(
+      byId[102].data_quality_notes,
+      'Insufficient runtime meter precision for valid calculation'
+    );
 
     // Hitachi
     assert.strictEqual(byId[103].operating_hours, 6.0);
     assert.strictEqual(byId[103].litres_consumed, 60.5);
+    assert.strictEqual(byId[103].data_quality_notes, null);
 
     console.log('\n  assets.current_hours overwrites:');
     assetUpdates.forEach(function(u) {
@@ -264,12 +271,7 @@ function testEndToEndMock() {
     });
     assert.ok(unmatchedWarn.length >= 1);
     console.log('✓ unmatched asset logged via console.warn');
-
-    var calloutWarn = warnings.filter(function(w) {
-      return w.indexOf('Callouts') !== -1;
-    });
-    assert.ok(calloutWarn.length >= 1);
-    console.log('✓ Callouts logged (no DB column to store — see note below)');
+    console.log('✓ Callouts persisted on data_quality_notes (asset 102)');
 
     console.log('\n✓ end-to-end VisionLink parse OK');
   });
@@ -281,11 +283,9 @@ testMatching();
 testEndToEndMock().then(function() {
   console.log('\n════════════════════════════════════════');
   console.log('All VisionLink parser tests passed.');
-  console.log('NOT wired into email-inbound / bulk-import.');
-  console.log('Callouts: no notes column on telematics_records/assets —');
-  console.log('  logged only. Need e.g. telematics_records.data_quality_notes to persist.');
-  console.log('Fuel: stored as telematics_records.litres_consumed');
-  console.log('  (machinery Fuel Analyst already selects this for off-road assets).');
+  console.log('Wired into email-inbound + bulk-import (isVisionLinkCsv).');
+  console.log('Callouts → telematics_records.data_quality_notes');
+  console.log('Fuel → telematics_records.litres_consumed');
 }).catch(function(err) {
   console.error('\nFAILED:', err);
   process.exit(1);

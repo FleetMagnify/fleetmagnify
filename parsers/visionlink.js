@@ -13,10 +13,9 @@
  *   idle_hours      ← Idle Time (Hours)
  *   total_engine_hours ← Hour Meter (Hours)  [cumulative snapshot]
  *   litres_consumed ← Total Fuel Burned (L)  [feeds machinery Fuel Analyst]
+ *   data_quality_notes ← Callouts (OEM data-quality warnings)
  *
  * Overwrites assets.current_hours from Hour Meter (cumulative, not a delta).
- *
- * NOT wired into email-inbound / bulk-import yet — local parse + tests only.
  */
 
 const {
@@ -249,18 +248,7 @@ async function parseVisionLinkReport(supabase, options) {
 
     rows.forEach(function(row, idx) {
       var callouts = String(row.Callouts || '').trim();
-      if (callouts && !/^null$/i.test(callouts)) {
-        // No notes/flag column on telematics_records or assets for Callouts —
-        // log for now. To persist properly we'd need a new column
-        // (e.g. telematics_records.data_quality_notes text).
-        console.warn(
-          'visionlink: Callouts on row ' + (idx + 1) +
-          ' Asset ID=' + (row['Asset ID'] || '') +
-          ' Serial=' + (row['Asset Serial Number'] || '') +
-          ': ' + callouts
-        );
-        calloutsLogged++;
-      }
+      if (callouts && /^null$/i.test(callouts)) callouts = '';
 
       if (isEmptyActivityRow(row)) {
         skippedEmpty++;
@@ -310,6 +298,8 @@ async function parseVisionLinkReport(supabase, options) {
         operatingHours = runtime;
       }
 
+      if (callouts) calloutsLogged++;
+
       records.push({
         user_id: userId,
         asset_id: Number(matched.asset.id),
@@ -318,6 +308,7 @@ async function parseVisionLinkReport(supabase, options) {
         idle_hours: idle,
         total_engine_hours: hourMeter,
         litres_consumed: fuel,
+        data_quality_notes: callouts || null,
       });
 
       if (hourMeter != null) {
