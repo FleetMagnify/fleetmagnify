@@ -25,7 +25,12 @@ function classifyUnknownCsv(rawCsv) {
   var categories = {
     on_road_telematics: ['mileage', 'odometer', 'distance', 'trip', 'idle'],
     fuel_provider: ['litres', 'card number', 'fuel', 'customer value', 'transaction'],
-    oem_machinery_telematics: ['productive', 'idle fuel', 'operating fuel', 'engine hours', 'machine'],
+    oem_machinery_telematics: [
+      'productive', 'idle fuel', 'operating fuel', 'engine hours', 'machine',
+      // VisionLink Fleet Utilisation exports
+      'hour meter', 'total fuel burned', 'working time', 'asset serial number',
+      'timezone display name', 'runtime (hours)',
+    ],
   };
 
   var bestCategory = 'unknown';
