@@ -2,6 +2,7 @@ const { isNavmanCsv, parseNavmanReport } = require('../parsers/navman');
 const { isNavmanMileageCsv, parseNavmanMileageReport } = require('../parsers/navman-mileage');
 const { isNavmanIdleCsv, parseNavmanIdleReport } = require('../parsers/navman-idle');
 const { isVisionLinkCsv, parseVisionLinkReport } = require('../parsers/visionlink');
+const { isEroadCsv, parseEroadReport } = require('../parsers/eroad');
 const { isBpCsv, parseBpReport } = require('../parsers/bp');
 const { isBpTransactionCsv, parseBpTransactionReport } = require('../parsers/bp-transaction');
 const { isMobilCsv, parseMobilReport } = require('../parsers/mobil');
@@ -86,6 +87,9 @@ module.exports = async function handler(req, res) {
     } else if (isVisionLinkCsv(rawCsv)) {
       parser = 'VisionLink';
       result = await parseVisionLinkReport(supabase, options);
+    } else if (isEroadCsv(rawCsv)) {
+      parser = 'eROAD';
+      result = await parseEroadReport(supabase, options);
     } else if (isNavmanCsv(rawCsv)) {
       parser = 'Navman Executive Summary';
       result = await parseNavmanReport(supabase, options);

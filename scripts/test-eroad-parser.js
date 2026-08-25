@@ -143,14 +143,12 @@ function testEndToEnd() {
       recordsUpserted: result.recordsUpserted,
       unmatched: result.unmatched,
       odometerUpdated: result.odometerUpdated,
-      rucNotStored: result.rucNotStored,
     }));
 
     assert.strictEqual(result.ok, true);
     assert.strictEqual(result.recordDate, '2026-08-25');
     assert.strictEqual(result.recordsUpserted, 3, '3 matched; Unknown Rig unmatched');
     assert.strictEqual(result.unmatched, 1);
-    assert.ok(result.rucNotStored >= 1, 'RUC present but not stored');
 
     var tel = upserted.filter(function(u) { return u.table === 'telematics_records'; })[0];
     assert.ok(tel);
@@ -204,9 +202,11 @@ function testEndToEnd() {
     assert.ok(unmatchedWarn.length >= 1);
     console.log('✓ unmatched vehicle logged');
 
-    var rucWarn = warnings.filter(function(w) { return w.indexOf('RUC Purchased') !== -1; });
-    assert.ok(rucWarn.length >= 1);
-    console.log('✓ RUC flagged as not stored');
+    var rucGapWarn = warnings.filter(function(w) {
+      return w.indexOf('RUC') !== -1 && w.indexOf('no ruc column') !== -1;
+    });
+    assert.strictEqual(rucGapWarn.length, 0, 'must not treat RUC as a schema gap');
+    console.log('✓ RUC Purchased intentionally unused (no gap warning)');
 
     console.log('\n✓ end-to-end eROAD parse OK');
   });
@@ -219,9 +219,8 @@ testDateExtraction();
 testEndToEnd().then(function() {
   console.log('\n════════════════════════════════════════');
   console.log('All eROAD parser tests passed.');
-  console.log('NOT wired into email-inbound / bulk-import parse dispatch.');
-  console.log('classifyUnknownCsv keywords updated for quarantine labelling.');
-  console.log('RUC Purchased ($): NO storage column yet — needs schema decision.');
+  console.log('Wired into email-inbound + bulk-import (isEroadCsv).');
+  console.log('RUC Purchased ($): intentionally unused (own RUC framework).');
 }).catch(function(err) {
   console.error('\nFAILED:', err);
   process.exit(1);

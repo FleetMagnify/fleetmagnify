@@ -11,6 +11,7 @@ const { isMobilCsv, parseMobilReport } = require('../parsers/mobil');
 const { isNavmanMileageCsv, parseNavmanMileageReport } = require('../parsers/navman-mileage');
 const { isNavmanIdleCsv, parseNavmanIdleReport } = require('../parsers/navman-idle');
 const { isVisionLinkCsv, parseVisionLinkReport } = require('../parsers/visionlink');
+const { isEroadCsv, parseEroadReport } = require('../parsers/eroad');
 
 function classifyUnknownCsv(rawCsv) {
   var lines = String(rawCsv).split(/\r?\n/);
@@ -492,6 +493,35 @@ module.exports = async function handler(req, res) {
           await sendFailureAlert(
             attachment.filename,
             visionErr.message,
+            userResult.data.user_id
+          );
+        }
+      } else if (isEroadCsv(rawCsv)) {
+        try {
+          var eroadResult = await parseEroadReport(supabase, {
+            userId: userResult.data.user_id,
+            importId: importId,
+            rawCsv: rawCsv,
+            filename: attachment.filename || null,
+            receivedAt: receivedAt,
+          });
+          console.log(
+            'email-inbound: eROAD parse complete',
+            attachment.filename,
+            eroadResult.recordsUpserted + ' records,',
+            eroadResult.unmatched + ' unmatched,',
+            eroadResult.odometerUpdated + ' odometers updated,',
+            'date=' + eroadResult.recordDate
+          );
+        } catch (eroadErr) {
+          console.error(
+            'email-inbound: eROAD parse failed',
+            attachment.filename,
+            eroadErr.message
+          );
+          await sendFailureAlert(
+            attachment.filename,
+            eroadErr.message,
             userResult.data.user_id
           );
         }

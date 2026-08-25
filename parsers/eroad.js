@@ -23,8 +23,9 @@
  * Zero-activity rows (all zeros) are VALID reported values — store them.
  * This is the opposite of VisionLink empty-activity skipping.
  *
- * RUC Purchased ($): no column on telematics_records / assets today — not stored.
- * NOT wired into email-inbound / bulk-import yet.
+ * RUC Purchased ($): intentionally unused. FleetMagnify calculates RUC via its
+ * own GVM-based framework so methodology stays consistent across telematics
+ * providers — never ingest provider-specific RUC figures.
  */
 
 const {
@@ -248,7 +249,6 @@ async function parseEroadReport(supabase, options) {
     var records = [];
     var odoUpdates = [];
     var unmatched = [];
-    var rucSeen = 0;
 
     parsed.rows.forEach(function(row, idx) {
       var name = String(row.Name || '').trim();
@@ -279,8 +279,8 @@ async function parseEroadReport(supabase, options) {
 
       var odo = parseNumeric(row['Ehubo/Odo (km)']);
 
-      var ruc = parseNumeric(row['RUC Purchased ($)']);
-      if (ruc != null && ruc !== 0) rucSeen++;
+      // RUC Purchased ($): intentionally ignored — FleetMagnify uses its own
+      // GVM-based RUC framework, not provider-reported RUC figures.
 
       records.push({
         user_id: userId,
@@ -294,13 +294,6 @@ async function parseEroadReport(supabase, options) {
         odoUpdates.push({ assetId: asset.id, odometer: odo });
       }
     });
-
-    if (rucSeen > 0) {
-      console.warn(
-        'eroad: RUC Purchased ($) present on ' + rucSeen +
-        ' row(s) but not stored — no ruc column on telematics_records/assets yet'
-      );
-    }
 
     if (records.length === 0) {
       throw new Error(
@@ -344,7 +337,6 @@ async function parseEroadReport(supabase, options) {
       unmatched: unmatched.length,
       unmatchedDetails: unmatched,
       odometerUpdated: odoIds.length,
-      rucNotStored: rucSeen,
     };
   } catch (err) {
     await updateImportStatus(supabase, importId, 'failed', err.message, 'eroad');
