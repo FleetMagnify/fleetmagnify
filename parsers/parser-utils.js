@@ -159,12 +159,111 @@ function detectAssetType(vehicleName) {
   return 'Rigid Truck';
 }
 
+/**
+ * Parse a Navman calendar date into YYYY-MM-DD.
+ *
+ * From ~Aug 2026 Navman exports use MM-DD-YYYY with '-' or '/' separators
+ * (e.g. "8-25-2026" = 25 August 2026). Real idle timestamps for the same
+ * calendar day line up with mileage ActivityDate, so these values are NZ
+ * local dates already — do NOT apply the old UTC+12 +1-day shift that was
+ * used when Navman exported UTC-shifted DD/MM/YYYY strings.
+ *
+ * Ambiguous numeric dates (both month and day ≤ 12) are treated as
+ * month-first to match the current Navman export convention.
+ */
+function parseNavmanDate(dateStr) {
+  var raw = String(dateStr || '').trim();
+  if (!raw) return null;
+
+  // Take the date token only (idle fields append " H:MM AM/PM")
+  var dateToken = raw.split(/\s+/)[0];
+  var parts = dateToken.split(/[-\/]/);
+  if (parts.length !== 3) return null;
+
+  var a = parseInt(parts[0], 10);
+  var b = parseInt(parts[1], 10);
+  var year = parseInt(parts[2], 10);
+  if (!year || year < 2000 || year > 2100) return null;
+  if (!a || !b) return null;
+
+  var month;
+  var day;
+  // If one side is > 12 it disambiguates. Otherwise prefer month-first
+  // (current Navman MM-DD-YYYY convention).
+  if (a > 12 && b >= 1 && b <= 12) {
+    // Legacy DD-MM-YYYY (e.g. 25-08-2026)
+    day = a;
+    month = b;
+  } else if (b > 12 && a >= 1 && a <= 12) {
+    // Current MM-DD-YYYY (e.g. 8-25-2026)
+    month = a;
+    day = b;
+  } else if (a >= 1 && a <= 12 && b >= 1 && b <= 12) {
+    month = a;
+    day = b;
+  } else {
+    return null;
+  }
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+  // Validate the calendar date (rejects 2-31-2026 etc.)
+  var d = new Date(year, month - 1, day);
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) {
+    return null;
+  }
+
+  return year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+}
+
+/**
+ * Parse a Navman idle timestamp like "8-25-2026 5:07 AM".
+ * Returns { dateIso, ms } or null. dateIso is the NZ-local calendar date
+ * with no UTC day-shift (see parseNavmanDate).
+ */
+function parseNavmanDatetime(datetimeStr) {
+  var raw = String(datetimeStr || '').trim();
+  if (!raw) return null;
+
+  var dateIso = parseNavmanDate(raw);
+  if (!dateIso) return null;
+
+  var match = raw.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})\s+(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!match) {
+    // Date-only fallback
+    var dateOnly = new Date(dateIso + 'T00:00:00');
+    return { dateIso: dateIso, ms: dateOnly.getTime() };
+  }
+
+  var year = parseInt(match[3], 10);
+  var month;
+  var day;
+  var a = parseInt(match[1], 10);
+  var b = parseInt(match[2], 10);
+  if (a > 12 && b <= 12) {
+    day = a; month = b;
+  } else {
+    month = a; day = b;
+  }
+
+  var hour = parseInt(match[4], 10);
+  var minute = parseInt(match[5], 10);
+  var ampm = match[6] ? match[6].toUpperCase() : null;
+  if (ampm === 'PM' && hour < 12) hour += 12;
+  if (ampm === 'AM' && hour === 12) hour = 0;
+
+  var dt = new Date(year, month - 1, day, hour, minute, 0, 0);
+  return { dateIso: dateIso, ms: dt.getTime() };
+}
+
 module.exports = {
   parseCsvLine: parseCsvLine,
   normalizeHeader: normalizeHeader,
   parseNumeric: parseNumeric,
   updateImportStatus: updateImportStatus,
   detectAssetType: detectAssetType,
+  parseNavmanDate: parseNavmanDate,
+  parseNavmanDatetime: parseNavmanDatetime,
   BP_FUEL_PRODUCT_ALLOWLIST: BP_FUEL_PRODUCT_ALLOWLIST,
   isKnownFuelProduct: isKnownFuelProduct,
   MOBIL_FUEL_PRODUCT_ALLOWLIST: MOBIL_FUEL_PRODUCT_ALLOWLIST,
