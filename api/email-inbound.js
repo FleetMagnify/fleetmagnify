@@ -15,16 +15,25 @@ const { isVisionLinkCsv, parseVisionLinkReport } = require('../parsers/visionlin
 function classifyUnknownCsv(rawCsv) {
   var lines = String(rawCsv).split(/\r?\n/);
   var headerLine = '';
+  var scanText = '';
+  var nonEmpty = 0;
   for (var i = 0; i < Math.min(lines.length, 30); i++) {
     if (lines[i] && lines[i].trim()) {
-      headerLine = lines[i];
-      break;
+      if (!headerLine) headerLine = lines[i];
+      scanText += ' ' + lines[i].toLowerCase();
+      nonEmpty++;
+      // eROAD puts a title on row 1 and headers on row 2 — scan both
+      if (nonEmpty >= 3) break;
     }
   }
-  var headerLower = headerLine.toLowerCase();
+  var headerLower = (scanText || headerLine).toLowerCase();
 
   var categories = {
-    on_road_telematics: ['mileage', 'odometer', 'distance', 'trip', 'idle'],
+    on_road_telematics: [
+      'mileage', 'odometer', 'distance', 'trip', 'idle',
+      // eROAD Fleet Summary Report (title often on row 1, headers on row 2)
+      'eroad fleet summary', 'ehubo', 'ruc purchased', 'total idle time', 'rego/plate',
+    ],
     fuel_provider: ['litres', 'card number', 'fuel', 'customer value', 'transaction'],
     oem_machinery_telematics: [
       'productive', 'idle fuel', 'operating fuel', 'engine hours', 'machine',
