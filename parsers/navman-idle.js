@@ -1,11 +1,25 @@
 /**
  * Navman Idle Events Report CSV parser.
  * Headers: Vehicle, Registration, VehicleGroup, IdleStart, IdleEnd, Duration, Unit, Location
+ *
  * Aggregates idle events by vehicle by day into total idle minutes.
+ * Duration is taken from the pre-calculated Duration column (minutes) and
+ * sanity-checked against IdleStart/IdleEnd. Location is ignored (no column
+ * on telematics_records). VehicleGroup is not used for asset matching.
  */
 
-const { parseCsvLine, normalizeHeader, parseNumeric, updateImportStatus, detectAssetType } = require('./parser-utils');
+const {
+  parseCsvLine,
+  normalizeHeader,
+  parseNumeric,
+  updateImportStatus,
+  detectAssetType,
+  parseNavmanDate,
+  parseNavmanDatetime,
+} = require('./parser-utils');
 
+// Core columns that identify a Navman idle export. Extra columns (Registration,
+// VehicleGroup, Location) may appear — detection only requires these names.
 var IDLE_SIGNATURE = ['Vehicle', 'IdleStart', 'IdleEnd', 'Duration'];
 
 function isNavmanIdleHeaderRow(headers) {
@@ -25,19 +39,6 @@ function isNavmanIdleCsv(rawCsv) {
     }
   }
   return false;
-}
-
-function parseDMYFromDatetime(datetimeStr) {
-  // Parse "DD/MM/YYYY HH:MM" explicitly
-  var parts = String(datetimeStr || '').trim().split(' ');
-  if (!parts[0]) return null;
-  var dateParts = parts[0].split('/');
-  if (dateParts.length !== 3) return null;
-  var day = dateParts[0].padStart(2, '0');
-  var month = dateParts[1].padStart(2, '0');
-  var year = dateParts[2];
-  if (year.length !== 4) return null;
-  return year + '-' + month + '-' + day;
 }
 
 function parseNavmanIdleRows(rawCsv) {
@@ -107,6 +108,13 @@ async function ensureAssets(supabase, userId, rows) {
   return { assetMap: assetMap, pendingAdded: pendingAdded };
 }
 
+function durationFromStartEndMinutes(startMs, endMs) {
+  if (startMs == null || endMs == null || !isFinite(startMs) || !isFinite(endMs)) return null;
+  var delta = (endMs - startMs) / 60000;
+  if (!isFinite(delta) || delta < 0) return null;
+  return Math.round(delta);
+}
+
 async function parseNavmanIdleReport(supabase, options) {
   var userId = options.userId;
   var importId = options.importId;
@@ -119,16 +127,37 @@ async function parseNavmanIdleReport(supabase, options) {
     var assetResult = await ensureAssets(supabase, userId, rows);
     var assetMap = assetResult.assetMap;
 
-    // Aggregate idle minutes per vehicle per day
+    // Aggregate idle minutes per vehicle per day. Date comes from IdleStart
+    // via parseNavmanDate (MM-DD-YYYY local, no UTC+12 day-shift).
     var dailyIdleMap = {};
+    var skippedNoDate = 0;
     rows.forEach(function(row) {
       var vehicleName = String(row.Vehicle || '').trim();
-      var dateStr = parseDMYFromDatetime(row.IdleStart);
+      var startParsed = parseNavmanDatetime(row.IdleStart);
+      var endParsed = parseNavmanDatetime(row.IdleEnd);
+      var dateStr = startParsed ? startParsed.dateIso : parseNavmanDate(row.IdleStart);
       var duration = parseNumeric(row.Duration);
       var unit = String(row.Unit || '').trim().toLowerCase();
+      if (!dateStr) skippedNoDate++;
       if (!vehicleName || !dateStr || duration === null) return;
       // Only process minutes — if unit is not min, skip
       if (unit && unit !== 'min') return;
+
+      // Sanity-check pre-calculated Duration against IdleStart/IdleEnd delta.
+      // Prefer Duration (Navman's own figure) but warn when they disagree by >2 min.
+      if (startParsed && endParsed) {
+        var derived = durationFromStartEndMinutes(startParsed.ms, endParsed.ms);
+        if (derived != null && Math.abs(derived - duration) > 2) {
+          console.warn(
+            'navman-idle: Duration mismatch for',
+            vehicleName,
+            'on',
+            dateStr,
+            '— CSV Duration=' + duration + 'min, IdleStart/IdleEnd delta=' + derived + 'min; using CSV Duration'
+          );
+        }
+      }
+
       var assetEntry = assetMap[vehicleName];
       if (!assetEntry) return;
       var key = assetEntry.id + '|' + dateStr;
@@ -189,13 +218,19 @@ async function parseNavmanIdleReport(supabase, options) {
       console.warn('navman-idle: high idle_hours (>10h) flagged for review:', JSON.stringify(flaggedHigh));
     }
 
-    if (records.length === 0) throw new Error('No valid idle records to import');
+    if (records.length === 0) {
+      var hint = skippedNoDate > 0
+        ? ' (' + skippedNoDate + ' rows had unparseable IdleStart)'
+        : '';
+      throw new Error('No valid idle records to import' + hint);
+    }
 
     // Single batch upsert — merges with existing mileage records via onConflict
-    // Only sets idle_hours — does not touch odometer_km or other fields
+    // Only sets idle_hours — does not touch odometer_km / daily_distance_km /
+    // Location (Location is not stored; no telematics_records column for it).
     var upsertResult = await supabase
       .from('telematics_records')
-      .upsert(records, { 
+      .upsert(records, {
         onConflict: 'asset_id,record_date',
         ignoreDuplicates: false
       });
@@ -220,4 +255,7 @@ async function parseNavmanIdleReport(supabase, options) {
 module.exports = {
   isNavmanIdleCsv: isNavmanIdleCsv,
   parseNavmanIdleReport: parseNavmanIdleReport,
+  // Exported for unit tests against real Navman samples
+  parseNavmanIdleRows: parseNavmanIdleRows,
+  isNavmanIdleHeaderRow: isNavmanIdleHeaderRow,
 };

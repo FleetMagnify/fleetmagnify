@@ -1,10 +1,23 @@
 /**
  * Navman Daily Mileage Report CSV parser.
  * Headers: Vehicle, Registration, VehicleGroup, ActivityDate, ActualDistance, Units
+ *
+ * Columns are read by header name (not fixed index) so newly inserted columns
+ * like Registration / VehicleGroup do not break parsing. VehicleGroup is not
+ * used for asset matching — matching is by Vehicle name only.
  */
 
-const { parseCsvLine, normalizeHeader, parseNumeric, updateImportStatus, detectAssetType } = require('./parser-utils');
+const {
+  parseCsvLine,
+  normalizeHeader,
+  parseNumeric,
+  updateImportStatus,
+  detectAssetType,
+  parseNavmanDate,
+} = require('./parser-utils');
 
+// Core columns that identify a Navman mileage export. Extra columns may appear
+// before/after these — detection only requires these names to be present.
 var MILEAGE_SIGNATURE = ['Vehicle', 'ActivityDate', 'ActualDistance'];
 
 function isNavmanMileageHeaderRow(headers) {
@@ -24,17 +37,6 @@ function isNavmanMileageCsv(rawCsv) {
     }
   }
   return false;
-}
-
-function parseDMY(dateStr) {
-  // Parse DD/MM/YYYY explicitly — never use auto-detection
-  var parts = String(dateStr || '').trim().split('/');
-  if (parts.length !== 3) return null;
-  var day = parts[0].padStart(2, '0');
-  var month = parts[1].padStart(2, '0');
-  var year = parts[2];
-  if (year.length !== 4) return null;
-  return year + '-' + month + '-' + day;
 }
 
 function parseNavmanMileageRows(rawCsv) {
@@ -121,13 +123,17 @@ async function parseNavmanMileageReport(supabase, options) {
     var assetResult = await ensureAssets(supabase, userId, rows);
     var assetMap = assetResult.assetMap;
 
-    // Aggregate distance per vehicle per date — deduplicate same-day entries by summing
-    // then taking the MAX (same-day duplicates from overlapping exports should be same value)
+    // Aggregate distance per vehicle per date — take MAX for same-day duplicates
+    // (overlapping exports of the same day should carry the same value).
+    // VehicleGroup is intentionally ignored for matching.
     var dailyMap = {};
+    var skippedNoDate = 0;
     rows.forEach(function(row) {
       var vehicleName = String(row.Vehicle || '').trim();
-      var dateStr = parseDMY(row.ActivityDate);
+      // parseNavmanDate: MM-DD-YYYY local (no UTC+12 day-shift) — see parser-utils.
+      var dateStr = parseNavmanDate(row.ActivityDate);
       var distance = parseNumeric(row.ActualDistance);
+      if (!dateStr) skippedNoDate++;
       if (!vehicleName || !dateStr || distance === null) return;
       var assetEntry = assetMap[vehicleName];
       if (!assetEntry) return;
@@ -153,13 +159,18 @@ async function parseNavmanMileageReport(supabase, options) {
       });
     }
 
-    if (records.length === 0) throw new Error('No valid mileage records to import');
+    if (records.length === 0) {
+      var hint = skippedNoDate > 0
+        ? ' (' + skippedNoDate + ' rows had unparseable ActivityDate)'
+        : '';
+      throw new Error('No valid mileage records to import' + hint);
+    }
 
     var upsertResult = await supabase
       .from('telematics_records')
       .upsert(records, { onConflict: 'asset_id,record_date' });
 
-    if (upsertResult.error) throw new Error('Failed to upsert mileage records: ' + 
+    if (upsertResult.error) throw new Error('Failed to upsert mileage records: ' +
       upsertResult.error.message);
 
     await updateImportStatus(supabase, importId, 'processed', null, 'navman-mileage');
@@ -178,4 +189,7 @@ async function parseNavmanMileageReport(supabase, options) {
 module.exports = {
   isNavmanMileageCsv: isNavmanMileageCsv,
   parseNavmanMileageReport: parseNavmanMileageReport,
+  // Exported for unit tests against real Navman samples
+  parseNavmanMileageRows: parseNavmanMileageRows,
+  isNavmanMileageHeaderRow: isNavmanMileageHeaderRow,
 };
