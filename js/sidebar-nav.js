@@ -2,9 +2,6 @@ window.FleetMagnifySidebar = (function() {
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
 
-  // toby@svce.co.nz — the directors' fleet, trading as Independent Line Services
-  var ILS_ACCOUNT_ID = 'd2ed89c3-dcaf-48b3-826a-f73802e4cf74';
-
   var NAV_ITEMS = [
     { type: 'link', href: 'home.html', icon: '🏠', text: 'Overview' },
     { type: 'label', text: 'Machinery Modules' },
@@ -20,7 +17,7 @@ window.FleetMagnifySidebar = (function() {
     { type: 'link', href: 'cost-per-km-analyst.html', icon: '📏', text: 'Cost Per KM Analyst' },
     { type: 'link', href: 'truck-emissions-analyst.html', icon: '🌿', text: 'Emissions Analyst' },
     { type: 'link', href: 'trip-report.html', icon: '🗺️', text: 'Trip Report' },
-    { type: 'link', href: 'orion-fuel-report.html', icon: '🧾', text: 'Orion Fuel Report', ilsOnly: true },
+    { type: 'link', href: 'orion-fuel-report.html', icon: '🧾', text: 'Orion Fuel Report', requiresWorkOrderReport: true },
     { type: 'label', text: 'Fleet Management' },
     { type: 'link', href: 'assets.html', icon: '🚧', text: 'Assets' },
     { type: 'link', href: 'upload.html', icon: '📤', text: 'Upload Data' },
@@ -34,7 +31,9 @@ window.FleetMagnifySidebar = (function() {
         return '<div class="nav-label">' + item.text + '</div>';
       }
       var cls = (item.href === activePage) ? 'nav-item active' : 'nav-item';
-      var attrs = item.ilsOnly ? ' data-ils-only="true" style="display:none"' : '';
+      var attrs = item.requiresWorkOrderReport
+        ? ' data-work-order-report="true" style="display:none"'
+        : '';
       return '<a class="' + cls + '" href="' + item.href + '"' + attrs + '><span class="nav-icon">' + item.icon + '</span> ' + item.text + '</a>';
     }).join('\n    ');
   }
@@ -110,18 +109,42 @@ window.FleetMagnifySidebar = (function() {
 
     if (!supabase || !effectiveAccountId) return;
 
-    if (effectiveAccountId === ILS_ACCOUNT_ID) {
-      var ilsItems = document.querySelectorAll('[data-ils-only="true"]');
-      for (var i = 0; i < ilsItems.length; i++) { ilsItems[i].style.display = ''; }
+    // Show Orion / work-order report nav when the *resolved account owner*
+    // has profiles.has_work_order_report — not auth.uid(). Account members
+    // (e.g. Riki/Peter on ILS) resolve to the owner and inherit the flag.
+    var hasWorkOrderReport = false;
+    try {
+      var flagResult = await supabase
+        .from('profiles')
+        .select('has_work_order_report')
+        .eq('id', effectiveAccountId)
+        .maybeSingle();
+      hasWorkOrderReport = !!(flagResult.data && flagResult.data.has_work_order_report);
+    } catch (err) {
+      console.warn('FleetMagnifySidebar: failed to read has_work_order_report', err);
     }
 
     var composition = await detectFleetComposition(supabase, effectiveAccountId);
-    if (!composition.hasTrucks && !composition.hasMachinery) return;
-
     var nav = document.querySelector('.sidebar-nav');
-    if (!nav) return;
-    if (!composition.hasMachinery) setSectionVisibility(nav, 'Machinery Modules', false);
-    if (!composition.hasTrucks) setSectionVisibility(nav, 'Truck Modules', false);
+    if (nav && (composition.hasTrucks || composition.hasMachinery)) {
+      if (!composition.hasMachinery) setSectionVisibility(nav, 'Machinery Modules', false);
+      if (!composition.hasTrucks) setSectionVisibility(nav, 'Truck Modules', false);
+    }
+
+    // Apply after fleet composition so a section hide does not wipe the flag link.
+    if (hasWorkOrderReport) {
+      var woItems = document.querySelectorAll('[data-work-order-report="true"]');
+      for (var i = 0; i < woItems.length; i++) { woItems[i].style.display = ''; }
+      if (nav && !composition.hasTrucks) {
+        var labels = nav.querySelectorAll('.nav-label');
+        for (var j = 0; j < labels.length; j++) {
+          if (labels[j].textContent === 'Truck Modules') {
+            labels[j].style.display = '';
+            break;
+          }
+        }
+      }
+    }
   }
 
   return { render: render, inject: inject };

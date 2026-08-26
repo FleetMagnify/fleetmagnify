@@ -111,7 +111,7 @@
   </div>
 
   <div class="page-content">
-    <div class="page-eyebrow"><span class="dash"></span> SVCE ONLY</div>
+    <div class="page-eyebrow"><span class="dash"></span> WORK ORDER REPORT</div>
     <div class="page-title">Orion Fuel Report</div>
     <p class="page-sub">Upload the monthly Orion "Customer Hours" work order export. This matches each work order day to the asset's real recorded fuel consumption in FleetMagnify and totals it — for the Orion diesel price fluctuation credit.</p>
 
@@ -126,7 +126,7 @@
     <div id="gate-blocked" class="card" hidden>
       <div class="empty-state">
         <div class="empty-state-icon">🔒</div>
-        <div>This report is only available on the directors' fleet account.</div>
+        <div>This report is not available on your account.</div>
       </div>
     </div>
 
@@ -896,11 +896,22 @@
     return authUserId;
   }
 
+  async function hasWorkOrderReportFlag(accountId) {
+    var result = await supabase
+      .from('profiles')
+      .select('has_work_order_report')
+      .eq('id', accountId)
+      .maybeSingle();
+    return !!(result.data && result.data.has_work_order_report);
+  }
+
   async function boot() {
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     var currentUser = sessionResult.data.session.user;
 
+    // Gate on the resolved account owner — not auth.uid() — so ILS members
+    // (Riki/Peter) inherit profiles.has_work_order_report from the owner.
     effectiveAccountId = await resolveAccountId(currentUser.id);
     window.FleetMagnifySidebar.inject('orion-fuel-report.html', supabase, effectiveAccountId);
 
@@ -910,6 +921,14 @@
     companyName = await window.FleetMagnifyReportTheme.resolveAccountDisplayName(supabase, effectiveAccountId);
     document.getElementById('user-name').textContent = companyName;
     document.getElementById('user-avatar').textContent = companyName.charAt(0).toUpperCase();
+
+    var allowed = await hasWorkOrderReportFlag(effectiveAccountId);
+    if (!allowed) {
+      var methodNote = document.querySelector('.method-note');
+      if (methodNote) methodNote.hidden = true;
+      document.getElementById('gate-blocked').hidden = false;
+      return;
+    }
 
     await loadAssets();
     await loadAliases();
