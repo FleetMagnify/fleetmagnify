@@ -10,11 +10,13 @@
  *
  *   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
  *     node scripts/generate-demo-history.js [--dry-run] [--only kenworth]
+ *     node scripts/generate-demo-history.js --only excavator,grader,dozer,adt,compactor
  *
- *   --only <profile-key>  Regenerates one asset (telematics + fuel +
- *     calibration rows for that asset id). Does not touch jobs or
- *     user_settings. Known keys: excavator, grader, dozer, adt,
- *     compactor, isuzu, hino, volvoFh, kenworth, transporter.
+ *   --only <keys>  Regenerates the named asset(s) (telematics + fuel +
+ *     calibration rows for those asset ids). Comma- or space-separated.
+ *     Does not touch jobs or user_settings. Known keys: excavator,
+ *     grader, dozer, adt, compactor, isuzu, hino, volvoFh, kenworth,
+ *     transporter.
  *
  * Safety:
  *   - Looks up asset IDs at runtime (never hardcoded)
@@ -65,7 +67,8 @@ var PROFILES = [
     startHours: 6200,
     weekdayRuntime: [7.6, 10.8],
     saturdayRuntime: [0, 5.5],
-    idleFraction: [0.34, 0.48],
+    idleFraction: [0.27, 0.43],
+    targetIdlePct: 0.35,
     workingLph: 28.0,
     idleLph: 6.4,
     tankL: 620,
@@ -78,7 +81,8 @@ var PROFILES = [
     startHours: 8100,
     weekdayRuntime: [8.2, 10.4],
     saturdayRuntime: [0, 4.5],
-    idleFraction: [0.14, 0.24],
+    idleFraction: [0.24, 0.40],
+    targetIdlePct: 0.32,
     workingLph: 22.0,
     idleLph: 5.2,
     tankL: 480,
@@ -91,7 +95,8 @@ var PROFILES = [
     startHours: 11400,
     weekdayRuntime: [8.0, 11.0],
     saturdayRuntime: [0, 5.0],
-    idleFraction: [0.26, 0.36],
+    idleFraction: [0.30, 0.46],
+    targetIdlePct: 0.38,
     workingLph: 47.0,
     idleLph: 8.2,
     tankL: 900,
@@ -104,7 +109,8 @@ var PROFILES = [
     startHours: 4200,
     weekdayRuntime: [9.0, 11.6],
     saturdayRuntime: [3.0, 7.0],
-    idleFraction: [0.08, 0.16],
+    idleFraction: [0.22, 0.38],
+    targetIdlePct: 0.30,
     workingLph: 31.0,
     idleLph: 6.0,
     tankL: 520,
@@ -117,7 +123,8 @@ var PROFILES = [
     startHours: 2800,
     weekdayRuntime: [4.2, 7.0],
     saturdayRuntime: [0, 4.0],
-    idleFraction: [0.18, 0.28],
+    idleFraction: [0.26, 0.42],
+    targetIdlePct: 0.34,
     workingLph: 14.0,
     idleLph: 3.4,
     tankL: 280,
@@ -623,7 +630,36 @@ function generateDailyMap(profile, dates, rng) {
   dates.forEach(function(d) {
     daily[d] = dailyActivity(profile, d, rng, transporterActive, siteDays, yardDays);
   });
+  rebalanceMachineryIdle(daily, dates, profile, rng);
   return daily;
+}
+
+// Daily idle fractions stay noisy; this nudges the 75-day mix onto each
+// machine's target (30–40% band, varied per asset) and rebuilds litres from
+// the new hours so fuel stays proportional to engine time.
+function rebalanceMachineryIdle(daily, dates, profile, rng) {
+  if (profile.kind !== 'machinery' || !profile.targetIdlePct) return;
+  var totalOp = 0;
+  var totalIdle = 0;
+  dates.forEach(function(d) {
+    totalOp += daily[d].operating;
+    totalIdle += daily[d].idle;
+  });
+  var total = totalOp + totalIdle;
+  if (total <= 0 || totalOp <= 0 || totalIdle <= 0) return;
+  var jitter = (rng() - 0.5) * 0.018;
+  var desired = clamp(profile.targetIdlePct + jitter, 0.305, 0.395);
+  var scaleIdle = (desired * total) / totalIdle;
+  var scaleOp = ((1 - desired) * total) / totalOp;
+  dates.forEach(function(d) {
+    var day = daily[d];
+    if (!day.active) return;
+    day.idle = round1(day.idle * scaleIdle);
+    day.operating = round1(day.operating * scaleOp);
+    var litres = day.operating * profile.workingLph + day.idle * profile.idleLph;
+    litres *= lerp(rng, 0.97, 1.03);
+    day.litres = round1(Math.max(0, litres));
+  });
 }
 
 function dailyActivity(profile, dateStr, rng, transporterActive, siteDays, yardDays) {
@@ -969,21 +1005,62 @@ function truckResidualIdle(dates, daily, fills, profile) {
 // Main
 // ---------------------------------------------------------------------------
 
-function parseOnlyKey() {
+function parseOnlyKeys() {
   var idx = process.argv.indexOf('--only');
   if (idx === -1) return null;
-  var key = process.argv[idx + 1];
-  if (!key || key.charAt(0) === '-') {
-    throw new Error('--only requires a profile key (e.g. kenworth)');
+  var keys = [];
+  var seen = {};
+  for (var i = idx + 1; i < process.argv.length; i++) {
+    var arg = process.argv[i];
+    if (arg.charAt(0) === '-') break;
+    arg.split(',').forEach(function(raw) {
+      var key = raw.trim();
+      if (!key || seen[key]) return;
+      var known = PROFILES.some(function(p) { return p.key === key; });
+      if (!known) {
+        throw new Error(
+          'Unknown --only key "' + key + '". Known: ' +
+          PROFILES.map(function(p) { return p.key; }).join(', ')
+        );
+      }
+      seen[key] = true;
+      keys.push(key);
+    });
   }
-  var known = PROFILES.some(function(p) { return p.key === key; });
-  if (!known) {
-    throw new Error(
-      'Unknown --only key "' + key + '". Known: ' +
-      PROFILES.map(function(p) { return p.key; }).join(', ')
-    );
+  if (!keys.length) {
+    throw new Error('--only requires a profile key (e.g. kenworth or excavator,grader)');
   }
-  return key;
+  return keys;
+}
+
+function idleShare(operating, idle) {
+  var total = operating + idle;
+  return total > 0 ? idle / total : null;
+}
+
+async function fetchHoursByAsset(supabase, assetIds, startDate, endDate) {
+  var out = {};
+  assetIds.forEach(function(id) {
+    out[id] = { n: 0, op: 0, idle: 0, litres: 0 };
+  });
+  if (!assetIds.length) return out;
+  var result = await supabase
+    .from('telematics_records')
+    .select('asset_id, operating_hours, idle_hours, litres_consumed')
+    .eq('user_id', DEMO_USER_ID)
+    .in('asset_id', assetIds)
+    .gte('record_date', startDate)
+    .lte('record_date', endDate);
+  if (result.error) throw new Error('telematics snapshot failed: ' + result.error.message);
+  (result.data || []).forEach(function(r) {
+    var id = Number(r.asset_id);
+    if (!out[id]) out[id] = { n: 0, op: 0, idle: 0, litres: 0 };
+    out[id].n += 1;
+    out[id].op += parseFloat(r.operating_hours) || 0;
+    out[id].idle += parseFloat(r.idle_hours) || 0;
+    out[id].litres += parseFloat(r.litres_consumed) || 0;
+  });
+  return out;
 }
 
 function simulateLocally() {
@@ -991,11 +1068,11 @@ function simulateLocally() {
   var startDate = addDays(endDate, -(DAYS - 1));
   var dates = eachDateInclusive(startDate, endDate);
   var failed = false;
-  var onlyKey = parseOnlyKey();
+  var onlyKeys = parseOnlyKeys();
   console.log('Local simulate ' + startDate + ' → ' + endDate + ' (' + dates.length + ' days)' +
-    (onlyKey ? '  [--only ' + onlyKey + ']' : '') + '\n');
+    (onlyKeys ? '  [--only ' + onlyKeys.join(',') + ']' : '') + '\n');
   PROFILES.forEach(function(profile, idx) {
-    if (onlyKey && profile.key !== onlyKey) return;
+    if (onlyKeys && onlyKeys.indexOf(profile.key) === -1) return;
     var rng = mulberry32(hashSeed(profile.key + ':' + (100 + idx) + ':demo75'));
     var daily = generateDailyMap(profile, dates, rng);
     var telDays = 0;
@@ -1026,10 +1103,16 @@ function simulateLocally() {
       if (totalLitres < 500) problems.push('litres_consumed total=' + totalLitres.toFixed(0));
       if (totalOp < 80) problems.push('operating_hours total=' + totalOp.toFixed(0));
       if (totalIdle < 20) problems.push('idle_hours total=' + totalIdle.toFixed(0));
+      var idlePct = idleShare(totalOp, totalIdle);
+      if (idlePct == null || idlePct < 0.30 || idlePct > 0.40) {
+        problems.push('idle%=' + (idlePct != null ? (idlePct * 100).toFixed(1) : 'n/a') + ' (want 30–40%)');
+      }
       console.log(
         '       Fuel Analyst (telematics): litres_consumed days=' + litreDays +
         '  total=' + totalLitres.toFixed(0) + ' L  working=' + totalOp.toFixed(0) +
-        ' h  idle=' + totalIdle.toFixed(0) + ' h'
+        ' h  idle=' + totalIdle.toFixed(0) + ' h  idle=' +
+        (idlePct != null ? (idlePct * 100).toFixed(1) + '%' : 'n/a') +
+        (profile.targetIdlePct ? ' (target ~' + (profile.targetIdlePct * 100).toFixed(0) + '%)' : '')
       );
     }
     if (profile.kind === 'truck') {
@@ -1089,7 +1172,41 @@ function simulateLocally() {
       (problems.length ? '  ' + problems.join('; ') : '')
     );
   });
-  if (!onlyKey || onlyKey === 'kenworth') {
+  var machinerySweep = PROFILES.filter(function(p) {
+    return p.kind === 'machinery' && (!onlyKeys || onlyKeys.indexOf(p.key) !== -1);
+  });
+  machinerySweep.forEach(function(profile) {
+    var sweepBad = 0;
+    var sweepMin = Infinity;
+    var sweepMax = -Infinity;
+    for (var sid = 1; sid <= 40; sid++) {
+      var sRng = mulberry32(hashSeed(profile.key + ':' + sid + ':demo75'));
+      var sDaily = generateDailyMap(profile, dates, sRng);
+      var sOp = 0, sIdle = 0, sLitres = 0;
+      dates.forEach(function(d) {
+        sOp += sDaily[d].operating;
+        sIdle += sDaily[d].idle;
+        sLitres += sDaily[d].litres;
+      });
+      var sPct = idleShare(sOp, sIdle);
+      if (sPct == null || sPct < 0.30 || sPct > 0.40) sweepBad += 1;
+      else if (Math.abs(sPct - profile.targetIdlePct) > 0.025) sweepBad += 1;
+      if (sPct != null) {
+        sweepMin = Math.min(sweepMin, sPct);
+        sweepMax = Math.max(sweepMax, sPct);
+      }
+      var expectedLitres = sOp * profile.workingLph + sIdle * profile.idleLph;
+      if (expectedLitres > 0 && Math.abs(sLitres / expectedLitres - 1) > 0.05) sweepBad += 1;
+    }
+    console.log(
+      'Machinery idle% sweep ' + profile.key + ' (ids 1–40): ' +
+      (sweepMin < Infinity ? (sweepMin * 100).toFixed(1) + '–' + (sweepMax * 100).toFixed(1) : 'n/a') +
+      '%  target ~' + (profile.targetIdlePct * 100).toFixed(0) +
+      '%  outside 30–40 or >2.5pp from target: ' + sweepBad + '/40'
+    );
+    if (sweepBad > 0) failed = true;
+  });
+  if (!onlyKeys || onlyKeys.indexOf('kenworth') !== -1) {
     var kenworth = PROFILES.filter(function(p) { return p.key === 'kenworth'; })[0];
     var sweepBad = 0;
     var sweepMin = Infinity;
@@ -1130,7 +1247,7 @@ async function main() {
   }
 
   var dryRun = process.argv.indexOf('--dry-run') !== -1;
-  var onlyKey = parseOnlyKey();
+  var onlyKeys = parseOnlyKeys();
   var supabaseUrl = process.env.SUPABASE_URL || 'https://pddsgvuzvuwueuvpoytw.supabase.co';
   var serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -1151,7 +1268,7 @@ async function main() {
   console.log('  user_id:   ' + DEMO_USER_ID);
   console.log('  window:    ' + startDate + ' → ' + endDate + ' (' + dates.length + ' days)');
   console.log('  mode:      ' + (dryRun ? 'DRY RUN (no writes)' : 'LIVE WRITE'));
-  if (onlyKey) console.log('  --only:    ' + onlyKey + ' (jobs and user_settings left untouched)');
+  if (onlyKeys) console.log('  --only:    ' + onlyKeys.join(', ') + ' (jobs and user_settings left untouched)');
   console.log('');
 
   console.log('Probing live schemas…');
@@ -1231,15 +1348,19 @@ async function main() {
     console.log('  matched ' + profile.key + ' → id=' + asset.id + ' "' + asset.asset_name + '" type=' + asset.asset_type);
   });
 
-  var missingProfiles = PROFILES.filter(function(p) { return !byKey[p.key]; });
-  if (onlyKey) {
-    if (!byKey[onlyKey]) {
-      throw new Error('--only ' + onlyKey + ' did not match a demo asset. Matched keys: ' + Object.keys(byKey).join(', '));
+  var allMatchedByKey = byKey;
+
+  var missingProfiles = PROFILES.filter(function(p) { return !allMatchedByKey[p.key]; });
+  if (onlyKeys) {
+    var missingOnly = onlyKeys.filter(function(k) { return !byKey[k]; });
+    if (missingOnly.length) {
+      throw new Error('--only did not match demo asset(s): ' + missingOnly.join(', ') +
+        '. Matched keys: ' + Object.keys(byKey).join(', '));
     }
-    var kept = byKey[onlyKey];
-    byKey = {};
-    byKey[onlyKey] = kept;
-    console.log('  --only ' + onlyKey + ': regenerating this asset only');
+    var kept = {};
+    onlyKeys.forEach(function(k) { kept[k] = byKey[k]; });
+    byKey = kept;
+    console.log('  --only ' + onlyKeys.join(', ') + ': regenerating these assets only');
   } else if (missingProfiles.length) {
     throw new Error(
       'Could not match all 10 demo assets. Missing: ' +
@@ -1252,6 +1373,19 @@ async function main() {
   }
 
   var demoAssetIds = Object.keys(byKey).map(function(k) { return Number(byKey[k].asset.id); });
+  var untouchedTruckIds = Object.keys(allMatchedByKey).filter(function(k) {
+    return allMatchedByKey[k].profile.kind === 'truck' && !byKey[k];
+  }).map(function(k) { return Number(allMatchedByKey[k].asset.id); });
+
+  var beforeMachinery = await fetchHoursByAsset(supabase, demoAssetIds, startDate, endDate);
+  var beforeTruckTel = {};
+  if (untouchedTruckIds.length) {
+    beforeTruckTel = await fetchHoursByAsset(supabase, untouchedTruckIds, startDate, endDate);
+  }
+  var beforeJobs = await supabase.from('jobs').select('id', { count: 'exact', head: true }).eq('user_id', DEMO_USER_ID);
+  var beforeJobCount = beforeJobs.count || 0;
+  var beforeJobAssets = await supabase.from('job_assets').select('id', { count: 'exact', head: true }).eq('user_id', DEMO_USER_ID);
+  var beforeJobAssetCount = beforeJobAssets.count || 0;
 
   console.log('');
   console.log('Discovering diesel price from existing customer data…');
@@ -1423,7 +1557,9 @@ async function main() {
       lastFill: fills[fills.length - 1] && fills[fills.length - 1].purchase_date,
       daily: daily,
       fillDates: fillDates,
-      residual: profile.kind === 'truck' ? truckResidualIdle(dates, daily, fills, profile) : null
+      residual: profile.kind === 'truck' ? truckResidualIdle(dates, daily, fills, profile) : null,
+      idlePct: profile.kind === 'machinery' ? idleShare(totalOp, totalIdle) : null,
+      targetIdlePct: profile.targetIdlePct || null
     });
   });
 
@@ -1465,6 +1601,9 @@ async function main() {
     if (s.kind === 'truck' && Math.abs(s.finalOdo - (s.startOdo + s.totalKm)) > 0.2) {
       problems.push('odometer mismatch');
     }
+    if (s.kind === 'machinery' && s.idlePct != null && (s.idlePct < 0.30 || s.idlePct > 0.40)) {
+      problems.push('idle%=' + (s.idlePct * 100).toFixed(1) + ' (want 30–40%)');
+    }
     if (s.key === 'kenworth' && s.residual &&
         (s.residual.idleLph == null || s.residual.idleLph < 1.3 || s.residual.idleLph > 4.5)) {
       problems.push('residual idle=' + (s.residual.idleLph != null ? s.residual.idleLph.toFixed(2) : 'n/a') + ' L/hr');
@@ -1479,7 +1618,7 @@ async function main() {
   if (sanityFailed) throw new Error('Pre-write sanity checks failed — nothing written');
 
   if (dryRun) {
-    printSummary(summaries, onlyKey ? [] : jobPayloads, startDate, endDate, pricing);
+    printSummary(summaries, onlyKeys ? [] : jobPayloads, startDate, endDate, pricing);
     console.log('\nDRY RUN complete — no database writes.');
     return;
   }
@@ -1535,7 +1674,7 @@ async function main() {
   }
 
   var insertedJobs = [];
-  if (onlyKey) {
+  if (onlyKeys) {
     console.log('  --only: leaving jobs and user_settings untouched');
   } else {
     if (settingsExist && jobCols.existing) {
@@ -1658,21 +1797,71 @@ async function main() {
   printSummary(summaries, insertedJobs, startDate, endDate, pricing);
 
   console.log('');
-  console.log('Running fuel regression calibration for this user…');
-  try {
-    var { spawnSync } = require('child_process');
-    var rr = spawnSync(process.execPath, ['lib/fuel-regression.js', '--user-id', DEMO_USER_ID], {
-      cwd: require('path').join(__dirname, '..'),
-      env: process.env,
-      encoding: 'utf8'
+  console.log('========== IDLE % BEFORE → AFTER ==========');
+  summaries.forEach(function(s) {
+    if (s.kind !== 'machinery') return;
+    var prev = beforeMachinery[Number(s.id)] || { op: 0, idle: 0, litres: 0, n: 0 };
+    var prevPct = idleShare(prev.op, prev.idle);
+    console.log(
+      s.name +
+      '  before ' + (prevPct != null ? (prevPct * 100).toFixed(1) + '%' : 'n/a') +
+      '  (' + prev.op.toFixed(0) + 'h work / ' + prev.idle.toFixed(0) + 'h idle, ' + prev.litres.toFixed(0) + ' L, n=' + prev.n + ')' +
+      '  → after ' + (s.idlePct != null ? (s.idlePct * 100).toFixed(1) + '%' : 'n/a') +
+      '  (' + s.totalOp.toFixed(0) + 'h work / ' + s.totalIdle.toFixed(0) + 'h idle, ' + s.totalLitres.toFixed(0) + ' L)' +
+      (s.targetIdlePct ? '  target ~' + (s.targetIdlePct * 100).toFixed(0) + '%' : '')
+    );
+  });
+  console.log('===========================================');
+
+  if (onlyKeys) {
+    var afterTruckTel = untouchedTruckIds.length
+      ? await fetchHoursByAsset(supabase, untouchedTruckIds, startDate, endDate)
+      : {};
+    var truckDrift = [];
+    untouchedTruckIds.forEach(function(id) {
+      var b = beforeTruckTel[id] || { n: 0, op: 0, idle: 0, litres: 0 };
+      var a = afterTruckTel[id] || { n: 0, op: 0, idle: 0, litres: 0 };
+      if (b.n !== a.n || Math.abs(b.op - a.op) > 0.05 || Math.abs(b.idle - a.idle) > 0.05 ||
+          Math.abs(b.litres - a.litres) > 0.5) {
+        truckDrift.push('asset_id=' + id + ' tel ' + b.n + '→' + a.n);
+      }
     });
-    if (rr.stdout) process.stdout.write(rr.stdout);
-    if (rr.stderr) process.stderr.write(rr.stderr);
-    if (rr.status !== 0) {
-      console.log('  WARN: fuel-regression exited ' + rr.status + ' (history was still written)');
+    var afterJobs = await supabase.from('jobs').select('id', { count: 'exact', head: true }).eq('user_id', DEMO_USER_ID);
+    var afterJobAssets = await supabase.from('job_assets').select('id', { count: 'exact', head: true }).eq('user_id', DEMO_USER_ID);
+    if (truckDrift.length) {
+      throw new Error('Truck telematics changed unexpectedly: ' + truckDrift.join('; '));
     }
-  } catch (err) {
-    console.log('  WARN: could not run fuel-regression: ' + err.message);
+    if ((afterJobs.count || 0) !== beforeJobCount) {
+      throw new Error('jobs count changed: ' + beforeJobCount + ' → ' + afterJobs.count);
+    }
+    if ((afterJobAssets.count || 0) !== beforeJobAssetCount) {
+      throw new Error('job_assets count changed: ' + beforeJobAssetCount + ' → ' + afterJobAssets.count);
+    }
+    console.log('Untouched: ' + untouchedTruckIds.length + ' trucks (telematics unchanged), jobs=' +
+      beforeJobCount + ', job_assets=' + beforeJobAssetCount);
+  }
+
+  var regeneratingTruck = Object.keys(byKey).some(function(k) { return byKey[k].profile.kind === 'truck'; });
+  if (!regeneratingTruck) {
+    console.log('Skipping fuel-regression (no trucks in this run).');
+  } else {
+    console.log('');
+    console.log('Running fuel regression calibration for this user…');
+    try {
+      var { spawnSync } = require('child_process');
+      var rr = spawnSync(process.execPath, ['lib/fuel-regression.js', '--user-id', DEMO_USER_ID], {
+        cwd: require('path').join(__dirname, '..'),
+        env: process.env,
+        encoding: 'utf8'
+      });
+      if (rr.stdout) process.stdout.write(rr.stdout);
+      if (rr.stderr) process.stderr.write(rr.stderr);
+      if (rr.status !== 0) {
+        console.log('  WARN: fuel-regression exited ' + rr.status + ' (history was still written)');
+      }
+    } catch (err) {
+      console.log('  WARN: could not run fuel-regression: ' + err.message);
+    }
   }
 
   console.log('\nDone.');
@@ -1692,7 +1881,9 @@ function printSummary(summaries, jobs, startDate, endDate, pricing) {
     console.log('  fuel purchases:  ' + s.fills + '  (' + s.intervals + ' intervals)  ' + s.firstFill + ' → ' + s.lastFill);
     if (s.kind === 'machinery') {
       console.log('  hours:           ' + s.startHours.toFixed(1) + ' → ' + s.finalHours.toFixed(1) +
-        '  (working ' + s.totalOp.toFixed(1) + 'h, idle ' + s.totalIdle.toFixed(1) + 'h)');
+        '  (working ' + s.totalOp.toFixed(1) + 'h, idle ' + s.totalIdle.toFixed(1) + 'h, idle ' +
+        (s.idlePct != null ? (s.idlePct * 100).toFixed(1) + '%' : 'n/a') +
+        (s.targetIdlePct ? ' target ~' + (s.targetIdlePct * 100).toFixed(0) + '%' : '') + ')');
       console.log('  litres burned:   ' + s.totalLitres.toFixed(1) + ' L (VisionLink litres_consumed)');
     } else {
       console.log('  odometer:        ' + s.startOdo.toFixed(1) + ' → ' + s.finalOdo.toFixed(1) +
