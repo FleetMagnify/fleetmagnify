@@ -36,7 +36,6 @@
   var LIFE_NEAR_LIMIT_MESSAGE =
     'Cannot calculate — asset is within 2% of its expected life limit and the depreciation rate is no longer meaningful. Update Expected Life Hours (or Expected Life KM) on the Assets page to continue tracking depreciation.';
 
-  var MIN_REMAINING_LIFE_HOURS = 5;
   var MIN_REMAINING_LIFE_KM = 100;
   var REMAINING_LIFE_PCT = 0.02;
 
@@ -101,9 +100,6 @@
       if (odo === null) missing.push('Current Odometer (km)');
     } else {
       if (num(asset.expected_life_hours) === null) missing.push('Expected Total Life (hours)');
-      var hours = context.totalEngineHours !== undefined && context.totalEngineHours !== null
-        ? num(context.totalEngineHours) : null;
-      if (hours === null) missing.push('Total Engine Hours');
     }
     return missing;
   }
@@ -127,21 +123,22 @@
     return num(asset.service_cost_per_hour) === null ? ['Service Cost Per Hour'] : [];
   }
 
+  // Hourly depreciation is straight-line over expected total life:
+  // (current value − end of life value) / expected_life_hours.
+  // totalEngineHours is unused for the rate (kept so existing call sites
+  // stay valid). Remaining-life as the denominator inflated the rate as
+  // the machine aged — e.g. a grader ~70% through its life showed ~3.3×
+  // the correct idle depreciation.
   function calcDepreciationPerHour(asset, totalEngineHours) {
-    var missing = getMissingDepreciationFields(asset, { totalEngineHours: totalEngineHours });
+    var missing = getMissingDepreciationFields(asset);
     if (missing.length) return { ok: false, missing: missing };
     var currentValue = num(asset.current_value);
     var eolValue = num(asset.estimated_end_of_life_value);
     var lifeHours = num(asset.expected_life_hours);
-    var currentHours = num(totalEngineHours);
-    var remaining = lifeHours - currentHours;
-    if (remaining <= 0) {
-      return lifeExceededResult(false);
+    if (lifeHours === null || lifeHours <= 0) {
+      return { ok: false, missing: ['Expected Total Life (hours)'] };
     }
-    if (remaining <= minRemainingLife(lifeHours, MIN_REMAINING_LIFE_HOURS)) {
-      return lifeExceededResult(true);
-    }
-    var perHour = (currentValue - eolValue) / remaining;
+    var perHour = (currentValue - eolValue) / lifeHours;
     return { ok: true, value: perHour < 0 ? 0 : perHour };
   }
 

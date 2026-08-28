@@ -710,7 +710,7 @@
     <div class="form-group field-shared-cost field-hidden" id="field-current-value">
       <label for="asset-current-value">Current Value ($)</label>
       <input type="number" id="asset-current-value" placeholder="e.g. 220000" step="0.01" min="0">
-      <div class="form-hint" id="hint-current-value">The asset's current book or market value — used with end-of-life value and remaining life to calculate depreciation.</div>
+      <div class="form-hint" id="hint-current-value">The asset's current book or market value — used with end-of-life value and expected total life to calculate depreciation per hour (or per km for on-road).</div>
     </div>
     <div class="form-group field-shared-cost field-hidden" id="field-eol-value">
       <label for="asset-eol-value">Estimated End of Life Value ($)</label>
@@ -2192,7 +2192,7 @@
       regoInput.placeholder = 'e.g. site ID or rego (optional)';
       document.getElementById('hint-rego').textContent = 'Optional internal or site identifier. Less critical than for on-road vehicles.';
       document.getElementById('hint-idle-rate').innerHTML = '<span class="emphasis">Critical for construction assets.</span> Litres per idle hour — drives Fuel Analyst and Idle Cost Analyst split between travelling and idle fuel. Leave blank to use a default by asset type.';
-      document.getElementById('hint-life-hours').innerHTML = '<span class="emphasis">Key for depreciation.</span> Total operating hours over the asset\'s useful life — used with current engine hours to calculate remaining depreciation life.';
+      document.getElementById('hint-life-hours').innerHTML = '<span class="emphasis">Key for depreciation.</span> Total operating hours over the asset\'s useful life — depreciation per hour is (current value − end of life value) ÷ this figure.';
       document.getElementById('hint-service-cost').innerHTML = '<span class="emphasis">Scheduled servicing only.</span> Routine service cost per operating hour — separate from annual repair cost above.';
       document.getElementById('hint-available-hours').textContent = 'Hours per week the asset is available to work. Leave blank to default to 40 in Utilisation Analyst.';
       document.getElementById('hint-target-utilisation').textContent = 'Target operating utilisation percentage — compared against actual hours in Utilisation Analyst.';
