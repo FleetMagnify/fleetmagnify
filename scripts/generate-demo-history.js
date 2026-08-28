@@ -86,7 +86,8 @@ var PROFILES = [
     workingLph: 22.0,
     idleLph: 5.2,
     tankL: 480,
-    targetFills: 13
+    targetFills: 13,
+    currentValue: 215000
   },
   {
     key: 'dozer',
@@ -1281,14 +1282,15 @@ async function main() {
     'user_id', 'vehicle_id', 'purchase_date', 'litres', 'cost_nzd', 'source', 'odometer_reading'
   ]);
   var jobCols = await probeColumns(supabase, 'jobs', [
-    'user_id', 'job_name', 'status', 'start_date', 'end_date', 'tonnes_moved'
+    'user_id', 'job_name', 'status', 'start_date', 'end_date', 'tonnes_moved', 'created_at'
   ]);
   var jobAssetCols = await probeColumns(supabase, 'job_assets', [
     'user_id', 'job_id', 'asset_id', 'work_date'
   ]);
   var assetCols = await probeColumns(supabase, 'assets', [
     'id', 'user_id', 'asset_name', 'asset_type', 'current_hours', 'current_odometer',
-    'is_ignored', 'is_on_road'
+    'is_ignored', 'is_on_road', 'idle_burn_rate_lph', 'current_value',
+    'telematics_provider', 'usage_profile', 'ruc_rate_per_km'
   ]);
   var fuelRecordsExist = await tableExists(supabase, 'fuel_records');
   var fuelRecordCols = fuelRecordsExist
@@ -1524,7 +1526,17 @@ async function main() {
     var patch = { id: Number(asset.id) };
     if (profile.kind === 'machinery') patch.current_hours = finalHours;
     if (profile.kind === 'truck') patch.current_odometer = finalOdo;
-    assetUpdates.push(patch);
+    if (profile.kind === 'machinery') patch.idle_burn_rate_lph = profile.idleLph;
+    if (profile.kind === 'truck') {
+      // Keep Kenworth's calibrated ~3 L/hr; clear implausible regression leftovers on the others.
+      if (key === 'kenworth' || key === 'transporter') patch.idle_burn_rate_lph = profile.idleLph;
+      else patch.idle_burn_rate_lph = null;
+    }
+    if (profile.kind === 'machinery') patch.telematics_provider = 'VisionLink';
+    if (profile.kind === 'truck') patch.telematics_provider = 'eRoad';
+    if (key === 'transporter') patch.usage_profile = 'intermittent';
+    if (profile.currentValue != null) patch.current_value = profile.currentValue;
+    assetUpdates.push(pickColumns(Object.assign({ id: Number(asset.id) }, patch), assetCols.existing.concat(['id'])));
 
     var totalOp = 0, totalIdle = 0, totalKm = 0, totalLitres = 0, activeDays = 0;
     dates.forEach(function(d) {
@@ -1567,13 +1579,16 @@ async function main() {
   // Jobs
   // -------------------------------------------------------------------------
   var jobPayloads = JOB_SPECS.map(function(spec) {
+    var start = addDays(endDate, -spec.startOffset);
+    var created = addDays(endDate, -spec.startOffset - 5);
     return pickColumns({
       user_id: DEMO_USER_ID,
       job_name: spec.job_name,
       status: spec.status,
-      start_date: addDays(endDate, -spec.startOffset),
+      start_date: start,
       end_date: addDays(endDate, -spec.endOffset),
-      tonnes_moved: spec.tonnes_moved
+      tonnes_moved: spec.tonnes_moved,
+      created_at: created + 'T07:30:00+12:00'
     }, jobCols.existing);
   });
 
@@ -1664,7 +1679,7 @@ async function main() {
     await batchedInsert(supabase, 'fuel_records', fuelRecordRows);
   }
 
-  console.log('Updating assets.current_hours / current_odometer…');
+  console.log('Updating asset hour-meters, idle rates, telematics provider, and profile fields…');
   for (var u = 0; u < assetUpdates.length; u++) {
     var patch = assetUpdates[u];
     var id = patch.id;

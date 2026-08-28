@@ -231,6 +231,10 @@
         </div>
         <button type="button" class="btn-teal" id="create-job-btn">+ Create New Job</button>
       </div>
+      <div class="method-note" style="display:flex;gap:12px;background:rgba(14,165,122,0.05);border:1px solid rgba(14,165,122,0.14);border-radius:12px;padding:14px 18px;margin-bottom:20px;">
+        <div style="font-size:16px;">💡</div>
+        <p style="font-size:13px;color:#5A6474;line-height:1.55;"><strong>How this is calculated:</strong> Each assigned work day pulls that day’s telematics hours and fuel. <strong>Fuel</strong> is VisionLink litres (machinery) or fill invoices (trucks). <strong>True idle cost</strong> is idle hours × idle fuel, depreciation, servicing and maintenance rates from the asset profile. <strong>Operating depreciation / servicing / maintenance</strong> apply only to working hours. Cost per tonne is the job total ÷ tonnes moved, shown to two decimal places.</p>
+      </div>
       <div class="jobs-toolbar">
         <div class="jobs-search">
           <span style="color:#3A4A5C;">🔍</span>
@@ -453,7 +457,7 @@
     'Bulldozer': 5.0, 'Compactor': 2.5, 'Crane': 4.5, 'Forklift': 1.5, 'Light Vehicle': 1.2,
     'Rigid Truck': 2.5, 'Semi Trailer': 3.0, 'Truck & Trailer': 3.0, 'Water Truck': 3.5, 'Other': 3.0
   };
-  var EMISSION_FACTORS = { 'Diesel': 2.68, 'Petrol': 2.31, 'Electric': 0, 'Hybrid': 1.5 };
+  var EMISSION_FACTORS = { 'Diesel': 2.68, 'Petrol': 2.31 };
 
   async function loadUserSettings() {
     var result = await supabase
@@ -488,10 +492,7 @@
     window.FleetMagnifySidebar.inject('job-cost-analyst.html', supabase, effectiveAccountId);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
-    companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name)
-      ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
-    document.getElementById('user-name').textContent = companyName;
-    document.getElementById('user-avatar').textContent = companyName.charAt(0).toUpperCase();
+    companyName = await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
     await loadUserSettings();
     await Promise.all([loadJobs(), loadAssets()]);
     bindUI();
@@ -533,7 +534,8 @@
       var status = (job.status || 'Active').toLowerCase();
       var matchesFilter = jobsFilter === 'all' ? true :
         jobsFilter === 'archived' ? status === 'archived' :
-        status !== 'archived';
+        jobsFilter === 'completed' ? status === 'completed' :
+        status === 'active';
       var matchesSearch = jobsSearch === '' ||
         job.job_name.toLowerCase().indexOf(jobsSearch) !== -1;
       return matchesFilter && matchesSearch;
@@ -804,7 +806,7 @@
     showToast('Job status updated.', 'success');
   }
 
-  function getIdleRate(asset) { return asset.idle_burn_rate_lph || DEFAULT_IDLE_RATES[asset.asset_type] || 3.0; }
+  function getIdleRate(asset) { return FCM.resolvedIdleRate(asset).rate; }
   function getEmissionFactor(ft) { return EMISSION_FACTORS[ft] !== undefined ? EMISSION_FACTORS[ft] : EMISSION_FACTORS.Diesel; }
   function mergeMissingFields(existing, incoming) {
     if (!incoming || !incoming.length) return existing;
@@ -1053,7 +1055,7 @@
     var costPerTonneEl = document.getElementById('kpi-cost-per-tonne');
     tonnesCard.hidden = false;
     if (jobTonnes && jobTonnes > 0) {
-      costPerTonneEl.textContent = fmtMoney(totals.grand / jobTonnes) + '/t';
+      costPerTonneEl.textContent = '$' + Number(totals.grand / jobTonnes).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '/t';
     } else {
       costPerTonneEl.textContent = '—';
     }
@@ -1502,10 +1504,10 @@
     el.setAttribute('title', partialTotalTooltip(unavailable));
     el.innerHTML = fmtMoney(value) + ' <span class="kpi-partial-suffix">' + esc(partialTotalSuffix(unavailable)) + '</span>';
   }
-  function formatDateShort(d) { return new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }); }
+  function formatDateShort(d) { return FCM.formatDateNZ(String(d).slice(0, 10)).replace(/ \d{4}$/, ''); }
   function formatDateLong(d) {
     if (!d) return '—';
-    return new Date(d).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
+    return FCM.formatDateNZ(String(d).slice(0, 10));
   }
   var toastTimer;
   function showToast(msg, type) {

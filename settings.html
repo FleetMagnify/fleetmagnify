@@ -525,11 +525,7 @@
     window.FleetMagnifySidebar.inject('settings.html', supabase, effectiveAccountId);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
-    var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
-      ? currentUser.user_metadata.company_name
-      : currentUser.email.split('@')[0];
-    document.getElementById('user-name').textContent = name;
-    document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+    await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
     await loadSettings();
 

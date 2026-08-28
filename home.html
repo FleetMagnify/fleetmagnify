@@ -186,6 +186,7 @@
         <div class="chart-card">
           <div class="chart-title">Utilisation by Asset (Month to Date)</div>
           <div class="chart-wrap"><canvas id="chart-util"></canvas></div>
+          <p class="chart-excluded" id="chart-util-legend" style="margin-top:8px;">Grey = no target set · Green = at or above target · Amber = below target · Red = over 100% of available hours</p>
           <p class="chart-excluded" id="chart-util-top-note" hidden></p>
           <p class="chart-excluded" id="chart-util-excluded" hidden></p>
         </div>
@@ -227,7 +228,7 @@
     'Bulldozer': 5.0, 'Compactor': 2.5, 'Crane': 4.5, 'Forklift': 1.5, 'Light Vehicle': 1.2,
     'Rigid Truck': 2.5, 'Semi Trailer': 3.0, 'Truck & Trailer': 3.0, 'Water Truck': 3.5, 'Other': 3.0
   };
-  var EMISSION_FACTORS = { 'Diesel': 2.68, 'Petrol': 2.31, 'Electric': 0, 'Hybrid': 1.5 };
+  var EMISSION_FACTORS = { 'Diesel': 2.68, 'Petrol': 2.31 };
   var DEFAULT_HOURS_PER_WEEK = 40;
 
   function fmtDate(d) {
@@ -235,16 +236,23 @@
   }
 
   function getMTDRange() {
-    var now = new Date();
-    return { from: fmtDate(new Date(now.getFullYear(), now.getMonth(), 1)), to: fmtDate(now) };
+    var today = FCM.nzTodayISO();
+    var parts = today.split('-').map(Number);
+    var from = parts[0] + '-' + String(parts[1]).padStart(2, '0') + '-01';
+    return { from: from, to: today };
   }
 
   function getPrevMTDRange() {
-    var now = new Date();
-    var from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    var endDay = Math.min(now.getDate(), new Date(now.getFullYear(), now.getMonth(), 0).getDate());
-    var to = new Date(now.getFullYear(), now.getMonth() - 1, endDay);
-    return { from: fmtDate(from), to: fmtDate(to) };
+    var today = FCM.nzTodayISO();
+    var parts = today.split('-').map(Number);
+    var y = parts[0], m = parts[1], d = parts[2];
+    var prevM = m === 1 ? 12 : m - 1;
+    var prevY = m === 1 ? y - 1 : y;
+    var from = prevY + '-' + String(prevM).padStart(2, '0') + '-01';
+    var lastDayPrev = new Date(y, m - 1, 0).getDate();
+    var toDay = Math.min(d, lastDayPrev);
+    var to = prevY + '-' + String(prevM).padStart(2, '0') + '-' + String(toDay).padStart(2, '0');
+    return { from: from, to: to };
   }
 
   function daysInRange(fromStr, toStr) {
@@ -286,11 +294,7 @@
     window.FleetMagnifySidebar.inject('home.html', supabase, effectiveAccountId);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
-    companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name)
-      ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
-    document.getElementById('user-name').textContent = companyName;
-    document.getElementById('user-avatar').textContent = companyName.charAt(0).toUpperCase();
-    document.getElementById('company-name').textContent = companyName;
+    companyName = await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
     if (window.FleetMagnifyUploadEmail) {
       var signupCompanyName = (currentUser.user_metadata && currentUser.user_metadata.company_name) || '';
@@ -309,8 +313,11 @@
     await maybeStartTour();
   }
 
-  function getIdleRate(a) { return a.idle_burn_rate_lph || DEFAULT_IDLE_RATES[a.asset_type] || 3.0; }
-  function getEmissionFactor(ft) { return EMISSION_FACTORS[ft] !== undefined ? EMISSION_FACTORS[ft] : EMISSION_FACTORS.Diesel; }
+  function getIdleRate(a) { return FCM.resolvedIdleRate(a).rate; }
+  function getEmissionFactor(ft) {
+    var key = (ft || '').trim();
+    return FCM.EMISSION_FACTORS[key] != null ? FCM.EMISSION_FACTORS[key] : FCM.EMISSION_FACTORS.Diesel;
+  }
   function getHoursPerWeek(a) {
     var h = a.available_hours_per_week != null ? parseFloat(a.available_hours_per_week) : DEFAULT_HOURS_PER_WEEK;
     return isNaN(h) ? DEFAULT_HOURS_PER_WEEK : h;
@@ -385,7 +392,7 @@
     el.removeAttribute('title');
   }
 
-  function computeAssetMetrics(assets, fuelRows, telRows, latestTelRows, dateFrom, dateTo) {
+  function computeAssetMetrics(assets, purchaseRows, telRows, latestTelRows, dateFrom, dateTo) {
     var weeks = daysInRange(dateFrom, dateTo) / 7;
     var engineHoursMap = {};
     (latestTelRows || []).forEach(function(r) {
@@ -400,30 +407,35 @@
     var fleetUnavailable = { fuelMissing: false, deprMissing: false, deprLifeExceeded: false, deprLifeNearLimit: false, servMissing: false, maintMissing: false };
 
     var results = assets.map(function(asset) {
-      var assetFuel = fuelRows.filter(function(r) { return Number(r.asset_id) === Number(asset.id); });
       var assetTel = telRows.filter(function(r) { return Number(r.asset_id) === Number(asset.id); });
+      var assetPurchases = purchaseRows.filter(function(r) { return Number(r.vehicle_id) === Number(asset.id); });
 
-      var fuelCost = 0, litres = 0, idleHours = 0, opHours = 0;
-      assetFuel.forEach(function(r) {
-        fuelCost += parseFloat(r.total_cost) || 0;
-        litres += parseFloat(r.litres) || 0;
+      var fuel = FCM.assetFuelTotals(asset, {
+        telRows: assetTel,
+        purchaseRows: assetPurchases,
+        machineryCpl: defaultMachineryFuelCostPerLitre
       });
+      var fuelCost = fuel.cost;
+      var litres = fuel.litres;
+      var idleHours = 0, opHours = 0;
       assetTel.forEach(function(r) {
         idleHours += parseFloat(r.idle_hours) || 0;
         opHours += parseFloat(r.operating_hours) || 0;
       });
 
       var avgCpl = litres > 0 ? fuelCost / litres : (!FCM.isOnRoad(asset) && defaultMachineryFuelCostPerLitre) || 0;
-      var idleRate = getIdleRate(asset);
+      var idleRate = FCM.resolvedIdleRate(asset).rate;
       var engineEntry = engineHoursMap[Number(asset.id)];
       var totalEngineHours = engineEntry ? engineEntry.hours : null;
-      var fuelPricingAvailable = (assetFuel.length > 0 && litres > 0) ||
-        (!FCM.isOnRoad(asset) && defaultMachineryFuelCostPerLitre > 0);
+      var fuelPricingAvailable = litres > 0 || (!FCM.isOnRoad(asset) && defaultMachineryFuelCostPerLitre > 0);
       var idleCosts = FCM.calcIdleHourCosts(asset, idleHours, avgCpl, idleRate, totalEngineHours, fuelPricingAvailable);
       var idlePartialTotal = calcPartialIdleTotal(idleCosts);
       mergeFleetUnavailable(fleetUnavailable, idleCosts);
 
-      var emissionsKg = litres * getEmissionFactor(asset.fuel_type);
+      var factor = FCM.EMISSION_FACTORS[(asset.fuel_type || '').trim()] != null
+        ? FCM.EMISSION_FACTORS[(asset.fuel_type || '').trim()]
+        : FCM.EMISSION_FACTORS.Diesel;
+      var emissionsKg = litres * factor;
       var available = getHoursPerWeek(asset) * weeks;
       var utilRate = available > 0 ? (opHours / available) * 100 : 0;
       var target = asset.target_utilisation_percent != null ? parseFloat(asset.target_utilisation_percent) : null;
@@ -437,13 +449,13 @@
         serviceCost: idleCosts.servicing,
         maintCost: idleCosts.maintenance,
         idleTotal: idlePartialTotal,
-        totalCost: fuelCost + idlePartialTotal,
+        totalCost: fuelCost + idlePartialTotal - (idleCosts.fuel || 0),
         hasPartialCost: idleCosts.hasMissing,
         emissionsKg: emissionsKg, utilRate: utilRate, target: target,
         opHours: opHours, available: available, litres: litres,
-        hasFuelData: assetFuel.length > 0,
+        hasFuelData: litres > 0,
         hasIdleData: assetTel.length > 0,
-        hasEmissionsData: assetFuel.length > 0 && litres > 0,
+        hasEmissionsData: litres > 0,
         hasUtilData: assetTel.length > 0
       };
     });
@@ -476,30 +488,18 @@
     // chart on this page.
     var assetsResult = await supabase.from('assets').select('*').eq('user_id', effectiveAccountId).eq('is_ignored', false).order('asset_name');
     var assets = assetsResult.data || [];
-    if (assets.length === 0) return { assets: [], fuel: [], tel: [], latestTel: [] };
+    if (assets.length === 0) return { assets: [], purchases: [], tel: [], latestTel: [] };
 
-    var fuelResult = await supabase.from('fuel_records').select('asset_id, litres, total_cost, record_date')
-      .eq('user_id', effectiveAccountId).gte('record_date', dateFrom).lte('record_date', dateTo);
     var fuelPurchasesResult = await supabase.from('fuel_purchases').select('vehicle_id, litres, cost_nzd, purchase_date')
       .eq('user_id', effectiveAccountId).gte('purchase_date', dateFrom).lte('purchase_date', dateTo);
-    var telResult = await supabase.from('telematics_records').select('asset_id, idle_hours, operating_hours, total_engine_hours, record_date')
+    var telResult = await supabase.from('telematics_records').select('asset_id, idle_hours, operating_hours, total_engine_hours, litres_consumed, record_date')
       .eq('user_id', effectiveAccountId).gte('record_date', dateFrom).lte('record_date', dateTo);
     var latestTelResult = await supabase.from('telematics_records').select('asset_id, total_engine_hours, record_date')
       .eq('user_id', effectiveAccountId).order('record_date', { ascending: false });
 
-    var normalizedPurchases = (fuelPurchasesResult.data || []).map(function(r) {
-      return {
-        asset_id: r.vehicle_id,
-        litres: r.litres,
-        total_cost: r.cost_nzd,
-        record_date: r.purchase_date
-      };
-    });
-    var fuel = (fuelResult.data || []).concat(normalizedPurchases);
-
     return {
       assets: assets,
-      fuel: fuel,
+      purchases: fuelPurchasesResult.data || [],
       tel: telResult.data || [],
       latestTel: latestTelResult.data || []
     };
@@ -535,15 +535,15 @@
     document.getElementById('empty-state').hidden = true;
     document.getElementById('dashboard-content').hidden = false;
 
-    var curMetrics = computeAssetMetrics(current.assets, current.fuel, current.tel, current.latestTel, mtd.from, mtd.to);
+    var curMetrics = computeAssetMetrics(current.assets, current.purchases, current.tel, current.latestTel, mtd.from, mtd.to);
     var prevData = await fetchData(prev.from, prev.to);
-    var prevMetrics = computeAssetMetrics(prevData.assets, prevData.fuel, prevData.tel, prevData.latestTel, prev.from, prev.to);
+    var prevMetrics = computeAssetMetrics(prevData.assets, prevData.purchases, prevData.tel, prevData.latestTel, prev.from, prev.to);
 
     var partialFleet = fleetHasPartial(curMetrics.fleetUnavailable);
     var partialTooltip = fleetPartialTooltip(curMetrics.fleetUnavailable);
     setPartialMoney(document.getElementById('hero-total'), curMetrics.totals.grand, partialFleet, partialTooltip, 'hero-value');
     var compareEl = document.getElementById('hero-compare');
-    var hasPrevData = prevData.fuel.length > 0 || prevData.tel.length > 0;
+    var hasPrevData = (prevData.purchases && prevData.purchases.length > 0) || prevData.tel.length > 0;
     if (!hasPrevData) {
       compareEl.innerHTML = '<span class="neutral">First month of tracking — month-over-month comparison available from ' +
         esc(monthName(1)) + '.</span>';
@@ -571,17 +571,19 @@
     Object.keys(charts).forEach(function(k) { if (charts[k]) { charts[k].destroy(); charts[k] = null; } });
   }
 
-  function chartTickOptions(labelCount) {
-    var rotate = labelCount > 6;
+  function chartTickOptions(labelCount, horizontal) {
     return {
       color: '#CBD5E1',
-      font: { size: 12 },
-      maxRotation: rotate ? 45 : 0,
-      minRotation: rotate ? 45 : 0,
-      autoSkip: false,
+      font: { size: 11 },
+      maxRotation: 0,
+      minRotation: 0,
+      autoSkip: true,
+      maxTicksLimit: horizontal ? 12 : 8,
       callback: function(value) {
         var label = this.getLabelForValue(value);
-        return typeof label === 'string' ? label : String(label);
+        if (typeof label !== 'string') return label;
+        if (label.length <= 24) return label;
+        return label.slice(0, 22) + '…';
       }
     };
   }
@@ -704,7 +706,7 @@
         plugins: { legend: { display: false } },
         scales: {
           x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 12 }, callback: function(v) { return v + ' kg'; } } },
-          y: { grid: { display: false }, ticks: chartTickOptions(emissionsChart.rows.length) }
+          y: { grid: { display: false }, ticks: chartTickOptions(emissionsChart.rows.length, true) }
         }
       }
     });
@@ -716,7 +718,8 @@
         datasets: [{
           data: utilChart.rows.map(function(a) { return Math.round(a.utilRate * 10) / 10; }),
           backgroundColor: utilChart.rows.map(function(a) {
-            if (a.target == null || isNaN(a.target)) return '#0EA57A';
+            if (a.target == null || isNaN(a.target)) return '#6B7785';
+            if (a.utilRate > 100) return '#E2754A';
             return a.utilRate >= a.target ? '#0EA57A' : '#EF9F27';
           }),
           borderRadius: 4
@@ -726,8 +729,8 @@
         indexAxis: 'y', responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-          x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 12 }, callback: function(v) { return v + '%'; } }, max: 100 },
-          y: { grid: { display: false }, ticks: chartTickOptions(utilChart.rows.length) }
+          x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 12 }, callback: function(v) { return v + '%'; } } },
+          y: { grid: { display: false }, ticks: chartTickOptions(utilChart.rows.length, true) }
         }
       }
     });

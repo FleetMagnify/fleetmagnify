@@ -10,7 +10,6 @@ window.FleetMagnifySidebar = (function() {
     { type: 'link', href: 'emissions-intelligence.html', icon: '🌍', text: 'Emissions Intelligence' },
     { type: 'link', href: 'utilisation-analyst.html', icon: '📊', text: 'Utilisation Analyst' },
     { type: 'link', href: 'job-cost-analyst.html', icon: '🏗', text: 'Job Cost Analyst' },
-    { type: 'link', href: 'reports.html', icon: '📋', text: 'Reports' },
     { type: 'label', text: 'Truck Modules' },
     { type: 'link', href: 'truck-fuel-analyst.html', icon: '🚛', text: 'Fuel Cost Analyst' },
     { type: 'link', href: 'truck-idle-monitor.html', icon: '⏸', text: 'Idle Monitor' },
@@ -19,6 +18,7 @@ window.FleetMagnifySidebar = (function() {
     { type: 'link', href: 'trip-report.html', icon: '🗺️', text: 'Trip Report' },
     { type: 'link', href: 'orion-fuel-report.html', icon: '🧾', text: 'Orion Fuel Report', requiresWorkOrderReport: true },
     { type: 'label', text: 'Fleet Management' },
+    { type: 'link', href: 'reports.html', icon: '📋', text: 'Reports' },
     { type: 'link', href: 'assets.html', icon: '🚧', text: 'Assets' },
     { type: 'link', href: 'upload.html', icon: '📤', text: 'Upload Data' },
     { type: 'link', href: 'integrations.html', icon: '🔌', text: 'Integrations' },
@@ -99,13 +99,21 @@ window.FleetMagnifySidebar = (function() {
     }
   }
 
-  async function inject(activePage, supabase, effectiveAccountId) {
+  function mount(activePage) {
+    var html = render(activePage);
     var placeholder = document.getElementById('sidebar-placeholder');
-    if (!placeholder) {
+    var existing = document.querySelector('aside.sidebar');
+    if (placeholder) {
+      placeholder.outerHTML = html;
+    } else if (existing) {
+      existing.outerHTML = html;
+    } else {
       console.warn('FleetMagnifySidebar: no #sidebar-placeholder element found on this page');
-      return;
     }
-    placeholder.outerHTML = render(activePage);
+  }
+
+  async function inject(activePage, supabase, effectiveAccountId) {
+    mount(activePage);
 
     if (!supabase || !effectiveAccountId) return;
 
@@ -147,6 +155,27 @@ window.FleetMagnifySidebar = (function() {
     }
   }
 
-  return { render: render, inject: inject };
+  async function setAccountChip(supabase, accountId, fallbackUser) {
+    var name = '';
+    if (supabase && accountId) {
+      try {
+        var result = await supabase.from('profiles').select('company_name').eq('id', accountId).maybeSingle();
+        name = result.data && result.data.company_name ? String(result.data.company_name).trim() : '';
+      } catch (e) { /* fall through */ }
+    }
+    if (!name && fallbackUser && fallbackUser.user_metadata && fallbackUser.user_metadata.company_name) {
+      name = String(fallbackUser.user_metadata.company_name).trim();
+    }
+    if (!name) name = 'FleetMagnify';
+    var nameEl = document.getElementById('user-name');
+    var avatarEl = document.getElementById('user-avatar');
+    if (nameEl) nameEl.textContent = name;
+    if (avatarEl) avatarEl.textContent = name.charAt(0).toUpperCase();
+    var companyEl = document.getElementById('company-name');
+    if (companyEl) companyEl.textContent = name;
+    return name;
+  }
+
+  return { render: render, inject: inject, mount: mount, setAccountChip: setAccountChip };
 
 })();

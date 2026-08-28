@@ -154,7 +154,10 @@
   .badge.on-target { background: rgba(14,165,122,0.12); color: #0EA57A; border: 1px solid rgba(14,165,122,0.22); }
   .badge.below-target { background: rgba(239,159,39,0.12); color: #EF9F27; border: 1px solid rgba(239,159,39,0.22); }
   .badge.exceeds-capacity { background: rgba(226,117,74,0.12); color: #E2754A; border: 1px solid rgba(226,117,74,0.24); }
-  .badge.no-data { background: rgba(255,255,255,0.04); color: #4A5568; border: 1px solid #2D3748; }
+  .badge.parked { background: rgba(107,119,133,0.12); color: #9BA4B0; border: 1px solid #2D3748; }
+  .badge.weekend { background: rgba(255,255,255,0.03); color: #4A5568; border: 1px solid #2D3748; }
+  .badge.worked { background: rgba(14,165,122,0.12); color: #0EA57A; border: 1px solid rgba(14,165,122,0.28); }
+  .badge.no-data { background: rgba(226,117,74,0.10); color: #C4A484; border: 1px solid rgba(226,117,74,0.22); }
   .badge.no-target { background: rgba(255,255,255,0.04); color: #5A6474; border: 1px solid #2D3748; }
 
   .empty-state {
@@ -190,7 +193,7 @@
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this is calculated:</strong> Available hours = weekly capacity × weeks (calendar days ÷ 7), spread evenly across <strong>working days only</strong> (Mon–Fri). Headline utilisation uses the <strong>recorded-data window</strong> (first to last telematics date in your selection), not empty months in a wide filter. Daily utilisation = that day’s actual ÷ that day’s available hours. Set weekly capacity and target on the <a href="assets.html">Assets page</a>.</p>
+      <p><strong>How this is calculated:</strong> Available hours = weekly capacity × weeks (calendar days ÷ 7), spread evenly across <strong>working days only</strong> (Mon–Fri). Headline utilisation uses the <strong>recorded-data window</strong> (first to last telematics date in your selection), not empty months in a wide filter. Daily utilisation = that day’s actual ÷ that day’s available hours. Assets tagged <strong>Intermittent / on-call</strong> report days worked instead of a flat utilisation %, and active days are not flagged against a 100% target. Set weekly capacity, target, and usage profile on the <a href="assets.html">Assets page</a>.</p>
     </div>
 
     <div class="filter-bar">
@@ -226,9 +229,9 @@
         <div class="kpi-sub">from telematics</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Utilisation Rate</div>
+        <div class="kpi-label" id="kpi-rate-label">Utilisation Rate</div>
         <div class="kpi-value teal" id="kpi-rate">—</div>
-        <div class="kpi-sub">actual ÷ available</div>
+        <div class="kpi-sub" id="kpi-rate-sub">actual ÷ available</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Target Utilisation</div>
@@ -251,9 +254,11 @@
       <div class="chart-card-header">
         <div class="chart-card-title">Daily Utilisation vs Target</div>
         <div class="chart-legend">
-          <div class="legend-item"><div class="legend-dot" style="background:#0EA57A;"></div> On target (≤100%)</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#0EA57A;"></div> On or above target</div>
           <div class="legend-item"><div class="legend-dot" style="background:#EF9F27;"></div> Below target</div>
-          <div class="legend-item"><div class="legend-dot" style="background:#E2754A;"></div> Exceeds 100%</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#E2754A;"></div> Over available hours</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#6B7785;"></div> Parked (telematics received, no work)</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#C4A484;"></div> No data (no telematics that day)</div>
           <div class="legend-item" id="legend-target" style="display:none;"><div class="legend-line"></div> Target</div>
         </div>
       </div>
@@ -295,9 +300,11 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<script src="js/fleet-cost-model.js"></script>
 <script src="js/sidebar-nav.js"></script>
 <script>
 (function() {
+  var FCM = window.FleetCostModel;
   var DEFAULT_HOURS_PER_WEEK = 40;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
@@ -339,17 +346,11 @@
     });
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
-    var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
-      ? currentUser.user_metadata.company_name
-      : currentUser.email.split('@')[0];
-    document.getElementById('user-name').textContent = name;
-    document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+    await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
-    var today = new Date();
-    var monthAgo = new Date();
-    monthAgo.setDate(monthAgo.getDate() - 30);
-    document.getElementById('date-to').value = today.toISOString().slice(0, 10);
-    document.getElementById('date-from').value = monthAgo.toISOString().slice(0, 10);
+    var today = FCM.nzTodayISO();
+    document.getElementById('date-to').value = today;
+    document.getElementById('date-from').value = FCM.addDaysISO(today, -30);
 
     await loadAssets();
   }
@@ -357,19 +358,34 @@
   async function loadAssets() {
     var result = await supabase
       .from('assets')
-      .select('id, asset_name, available_hours_per_week, target_utilisation_percent')
+      .select('id, asset_name, asset_type, available_hours_per_week, target_utilisation_percent, usage_profile')
       .eq('user_id', effectiveAccountId)
       .eq('is_ignored', false)
       .order('asset_name');
+    if (result.error) {
+      result = await supabase
+        .from('assets')
+        .select('id, asset_name, asset_type, available_hours_per_week, target_utilisation_percent')
+        .eq('user_id', effectiveAccountId)
+        .eq('is_ignored', false)
+        .order('asset_name');
+    }
 
     if (result.error || !result.data) return;
 
     assetsList = result.data;
     var select = document.getElementById('asset-select');
-    select.innerHTML = '<option value="">Select an asset...</option>' +
-      assetsList.map(function(a) {
-        return '<option value="' + a.id + '">' + esc(a.asset_name) + '</option>';
-      }).join('');
+    if (!assetsList.length) {
+      select.innerHTML = '<option value="">No assets found</option>';
+      return;
+    }
+    select.innerHTML = assetsList.map(function(a, i) {
+      return '<option value="' + a.id + '"' + (i === 0 ? ' selected' : '') + '>' + esc(a.asset_name) + '</option>';
+    }).join('');
+    selectedAsset = assetsList[0];
+    document.getElementById('apply-filters-btn').disabled = false;
+    updateAssetSettingsDisplay();
+    runAnalysis();
   }
 
   function getHoursPerWeek(asset) {
@@ -443,8 +459,13 @@
     el.style.display = 'flex';
   }
 
-  function dayStatus(rate, targetPercent, hasTelematics, dailyAvailable, actual) {
+  function dayStatus(rate, targetPercent, hasTelematics, dailyAvailable, actual, intermittent, isWknd) {
     if (!hasTelematics) return 'no-data';
+    if (hasTelematics && actual <= 0) {
+      if (isWknd) return 'weekend';
+      return 'parked';
+    }
+    if (intermittent) return 'worked';
     if (dailyAvailable <= 0 && actual > 0) return 'exceeds-capacity';
     if (targetPercent == null) return 'no-target';
     if (rate != null && rate > 100) return 'exceeds-capacity';
@@ -455,8 +476,11 @@
   function statusBadge(status) {
     if (status === 'on-target') return { className: 'on-target', text: 'On Target' };
     if (status === 'below-target') return { className: 'below-target', text: 'Below Target' };
-    if (status === 'exceeds-capacity') return { className: 'exceeds-capacity', text: 'Exceeds 100%' };
+    if (status === 'exceeds-capacity') return { className: 'exceeds-capacity', text: 'Over available hours' };
     if (status === 'no-data') return { className: 'no-data', text: 'No Data' };
+    if (status === 'parked') return { className: 'parked', text: 'Parked' };
+    if (status === 'weekend') return { className: 'weekend', text: 'Weekend' };
+    if (status === 'worked') return { className: 'worked', text: 'Worked' };
     return { className: 'no-target', text: 'No Target Set' };
   }
 
@@ -484,7 +508,9 @@
     }
     html += '</div>';
 
-    if (target != null) {
+    if (FCM.isIntermittentUsage(selectedAsset)) {
+      html += '<div>Usage: <strong>Intermittent / on-call</strong></div>';
+    } else if (target != null) {
       html += '<div>Target: <strong>' + target + '%</strong></div>';
     } else {
       html += '<div class="warn">⚠ Target utilisation not set</div>';
@@ -548,38 +574,44 @@
       byDate[r.record_date] = (byDate[r.record_date] || 0) + (parseFloat(r.operating_hours) || 0);
     });
 
+    var intermittent = FCM.isIntermittentUsage(selectedAsset);
     var dataDates = Object.keys(byDate).sort();
     var dataDateFrom = dataDates[0];
     var dataDateTo = dataDates[dataDates.length - 1];
-    var dataCalendarDays = calendarDaysInRange(dataDateFrom, dataDateTo);
-    var dataWorkingDays = workingDaysInRange(dataDateFrom, dataDateTo);
+    var rowFrom = intermittent ? dateFrom : dataDateFrom;
+    var rowTo = intermittent ? dateTo : dataDateTo;
+    var dataCalendarDays = calendarDaysInRange(rowFrom, rowTo);
+    var dataWorkingDays = workingDaysInRange(rowFrom, rowTo);
     var dataWeeks = dataCalendarDays / 7;
     var dataPeriodAvailable = hoursPerWeek * dataWeeks;
 
     var fullCalendarDays = calendarDaysInRange(dateFrom, dateTo);
     var fullWeeks = fullCalendarDays / 7;
     var fullPeriodAvailable = hoursPerWeek * fullWeeks;
-    var showSparseNote = isRangeSignificantlyWiderThanData(dateFrom, dateTo, dataDateFrom, dataDateTo);
+    var showSparseNote = !intermittent && isRangeSignificantlyWiderThanData(dateFrom, dateTo, dataDateFrom, dataDateTo);
 
     var dailyRows = [];
     var totalActual = 0;
+    var workedWeekdays = 0;
 
-    eachDateInRange(dataDateFrom, dataDateTo).forEach(function(date) {
+    eachDateInRange(rowFrom, rowTo).forEach(function(date) {
       var hasTelematics = byDate[date] != null;
       var actual = hasTelematics ? byDate[date] : 0;
+      var isWknd = !isWeekday(date);
       var dayAvailable = dailyAvailableForDate(dataPeriodAvailable, date, dataWorkingDays);
       var rate = null;
       if (hasTelematics && dayAvailable > 0) {
         rate = (actual / dayAvailable) * 100;
       }
       totalActual += actual;
+      if (!isWknd && actual > 0) workedWeekdays += 1;
 
       dailyRows.push({
         date: date,
         available: dayAvailable,
         actual: actual,
         rate: rate,
-        status: dayStatus(rate, targetPercent, hasTelematics, dayAvailable, actual),
+        status: dayStatus(rate, targetPercent, hasTelematics, dayAvailable, actual, intermittent, isWknd),
         hasTelematics: hasTelematics
       });
     });
@@ -607,15 +639,29 @@
     document.getElementById('kpi-actual').textContent = totalActual.toFixed(1) + ' hr';
 
     var rateEl = document.getElementById('kpi-rate');
-    rateEl.textContent = utilisationRate.toFixed(1) + '%';
-    if (targetPercent != null) {
-      rateEl.className = 'kpi-value ' + (utilisationRate >= targetPercent ? 'teal' : 'amber');
+    var rateLabelEl = document.getElementById('kpi-rate-label');
+    var rateSubEl = document.getElementById('kpi-rate-sub');
+    if (intermittent) {
+      rateLabelEl.textContent = 'Days Worked';
+      rateEl.textContent = workedWeekdays + ' of ' + dataWorkingDays;
+      rateEl.className = 'kpi-value teal';
+      rateSubEl.textContent = 'available weekdays in range (on-call profile)';
     } else {
-      rateEl.className = 'kpi-value white';
+      rateLabelEl.textContent = 'Utilisation Rate';
+      rateEl.textContent = utilisationRate.toFixed(1) + '%';
+      rateSubEl.textContent = 'actual ÷ available';
+      if (targetPercent != null) {
+        rateEl.className = 'kpi-value ' + (utilisationRate >= targetPercent ? 'teal' : 'amber');
+      } else {
+        rateEl.className = 'kpi-value white';
+      }
     }
 
     var targetEl = document.getElementById('kpi-target');
-    if (targetPercent != null) {
+    if (intermittent) {
+      targetEl.textContent = 'On-call';
+      targetEl.className = 'kpi-value white';
+    } else if (targetPercent != null) {
       targetEl.textContent = targetPercent + '%';
       targetEl.className = 'kpi-value white';
     } else {
@@ -624,7 +670,10 @@
     }
 
     var varianceEl = document.getElementById('kpi-variance');
-    if (variance != null) {
+    if (intermittent) {
+      varianceEl.textContent = '—';
+      varianceEl.className = 'kpi-value muted';
+    } else if (variance != null) {
       var sign = variance >= 0 ? '+' : '';
       varianceEl.textContent = sign + variance.toFixed(1) + '%';
       varianceEl.className = 'kpi-value ' + (variance >= 0 ? 'teal' : 'amber');
@@ -633,7 +682,7 @@
       varianceEl.className = 'kpi-value muted';
     }
 
-    renderChart(dailyRows.filter(function(r) { return r.hasTelematics && r.rate != null; }), targetPercent);
+    renderChart(dailyRows.filter(function(r) { return r.hasTelematics && r.actual > 0 && r.rate != null; }), intermittent ? null : targetPercent);
     renderTable(dailyRows, targetPercent);
   }
 
@@ -741,6 +790,10 @@
     document.getElementById('kpi-actual').textContent = '—';
     document.getElementById('kpi-rate').textContent = '—';
     document.getElementById('kpi-rate').className = 'kpi-value white';
+    var rateLabelEl = document.getElementById('kpi-rate-label');
+    if (rateLabelEl) rateLabelEl.textContent = 'Utilisation Rate';
+    var rateSubEl = document.getElementById('kpi-rate-sub');
+    if (rateSubEl) rateSubEl.textContent = 'actual ÷ available';
     document.getElementById('kpi-target').textContent = '—';
     document.getElementById('kpi-target').className = 'kpi-value white';
     document.getElementById('kpi-variance').textContent = '—';
@@ -756,8 +809,7 @@
   }
 
   function formatDateShort(dateStr) {
-    var d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+    return FCM.formatDateNZ(dateStr).replace(/ \d{4}$/, '');
   }
 
   function esc(str) {

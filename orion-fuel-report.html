@@ -143,7 +143,7 @@
           <div class="drop-filename" id="csv-filename"></div>
         </div>
         <div class="btn-row">
-          <button class="btn-primary" id="process-btn" disabled>Process File</button>
+          <button class="btn-primary" id="process-btn" disabled title="Attach a CSV file first">Process File</button>
         </div>
       </div>
 
@@ -869,7 +869,10 @@
     });
 
     document.getElementById('process-btn').addEventListener('click', async function() {
-      if (!selectedFile) return;
+      if (!selectedFile) {
+        alert('Attach a CSV file first.');
+        return;
+      }
       var btn = this;
       btn.disabled = true; btn.textContent = 'Processing...';
       try {

@@ -409,9 +409,10 @@
 <script src="js/sidebar-nav.js"></script>
 <script>
 (function() {
-  window.FleetMagnifySidebar.inject('upload.html');
+  window.FleetMagnifySidebar.mount('upload.html');
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
+  var effectiveAccountId = null;
   var truckFuelRows = [];
   var truckMileageRows = [];
   var truckFuelHeaders = [];
@@ -419,17 +420,27 @@
   var UPLOAD_DOMAIN = 'uploads.fleetmagnify.com';
 
   // ── Auth ──
+  async function resolveAccountId(supabase, authUserId) {
+    var memberResult = await supabase
+      .from('account_members')
+      .select('account_owner_user_id')
+      .eq('member_auth_user_id', authUserId)
+      .maybeSingle();
+    if (memberResult.data && memberResult.data.account_owner_user_id) {
+      return memberResult.data.account_owner_user_id;
+    }
+    return authUserId;
+  }
+
   async function init() {
     var { data: { session } } = await supabase.auth.getSession();
     if (!session) { window.location.href = 'login.html'; return; }
     currentUser = session.user;
-    var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, currentUser.id);
+    effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
+    window.FleetMagnifySidebar.inject('upload.html', supabase, effectiveAccountId);
+    var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
-    var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
-      ? currentUser.user_metadata.company_name
-      : currentUser.email.split('@')[0];
-    document.getElementById('user-name').textContent = name;
-    document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+    await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
     await getAssets();
     await loadTruckIngestionSettings();
   }
@@ -439,7 +450,7 @@
     var settingsResult = await supabase
       .from('user_settings')
       .select('upload_email')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .maybeSingle();
 
     if (settingsResult.data && settingsResult.data.upload_email) {
@@ -452,7 +463,7 @@
     var intResult = await supabase
       .from('company_integrations')
       .select('fuel_provider, bp_api_key, telematics_provider, eroad_api_key')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .maybeSingle();
 
     var row = intResult.data;
@@ -486,7 +497,7 @@
   var assetCache = null;
   async function getAssets() {
     if (assetCache) return assetCache;
-    var { data } = await supabase.from('assets').select('id, asset_name').eq('user_id', currentUser.id).order('asset_name');
+    var { data } = await supabase.from('assets').select('id, asset_name').eq('user_id', effectiveAccountId).order('asset_name');
     assetCache = data || [];
     return assetCache;
   }
@@ -793,7 +804,7 @@
     var { data } = await supabase
       .from('assets')
       .select('id, asset_name')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .in('asset_type', ON_ROAD_TYPES)
       .order('asset_name');
     return data || [];
@@ -889,7 +900,7 @@
         return;
       }
       fuelRecords.push({
-        user_id: currentUser.id,
+        user_id: effectiveAccountId,
         vehicle_id: Number(vehicleId),
         purchase_date: r.purchase_date || r.record_date || r.date || null,
         litres: parseOptionalFloat(r.litres),
@@ -906,7 +917,7 @@
         return;
       }
       mileageRecords.push({
-        user_id: currentUser.id,
+        user_id: effectiveAccountId,
         vehicle_id: Number(vehicleId),
         reading_date: r.reading_date || null,
         odometer_km: parseOptionalFloat(r.odometer_km),

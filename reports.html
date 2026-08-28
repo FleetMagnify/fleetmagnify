@@ -259,7 +259,7 @@
     'Bulldozer': 5.0, 'Compactor': 2.5, 'Crane': 4.5, 'Forklift': 1.5, 'Light Vehicle': 1.2,
     'Rigid Truck': 2.5, 'Semi Trailer': 3.0, 'Truck & Trailer': 3.0, 'Water Truck': 3.5, 'Other': 3.0
   };
-  var EMISSION_FACTORS = { 'Diesel': 2.68, 'Petrol': 2.31, 'Electric': 0, 'Hybrid': 1.5 };
+  var EMISSION_FACTORS = { 'Diesel': 2.68, 'Petrol': 2.31 };
   var DEFAULT_HOURS_PER_WEEK = 40;
   var AWAITING_FUEL_MSG = 'Awaiting telematics data';
   var AWAITING_SHORT = 'Awaiting';
@@ -313,19 +313,12 @@
     window.FleetMagnifySidebar.inject('reports.html', supabase, effectiveAccountId);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
-    companyName = (currentUser.user_metadata && currentUser.user_metadata.company_name)
-      ? currentUser.user_metadata.company_name
-      : currentUser.email.split('@')[0];
-    document.getElementById('user-name').textContent = companyName;
-    document.getElementById('user-avatar').textContent = companyName.charAt(0).toUpperCase();
+    companyName = await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
-    var today = new Date();
-    var monthAgo = new Date();
-    monthAgo.setDate(monthAgo.getDate() - 30);
-    var fromVal = monthAgo.toISOString().slice(0, 10);
-    var toVal = today.toISOString().slice(0, 10);
+    var today = FCM.nzTodayISO();
+    var fromVal = FCM.addDaysISO(today, -30);
     document.querySelectorAll('.date-from').forEach(function(el) { el.value = fromVal; });
-    document.querySelectorAll('.date-to').forEach(function(el) { el.value = toVal; });
+    document.querySelectorAll('.date-to').forEach(function(el) { el.value = today; });
 
     await loadAssets();
     bindUI();
