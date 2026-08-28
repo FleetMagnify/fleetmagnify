@@ -296,18 +296,19 @@
 
   function travelRateStatus(asset) {
     var idle = FCM.resolvedIdleRate(asset);
+    var idleBit = 'idle ' + FCM.formatIdleRate(idle.rate) + ' L/hr (' + idle.label + ')';
     if (asset.last_calibrated_at) {
       var r2 = asset.travel_rate_r2 != null ? parseFloat(asset.travel_rate_r2) : null;
       return {
-        calibrated: idle.source === 'calibrated',
-        label: idle.source === 'calibrated' ? 'Calibrated' : 'Default estimate',
-        sub: (r2 != null && !isNaN(r2)) ? ('Travel R² = ' + r2.toFixed(3) + ' · idle ' + FCM.formatIdleRate(idle.rate) + ' L/hr (' + idle.label + ')') : idle.label
+        calibrated: true,
+        label: 'Calibrated',
+        sub: (r2 != null && !isNaN(r2)) ? ('Travel R² = ' + r2.toFixed(3) + ' · ' + idleBit) : idleBit
       };
     }
     return {
       calibrated: false,
       label: 'Default estimate',
-      sub: 'Default rate for ' + (asset.asset_type || 'vehicle type')
+      sub: 'Default rate for ' + (asset.asset_type || 'vehicle type') + ' · ' + idleBit
     };
   }
 

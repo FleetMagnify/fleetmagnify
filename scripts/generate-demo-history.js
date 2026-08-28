@@ -1034,9 +1034,88 @@ function parseOnlyKeys() {
   return keys;
 }
 
+function padRight(s, n) {
+  s = String(s);
+  while (s.length < n) s += ' ';
+  return s;
+}
+
+function padLeft(s, n) {
+  s = String(s);
+  while (s.length < n) s = ' ' + s;
+  return s;
+}
+
 function idleShare(operating, idle) {
   var total = operating + idle;
   return total > 0 ? idle / total : null;
+}
+
+function printTruckRegressionDump(profile, cal) {
+  var fuelReg = require('../lib/fuel-regression');
+  var points = cal.points || [];
+  console.log('');
+  console.log('=== Fill-to-fill regression dump: ' + profile.key + ' ===');
+  console.log(
+    padRight('#', 3) +
+    padRight('start', 12) +
+    padRight('end', 12) +
+    padLeft('km', 10) +
+    padLeft('idle-h', 9) +
+    padLeft('litres', 10) +
+    padLeft('L/km', 9)
+  );
+  var sumKm = 0, sumIdle = 0, sumL = 0;
+  points.forEach(function(p, i) {
+    sumKm += p.km;
+    sumIdle += p.idle;
+    sumL += p.litres;
+    console.log(
+      padRight(String(i + 1), 3) +
+      padRight(p.start, 12) +
+      padRight(p.end, 12) +
+      padLeft(p.km.toFixed(1), 10) +
+      padLeft(p.idle.toFixed(2), 9) +
+      padLeft(p.litres.toFixed(1), 10) +
+      padLeft((p.km > 0 ? p.litres / p.km : 0).toFixed(3), 9)
+    );
+  });
+  var evaluated = points.map(function(p) {
+    return { distanceKm: p.km, idleHours: p.idle, litres: p.litres, included: true };
+  });
+  var engine = fuelReg.calibrateAsset(evaluated, null);
+  var travel = engine.calibrated ? engine.travelRateLpk : cal.travelLpk;
+  var travelLitres = travel * sumKm;
+  var idleLitres = sumL - travelLitres;
+  var idleLph = engine.calibrated ? engine.idleRateLph : cal.idleLph;
+  var bounds = (fuelReg.IDLE_CLASS_TABLE.standard_truck && fuelReg.IDLE_CLASS_TABLE.standard_truck.boundsLph) || [1.3, 4.5];
+  var inBand = idleLph != null && idleLph >= bounds[0] && idleLph <= bounds[1];
+  var decision = fuelReg.idleStoreDecision(
+    { asset_name: profile.key === 'transporter' ? 'Freightliner Argosy Low Loader' : profile.key,
+      usage_profile: profile.irregular ? 'intermittent' : 'regular' },
+    engine.calibrated ? engine : { calibrated: false }
+  );
+  console.log('---');
+  console.log(
+    'intervals=' + points.length +
+    '  Σ km=' + sumKm.toFixed(1) +
+    '  Σ idle-h=' + sumIdle.toFixed(2) +
+    '  Σ litres=' + sumL.toFixed(1)
+  );
+  console.log('travel slope Σxy/Σx² = ' + (travel != null ? travel.toFixed(4) : 'n/a') + ' L/km');
+  console.log('travel litres = slope × Σkm = ' + travelLitres.toFixed(1) + ' L');
+  console.log('idle residual litres = Σlitres − travel = ' + idleLitres.toFixed(1) + ' L');
+  console.log(
+    'idle L/hr = max(0, residual) / Σidle-h = ' +
+    (idleLph != null ? idleLph.toFixed(4) : 'n/a') +
+    (engine.idleRateFloorTriggered ? '  [floor triggered]' : '')
+  );
+  console.log(
+    'standard_truck band ' + bounds[0] + '–' + bounds[1] + ' L/hr: ' +
+    (inBand ? 'IN BAND' : 'OUT OF BAND') +
+    '  store decision: ' + (decision.store ? 'STORE as Calibrated' : 'DO NOT STORE (' + decision.reason + ')')
+  );
+  console.log('');
 }
 
 async function fetchHoursByAsset(supabase, assetIds, startDate, endDate) {
@@ -1155,6 +1234,9 @@ function simulateLocally() {
         '       travel=' + cal.travelLpk.toFixed(3) + ' L/km  residual idle=' +
         (cal.idleLph != null ? cal.idleLph.toFixed(2) : 'n/a') + ' L/hr  (target idle ' + profile.idleLph + ')'
       );
+      if (profile.key === 'transporter' || profile.key === 'kenworth' || profile.kind === 'truck') {
+        printTruckRegressionDump(profile, cal);
+      }
     }
     if (profile.irregular) {
       var longestZero = 0, run = 0;
@@ -1289,7 +1371,7 @@ async function main() {
   ]);
   var assetCols = await probeColumns(supabase, 'assets', [
     'id', 'user_id', 'asset_name', 'asset_type', 'current_hours', 'current_odometer',
-    'is_ignored', 'is_on_road', 'idle_burn_rate_lph', 'current_value',
+    'is_ignored', 'is_on_road', 'idle_burn_rate_lph', 'idle_rate_source', 'current_value',
     'telematics_provider', 'usage_profile', 'ruc_rate_per_km'
   ]);
   var fuelRecordsExist = await tableExists(supabase, 'fuel_records');
@@ -1528,9 +1610,20 @@ async function main() {
     if (profile.kind === 'truck') patch.current_odometer = finalOdo;
     if (profile.kind === 'machinery') patch.idle_burn_rate_lph = profile.idleLph;
     if (profile.kind === 'truck') {
-      // Keep Kenworth's calibrated ~3 L/hr; clear implausible regression leftovers on the others.
-      if (key === 'kenworth' || key === 'transporter') patch.idle_burn_rate_lph = profile.idleLph;
-      else patch.idle_burn_rate_lph = null;
+      // Kenworth's residual is tuned to land in-band (~3 L/hr). The Argosy
+      // transporter's one-variable residual is structurally near 0 and must
+      // not be stored as 3.00 (the Semi Trailer class default) or labelled
+      // Calibrated from last_calibrated_at.
+      var truckCal = truckResidualIdle(dates, daily, fills, profile);
+      if (key === 'kenworth' && truckCal.idleLph != null && truckCal.idleLph >= 1.3 && truckCal.idleLph <= 4.5) {
+        patch.idle_burn_rate_lph = round2(truckCal.idleLph);
+        patch.idle_rate_source = 'calibrated';
+      } else {
+        patch.idle_burn_rate_lph = null;
+        patch.idle_rate_source = null;
+      }
+    } else if (profile.kind === 'machinery') {
+      patch.idle_rate_source = 'set';
     }
     if (profile.kind === 'machinery') patch.telematics_provider = 'VisionLink';
     if (profile.kind === 'truck') patch.telematics_provider = 'eRoad';
