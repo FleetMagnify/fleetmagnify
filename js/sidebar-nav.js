@@ -1,6 +1,6 @@
 window.FleetMagnifySidebar = (function() {
 
-  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
+  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer', 'Truck & Trailer'];
 
   var NAV_ITEMS = [
     { type: 'link', href: 'home.html', icon: '🏠', text: 'Overview' },

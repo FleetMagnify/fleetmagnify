@@ -650,6 +650,7 @@
             <option value="Light Vehicle">Light Vehicle</option>
             <option value="Rigid Truck">Rigid Truck</option>
             <option value="Semi Trailer">Semi Trailer</option>
+            <option value="Truck & Trailer">Truck & Trailer</option>
             <option value="Water Truck">Water Truck</option>
             <option value="Other">Other</option>
           </select>
@@ -995,10 +996,16 @@
   var ASSET_TYPE_OPTIONS = [
     'Excavator', 'Dump Truck', 'Wheel Loader', 'Motor Grader', 'Bulldozer', 'Skidder',
     'Compactor', 'Crane', 'Forklift', 'Light Vehicle', 'Rigid Truck', 'Semi Trailer',
-    'Water Truck', 'Other'
+    'Truck & Trailer', 'Water Truck', 'Other'
   ];
-  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
-  var ON_ROAD_TYPE_SET = { 'Light Vehicle': true, 'Rigid Truck': true, 'Semi Trailer': true };
+  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer', 'Truck & Trailer'];
+  var ON_ROAD_TYPE_SET = {
+    'Light Vehicle': true,
+    'Rigid Truck': true,
+    'Semi Trailer': true,
+    'Truck & Trailer': true,
+    'Truck and Trailer / B-Train': true
+  };
   var ON_ROAD_FIELD_IDS = ['field-life-km', 'field-service-km', 'field-current-odometer', 'field-estimated-annual-km'];
   var SHARED_COST_FIELD_IDS = ['field-current-value', 'field-eol-value', 'field-annual-repair'];
   var CONSTRUCTION_FIELD_IDS = ['field-life-hours', 'field-service-hour', 'field-available-hours', 'field-target-utilisation'];
@@ -1006,8 +1013,8 @@
 
   var DEFAULT_IDLE_RATES = {
     'Excavator': 4.0, 'Dump Truck': 5.5, 'Wheel Loader': 4.5, 'Motor Grader': 4.0,
-    'Bulldozer': 5.0, 'Crane': 4.5, 'Forklift': 1.5, 'Light Vehicle': 1.2,
-    'Rigid Truck': 2.5, 'Semi Trailer': 3.0, 'Water Truck': 3.5, 'Other': 3.0
+    'Bulldozer': 5.0, 'Compactor': 2.5, 'Crane': 4.5, 'Forklift': 1.5, 'Light Vehicle': 1.2,
+    'Rigid Truck': 2.5, 'Semi Trailer': 3.0, 'Truck & Trailer': 3.0, 'Water Truck': 3.5, 'Other': 3.0
   };
 
   async function resolveAccountId(supabase, authUserId) {
@@ -2027,9 +2034,8 @@
 
   function assetIsOnRoad(asset) {
     if (!asset) return false;
-    if (asset.is_on_road === true) return true;
-    if (asset.is_on_road === false) return false;
-    return isOnRoadType(asset.asset_type);
+    if (isOnRoadType(asset.asset_type)) return true;
+    return asset.is_on_road === true;
   }
 
   function getTableColCount() {
@@ -2461,7 +2467,7 @@
     'expected_life_km', 'service_cost_per_km', 'current_odometer', 'estimated_annual_km'
   ];
   var MACHINERY_TYPE_NOTE = 'Valid asset_type values: Excavator, Dump Truck, Wheel Loader, Motor Grader, Bulldozer, Crane, Forklift, Water Truck, Other';
-  var TRUCKS_TYPE_NOTE = 'Valid asset_type values: Light Vehicle, Rigid Truck, Semi Trailer';
+  var TRUCKS_TYPE_NOTE = 'Valid asset_type values: Light Vehicle, Rigid Truck, Semi Trailer, Truck & Trailer';
   var ASSET_ID_NOTE = 'asset_id is pre-filled for existing assets — do not edit when updating; leave blank for new assets.';
   var MACHINERY_HEADERS = ['asset_id'].concat(MACHINERY_COLUMNS);
   var TRUCKS_HEADERS = ['asset_id'].concat(TRUCKS_COLUMNS);
@@ -2621,7 +2627,7 @@
       TRUCKS_SHEET,
       trucksHeaders,
       truckAssets,
-      'Valid asset_type values: Light Vehicle, Rigid Truck, Semi Trailer',
+      'Valid asset_type values: Light Vehicle, Rigid Truck, Semi Trailer, Truck & Trailer',
       ['', 'Kenworth T610', 'Rigid Truck', 'Kenworth', 'T610', 2022, 'Diesel', 'XYZ789', 2.5, 145000, 18000, 15000, 0.08, 450000, 80000]
     );
 

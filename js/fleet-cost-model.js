@@ -2,8 +2,14 @@
  * FleetMagnify shared depreciation, servicing, and maintenance cost model.
  */
 (function(global) {
-  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
-  var ON_ROAD_SET = { 'Light Vehicle': true, 'Rigid Truck': true, 'Semi Trailer': true };
+  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer', 'Truck & Trailer'];
+  var ON_ROAD_SET = {
+    'Light Vehicle': true,
+    'Rigid Truck': true,
+    'Semi Trailer': true,
+    'Truck & Trailer': true,
+    'Truck and Trailer / B-Train': true
+  };
 
   function num(v) {
     if (v === null || v === undefined || v === '') return null;
@@ -13,9 +19,10 @@
 
   function isOnRoad(asset) {
     if (!asset) return false;
-    if (asset.is_on_road === true) return true;
-    if (asset.is_on_road === false) return false;
-    return !!ON_ROAD_SET[(asset.asset_type || '').trim()];
+    // Type is source of truth. is_on_road can promote an unknown type to
+    // on-road, but cannot demote a recognised truck type to machinery.
+    if (ON_ROAD_SET[(asset.asset_type || '').trim()]) return true;
+    return asset.is_on_road === true;
   }
 
   function formatMissingMessage(fields) {

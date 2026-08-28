@@ -353,7 +353,7 @@
   var lastDateTo = '';
   var defaultMachineryFuelCostPerLitre = null;
 
-  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
+  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer', 'Truck & Trailer'];
   var NO_ODOMETER_MSG = 'No odometer data available yet — this will populate automatically once your eRoad integration is connected';
   var NO_DATA_TITLE = 'No data available for this period';
   var FILL_TO_FILL_TITLE = 'Fuel cost is calculated per fill-to-fill period, not per day — see the explanation banner above';
@@ -483,6 +483,9 @@
   function buildMachineryDailyRows(telRows, idleRate, costPerLitre) {
     var dailyRows = [];
     telRows.forEach(function(r) {
+      // VisionLink reports a single combined litres_consumed total, not
+      // idle-vs-working fuel. That total is source of truth; idleRate only
+      // apportions it (clipped so idle fuel cannot exceed the known total).
       var litres = parseFloat(r.litres_consumed) || 0;
       var idleHours = parseFloat(r.idle_hours) || 0;
       var opHours = parseFloat(r.operating_hours) || 0;
@@ -665,11 +668,13 @@
     'Wheel Loader': 4.5,
     'Motor Grader': 4.0,
     'Bulldozer': 5.0,
+    'Compactor': 2.5,
     'Crane': 4.5,
     'Forklift': 1.5,
     'Light Vehicle': 1.2,
     'Rigid Truck': 2.5,
     'Semi Trailer': 3.0,
+    'Truck & Trailer': 3.0,
     'Water Truck': 3.5,
     'Other': 3.0
   };

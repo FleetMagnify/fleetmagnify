@@ -271,11 +271,11 @@
   var currentPayloads = [];
   var latestPeriod = null;
 
-  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
+  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer', 'Truck & Trailer'];
   var EMISSION_FACTORS = { Diesel: 2.68, Petrol: 2.31, Hybrid: 1.5, Electric: 0 };
   var DATE_BUFFER_DAYS = 21;
   var DEFAULT_TRAVEL_RATES = {
-    'Light Vehicle': 0.12, 'Rigid Truck': 0.25, 'Semi Trailer': 0.40, 'Truck and Trailer / B-Train': 0.40
+    'Light Vehicle': 0.12, 'Rigid Truck': 0.25, 'Semi Trailer': 0.40, 'Truck & Trailer': 0.40, 'Truck and Trailer / B-Train': 0.40
   };
 
   function fmtDate(d) {
