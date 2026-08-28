@@ -483,6 +483,9 @@
   function buildMachineryDailyRows(telRows, idleRate, costPerLitre) {
     var dailyRows = [];
     telRows.forEach(function(r) {
+      // VisionLink reports a single combined litres_consumed total, not
+      // idle-vs-working fuel. That total is source of truth; idleRate only
+      // apportions it (clipped so idle fuel cannot exceed the known total).
       var litres = parseFloat(r.litres_consumed) || 0;
       var idleHours = parseFloat(r.idle_hours) || 0;
       var opHours = parseFloat(r.operating_hours) || 0;
@@ -665,6 +668,7 @@
     'Wheel Loader': 4.5,
     'Motor Grader': 4.0,
     'Bulldozer': 5.0,
+    'Compactor': 2.5,
     'Crane': 4.5,
     'Forklift': 1.5,
     'Light Vehicle': 1.2,
