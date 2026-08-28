@@ -42,6 +42,7 @@ var ON_ROAD_TYPES = {
   'Light Vehicle': true,
   'Rigid Truck': true,
   'Semi Trailer': true,
+  'Truck & Trailer': true,
   'Truck and Trailer / B-Train': true
 };
 

@@ -287,11 +287,11 @@
   var fleetSortKey = 'idleFuelCost';
   var fleetSortDir = 'desc';
 
-  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
+  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer', 'Truck & Trailer'];
   var ELEVATED_IDLE_THRESHOLD_HOURS = 3;
   var PRICE_HISTORY_MONTHS = 6;
   var DEFAULT_IDLE_RATES = {
-    'Light Vehicle': 1.2, 'Rigid Truck': 2.5, 'Truck and Trailer / B-Train': 3.0
+    'Light Vehicle': 1.2, 'Rigid Truck': 2.5, 'Semi Trailer': 3.0, 'Truck & Trailer': 3.0, 'Truck and Trailer / B-Train': 3.0
   };
 
   function fmtDate(d) {

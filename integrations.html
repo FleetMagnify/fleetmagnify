@@ -291,8 +291,14 @@
   var accountTelematicsProvider = '';
   var UPLOAD_DOMAIN = 'uploads.fleetmagnify.com';
 
-  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
-  var ON_ROAD_TYPE_SET = { 'Light Vehicle': true, 'Rigid Truck': true, 'Semi Trailer': true };
+  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer', 'Truck & Trailer'];
+  var ON_ROAD_TYPE_SET = {
+    'Light Vehicle': true,
+    'Rigid Truck': true,
+    'Semi Trailer': true,
+    'Truck & Trailer': true,
+    'Truck and Trailer / B-Train': true
+  };
 
   async function init() {
     var sessionResult = await supabase.auth.getSession();

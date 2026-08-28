@@ -339,13 +339,13 @@
   var stackChart = null;
   var fleetChart = null;
 
-  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer'];
+  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer', 'Truck & Trailer'];
   var COMPONENT_TYPES = ['fuel', 'depreciation', 'maintenance', 'servicing'];
   var COMPONENT_LABELS = { fuel: 'Fuel', depreciation: 'Depreciation', maintenance: 'Maintenance', servicing: 'Servicing' };
   var DATE_BUFFER_DAYS = 21;
   var PRICE_HISTORY_MONTHS = 6;
   var DEFAULT_TRAVEL_RATES = {
-    'Light Vehicle': 0.12, 'Rigid Truck': 0.25, 'Semi Trailer': 0.40, 'Truck and Trailer / B-Train': 0.40
+    'Light Vehicle': 0.12, 'Rigid Truck': 0.25, 'Semi Trailer': 0.40, 'Truck & Trailer': 0.40, 'Truck and Trailer / B-Train': 0.40
   };
 
   function fmtDate(d) {

@@ -107,6 +107,16 @@ async function updateImportStatus(supabase, importId, status, errorMessage, pars
 function detectAssetType(vehicleName) {
   var name = String(vehicleName || '').toLowerCase();
 
+  var truckTrailerKeywords = [
+    'truck & trailer', 'truck and trailer', 'b-train', 'b train', 'a-train',
+    'low-loader', 'low loader', 'lowloader'
+  ];
+  for (var tt = 0; tt < truckTrailerKeywords.length; tt++) {
+    if (name.indexOf(truckTrailerKeywords[tt]) !== -1) {
+      return 'Truck & Trailer';
+    }
+  }
+
   var rigidTruckKeywords = ['hino', 'isuzu', 'fuso', 'ud ', 'rigid', 'truck'];
   var hasTruckKeyword = false;
   for (var t = 0; t < rigidTruckKeywords.length; t++) {
@@ -118,7 +128,7 @@ function detectAssetType(vehicleName) {
 
   var semiTrailerKeywords = [
     'semi', 'kenworth', 'freightliner', 'mack', 'volvo', 'scania', 'man ', 'daf',
-    'prime mover', 'b-train', 'a-train',
+    'prime mover',
   ];
   for (var j = 0; j < semiTrailerKeywords.length; j++) {
     if (name.indexOf(semiTrailerKeywords[j]) !== -1) {
