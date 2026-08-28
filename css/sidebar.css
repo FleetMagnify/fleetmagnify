@@ -1,4 +1,4 @@
-.sidebar { width: 240px; flex-shrink: 0; background: rgba(10,16,26,0.95); border-right: 1px solid #2D3748; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 50; }
+.sidebar { width: 240px; flex-shrink: 0; background: #0A101A; border-right: 1px solid #2D3748; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 50; }
 .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 24px 20px; border-bottom: 1px solid #2D3748; text-decoration: none; }
 .logo-mark { width: 34px; height: 34px; border-radius: 9px; background: #0EA57A; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #080C12; }
 .logo-name { font-size: 16px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
@@ -13,3 +13,15 @@
 .sidebar-footer { padding: 16px 12px; border-top: 1px solid #2D3748; }
 .btn-signout { width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 8px; border: none; background: none; font-size: 13px; font-weight: 500; color: #4A5568; cursor: pointer; transition: all 0.2s; font-family: inherit; }
 .btn-signout:hover { background: rgba(226,75,74,0.08); color: #F0A8A7; }
+
+/* Prevent wide tables / KPI grids from forcing the page past the sidebar. */
+body { min-width: 0; }
+.main { min-width: 0; overflow-x: hidden; }
+.page-content { min-width: 0; max-width: 100%; }
+.table-scroll, .assets-table-wrap, .profile-editor-table-wrap { overflow-x: auto; max-width: 100%; }
+
+@media (max-width: 1280px) {
+  .kpi-section { flex-direction: column !important; }
+  .kpi-pair-divider { display: none !important; }
+  .charts-grid { grid-template-columns: 1fr !important; }
+}

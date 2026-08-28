@@ -209,7 +209,7 @@
                 <div class="form-hint">Generate this in MyEROAD under Administration &gt; My Organization &gt; Partner Gateway. A Client Administrator role is required.</div>
               </div>
             </div>
-            <div id="account-visionlink-msg" class="coming-soon-msg">VisionLink connection coming soon</div>
+            <div id="account-visionlink-msg" class="coming-soon-msg">VisionLink data is ingested from uploaded reports — no API key required.</div>
           </div>
 
           <button type="submit" class="btn-save" id="save-account-btn">Save Account Connections</button>
@@ -232,7 +232,7 @@
             <tr>
               <th>Asset Name</th>
               <th>Asset Type</th>
-              <th>Machine ID</th>
+              <th>Telematics</th>
               <th></th>
             </tr>
           </thead>
@@ -281,9 +281,10 @@
 <script src="js/sidebar-nav.js"></script>
 <script>
 (function() {
-  window.FleetMagnifySidebar.inject('integrations.html');
+  window.FleetMagnifySidebar.mount('integrations.html');
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
+  var effectiveAccountId = null;
   var allAssets = [];
   var editingAssetId = null;
   var storedHasBpKey = false;
@@ -300,17 +301,27 @@
     'Truck and Trailer / B-Train': true
   };
 
+  async function resolveAccountId(supabase, authUserId) {
+    var memberResult = await supabase
+      .from('account_members')
+      .select('account_owner_user_id')
+      .eq('member_auth_user_id', authUserId)
+      .maybeSingle();
+    if (memberResult.data && memberResult.data.account_owner_user_id) {
+      return memberResult.data.account_owner_user_id;
+    }
+    return authUserId;
+  }
+
   async function init() {
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
-    var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, currentUser.id);
+    effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
+    window.FleetMagnifySidebar.inject('integrations.html', supabase, effectiveAccountId);
+    var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
-    var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
-      ? currentUser.user_metadata.company_name
-      : currentUser.email.split('@')[0];
-    document.getElementById('user-name').textContent = name;
-    document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+    await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
     await loadUploadEmail();
     await loadCompanyIntegration();
     await loadAssets();
@@ -321,7 +332,7 @@
     var result = await supabase
       .from('user_settings')
       .select('upload_email')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .maybeSingle();
 
     if (result.error) {
@@ -411,17 +422,30 @@
   }
 
   function updateAccountStatusBadges() {
-    setStatusBadge(document.getElementById('fuel-status-badge'), storedHasBpKey, 'Fuel');
-    var telConnected = accountTelematicsProvider === 'VisionLink' ||
-      (accountTelematicsProvider === 'eRoad' && storedHasEroadKey);
+    var fuelConnected = storedHasBpKey || assetsHaveFuelCards();
+    var telConnected = !!accountTelematicsProvider || assetsHaveTelematics();
+    setStatusBadge(document.getElementById('fuel-status-badge'), fuelConnected, 'Fuel');
     setStatusBadge(document.getElementById('telematics-status-badge'), telConnected, 'Telematics');
+  }
+
+  function assetsHaveTelematics() {
+    return (allAssets || []).some(function(a) {
+      if (a.telematics_provider && String(a.telematics_provider).trim()) return true;
+      return !!a.asset_type;
+    });
+  }
+
+  function assetsHaveFuelCards() {
+    return (allAssets || []).some(function(a) {
+      return !!(a.bp_card_number && String(a.bp_card_number).trim());
+    });
   }
 
   async function loadCompanyIntegration() {
     var result = await supabase
       .from('company_integrations')
       .select('fuel_provider, bp_api_key, telematics_provider, eroad_api_key')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .maybeSingle();
 
     if (result.error && result.error.code !== 'PGRST116') {
@@ -472,7 +496,7 @@
     }
 
     var payload = {
-      user_id: currentUser.id,
+      user_id: effectiveAccountId,
       fuel_provider: fuelProvider || null,
       bp_api_key: fuelProvider === 'BP' ? (bpApiKey || null) : null,
       telematics_provider: telProvider || null,
@@ -492,7 +516,7 @@
     var existing = await supabase
       .from('company_integrations')
       .select('user_id')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', effectiveAccountId)
       .maybeSingle();
 
     var result;
@@ -505,7 +529,7 @@
       };
       if (payload.bp_api_key === undefined) delete updatePayload.bp_api_key;
       if (payload.eroad_api_key === undefined) delete updatePayload.eroad_api_key;
-      result = await supabase.from('company_integrations').update(updatePayload).eq('user_id', currentUser.id);
+      result = await supabase.from('company_integrations').update(updatePayload).eq('user_id', effectiveAccountId);
     } else {
       if (payload.bp_api_key === undefined) payload.bp_api_key = null;
       if (payload.eroad_api_key === undefined) payload.eroad_api_key = null;
@@ -546,8 +570,8 @@
     tbody.innerHTML = '<tr class="loading-row"><td colspan="4">Loading assets...</td></tr>';
     var result = await supabase
       .from('assets')
-      .select('id, asset_name, asset_type, eroad_machine_id, bp_card_number')
-      .eq('user_id', currentUser.id)
+      .select('id, asset_name, asset_type, eroad_machine_id, bp_card_number, telematics_provider')
+      .eq('user_id', effectiveAccountId)
       .eq('is_ignored', false)
       .order('asset_name');
 
@@ -557,17 +581,56 @@
     }
 
     allAssets = result.data || [];
+    inferAccountProvidersFromAssets();
     document.getElementById('asset-count').textContent = allAssets.length + ' asset' + (allAssets.length !== 1 ? 's' : '');
     renderAssetsTable();
+    updateAccountStatusBadges();
+  }
+
+  function inferAccountProvidersFromAssets() {
+    var hasEroad = false;
+    var hasVision = false;
+    var hasBp = false;
+    (allAssets || []).forEach(function(a) {
+      var p = String(a.telematics_provider || '').toLowerCase();
+      if (p.indexOf('eroad') !== -1 || p.indexOf('e-road') !== -1) hasEroad = true;
+      if (p.indexOf('vision') !== -1) hasVision = true;
+      if (!p && isOnRoadType(a.asset_type)) hasEroad = true;
+      if (!p && a.asset_type && !isOnRoadType(a.asset_type)) hasVision = true;
+      if (a.bp_card_number) hasBp = true;
+    });
+    if (!accountTelematicsProvider) {
+      if (hasEroad) accountTelematicsProvider = 'eRoad';
+      else if (hasVision) accountTelematicsProvider = 'VisionLink';
+      var telSelect = document.getElementById('telematics-provider');
+      if (telSelect && !telSelect.value && accountTelematicsProvider) {
+        telSelect.value = accountTelematicsProvider;
+        updateAccountTelematicsFields();
+      }
+    }
+    if (hasBp) {
+      var fuelSelect = document.getElementById('fuel-provider');
+      if (fuelSelect && !fuelSelect.value) {
+        fuelSelect.value = 'BP';
+        updateFuelProviderFields();
+      }
+    }
   }
 
   function renderMachineIdCell(asset) {
-    var hasMachineId = !!(asset.eroad_machine_id && String(asset.eroad_machine_id).trim());
-    if (accountTelematicsProvider !== 'eRoad') {
-      return '<span class="status-badge disconnected">N/A</span>';
+    var provider = String(asset.telematics_provider || '').trim();
+    if (!provider) provider = isOnRoadType(asset.asset_type) ? 'eRoad' : 'VisionLink';
+    if (/visionlink/i.test(provider)) {
+      return '<span class="status-badge connected">📡 VisionLink</span>';
     }
-    if (hasMachineId) {
-      return '<span class="status-badge connected">Machine ID set</span>';
+    if (/eroad|e-?road/i.test(provider)) {
+      var hasMachineId = !!(asset.eroad_machine_id && String(asset.eroad_machine_id).trim());
+      return hasMachineId
+        ? '<span class="status-badge connected">📡 eROAD · ID set</span>'
+        : '<span class="status-badge connected">📡 eROAD</span>';
+    }
+    if (provider) {
+      return '<span class="status-badge connected">📡 ' + esc(provider) + '</span>';
     }
     return '<span class="status-badge disconnected">Not configured</span>';
   }
@@ -671,8 +734,8 @@
       .from('assets')
       .update(payload)
       .eq('id', Number(editingAssetId))
-      .eq('user_id', currentUser.id)
-      .select('id, asset_name, asset_type, eroad_machine_id, bp_card_number')
+      .eq('user_id', effectiveAccountId)
+      .select('id, asset_name, asset_type, eroad_machine_id, bp_card_number, telematics_provider')
       .single();
 
     saveBtn.disabled = false;

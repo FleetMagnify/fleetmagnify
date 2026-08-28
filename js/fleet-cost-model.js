@@ -312,6 +312,166 @@
     return null;
   }
 
+  var DEFAULT_IDLE_RATES = {
+    'Excavator': 4.0, 'Dump Truck': 5.5, 'Wheel Loader': 4.5, 'Motor Grader': 3.0,
+    'Bulldozer': 5.0, 'Compactor': 2.5, 'Crane': 4.5, 'Forklift': 1.5,
+    'Light Vehicle': 1.2, 'Rigid Truck': 2.5, 'Semi Trailer': 3.0,
+    'Truck & Trailer': 3.0, 'Water Truck': 3.5, 'Other': 3.0
+  };
+
+  var DEFAULT_TRAVEL_RATES = {
+    'Light Vehicle': 0.12, 'Rigid Truck': 0.25, 'Semi Trailer': 0.40,
+    'Truck & Trailer': 0.40, 'Truck and Trailer / B-Train': 0.40
+  };
+
+  // NZ MfE combustion factors (kg CO₂-e per litre). Drivetrain is not a
+  // litre-based factor — Hybrid/Electric are omitted on purpose.
+  var EMISSION_FACTORS = { Diesel: 2.68, Petrol: 2.31 };
+
+  var IDLE_RATE_BOUNDS = {
+    light: [0.5, 2.5],
+    truck: [1.5, 4.5],
+    machinery: [1.5, 12]
+  };
+
+  function idleRateBoundsForAsset(asset) {
+    if (!isOnRoad(asset)) return IDLE_RATE_BOUNDS.machinery;
+    var t = ((asset && asset.asset_type) || '').trim();
+    if (t === 'Light Vehicle') return IDLE_RATE_BOUNDS.light;
+    return IDLE_RATE_BOUNDS.truck;
+  }
+
+  function isPlausibleIdleRate(asset, rate) {
+    var n = num(rate);
+    if (n === null || n <= 0) return false;
+    var b = idleRateBoundsForAsset(asset);
+    return n >= b[0] && n <= b[1];
+  }
+
+  function defaultIdleRateForAsset(asset) {
+    var t = ((asset && asset.asset_type) || '').trim();
+    if (DEFAULT_IDLE_RATES[t] != null) return DEFAULT_IDLE_RATES[t];
+    return isOnRoad(asset) ? 3.0 : 3.0;
+  }
+
+  function resolvedIdleRate(asset) {
+    var stored = asset ? num(asset.idle_burn_rate_lph) : null;
+    if (isPlausibleIdleRate(asset, stored)) {
+      var calibrated = !!(asset.last_calibrated_at) && isOnRoad(asset);
+      return {
+        rate: stored,
+        source: calibrated ? 'calibrated' : 'set',
+        label: calibrated ? 'Calibrated' : 'Set on asset'
+      };
+    }
+    return {
+      rate: defaultIdleRateForAsset(asset),
+      source: 'default',
+      label: 'Default estimate'
+    };
+  }
+
+  function formatIdleRate(rate) {
+    var n = num(rate);
+    if (n === null) return '';
+    return n.toFixed(2);
+  }
+
+  function machineryFuelFromTelematics(telRows, costPerLitre) {
+    var litres = 0;
+    (telRows || []).forEach(function(r) {
+      litres += parseFloat(r.litres_consumed) || 0;
+    });
+    var cpl = num(costPerLitre) || 0;
+    return { litres: litres, cost: litres * cpl };
+  }
+
+  function truckFuelFromInvoices(rows) {
+    var litres = 0, cost = 0;
+    (rows || []).forEach(function(r) {
+      litres += parseFloat(r.litres) || 0;
+      cost += parseFloat(r.cost_nzd != null ? r.cost_nzd : r.total_cost) || 0;
+    });
+    return { litres: litres, cost: cost };
+  }
+
+  // Single source of truth for Overview / modules:
+  // machinery = VisionLink litres_consumed × bulk $/L (Fuel Analyst construction path)
+  // trucks    = fuel_purchases invoices (not concatenated with daily fuel_records)
+  function assetFuelTotals(asset, opts) {
+    opts = opts || {};
+    if (isOnRoad(asset)) {
+      return truckFuelFromInvoices(opts.purchaseRows || []);
+    }
+    return machineryFuelFromTelematics(opts.telRows || [], opts.machineryCpl);
+  }
+
+  function isIntermittentUsage(asset) {
+    if (!asset) return false;
+    var profile = String(asset.usage_profile || '').toLowerCase();
+    if (profile === 'intermittent' || profile === 'on-call' || profile === 'on_call') return true;
+    var name = String(asset.asset_name || '').toLowerCase();
+    return /argosy|low-?loader|plant.?transporter/.test(name);
+  }
+
+  // NZ RUC-style bands by GVM. Override with assets.ruc_rate_per_km when set.
+  function defaultRucPerKm(asset) {
+    var stored = asset ? num(asset.ruc_rate_per_km) : null;
+    if (stored !== null) return stored < 0 ? 0 : stored;
+    var gvm = asset ? num(asset.gvm_tonnes) : null;
+    if (gvm === null) {
+      var t = ((asset && asset.asset_type) || '').trim();
+      if (t === 'Light Vehicle') return 0;
+      if (t === 'Rigid Truck') return 0.16;
+      if (t === 'Semi Trailer' || t === 'Truck & Trailer' || t === 'Truck and Trailer / B-Train') return 0.43;
+      return 0;
+    }
+    if (gvm <= 3.5) return 0.076;
+    if (gvm <= 6) return 0.120;
+    if (gvm <= 10) return 0.180;
+    if (gvm <= 14) return 0.220;
+    if (gvm <= 18) return 0.260;
+    if (gvm <= 22) return 0.295;
+    if (gvm <= 28) return 0.340;
+    if (gvm <= 32) return 0.385;
+    return 0.430;
+  }
+
+  function telematicsVendorLabel(asset) {
+    var p = String((asset && asset.telematics_provider) || '').trim();
+    if (/visionlink/i.test(p)) return 'VisionLink';
+    if (/eroad|e-?road/i.test(p)) return 'eROAD';
+    return isOnRoad(asset) ? 'eROAD' : 'VisionLink';
+  }
+
+  function fuelVendorLabel() {
+    return 'BP';
+  }
+
+  function nzTodayISO() {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Pacific/Auckland' });
+  }
+
+  function addDaysISO(iso, days) {
+    var parts = String(iso).split('-').map(Number);
+    var d = new Date(parts[0], parts[1] - 1, parts[2]);
+    d.setDate(d.getDate() + days);
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
+  function formatDateNZ(dateStr) {
+    if (!dateStr) return '';
+    var raw = String(dateStr).slice(0, 10);
+    var parts = raw.split('-').map(Number);
+    if (parts.length !== 3 || !parts[0]) return String(dateStr);
+    var d = new Date(parts[0], parts[1] - 1, parts[2]);
+    if (isNaN(d.getTime())) return String(dateStr);
+    return d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
   function costOrMissing(value, missingFields, fmtFn, lifeExceeded, lifeNearLimit) {
     if (lifeExceeded) {
       return { text: formatLifeExceededMessage(lifeNearLimit), isMissing: true, lifeExceeded: true, lifeNearLimit: !!lifeNearLimit };
@@ -327,6 +487,9 @@
 
   global.FleetCostModel = {
     ON_ROAD_TYPES: ON_ROAD_TYPES,
+    DEFAULT_IDLE_RATES: DEFAULT_IDLE_RATES,
+    DEFAULT_TRAVEL_RATES: DEFAULT_TRAVEL_RATES,
+    EMISSION_FACTORS: EMISSION_FACTORS,
     isOnRoad: isOnRoad,
     num: num,
     formatMissingMessage: formatMissingMessage,
@@ -349,6 +512,21 @@
     calcIdleHourCosts: calcIdleHourCosts,
     calcRunningCostPerKm: calcRunningCostPerKm,
     getLatestEngineHours: getLatestEngineHours,
-    costOrMissing: costOrMissing
+    costOrMissing: costOrMissing,
+    idleRateBoundsForAsset: idleRateBoundsForAsset,
+    isPlausibleIdleRate: isPlausibleIdleRate,
+    resolvedIdleRate: resolvedIdleRate,
+    formatIdleRate: formatIdleRate,
+    defaultIdleRateForAsset: defaultIdleRateForAsset,
+    machineryFuelFromTelematics: machineryFuelFromTelematics,
+    truckFuelFromInvoices: truckFuelFromInvoices,
+    assetFuelTotals: assetFuelTotals,
+    isIntermittentUsage: isIntermittentUsage,
+    defaultRucPerKm: defaultRucPerKm,
+    telematicsVendorLabel: telematicsVendorLabel,
+    fuelVendorLabel: fuelVendorLabel,
+    nzTodayISO: nzTodayISO,
+    addDaysISO: addDaysISO,
+    formatDateNZ: formatDateNZ
   };
 })(window);

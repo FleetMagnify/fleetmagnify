@@ -154,7 +154,7 @@
     <div id="empty-state" class="empty-state" hidden>
       <span class="icon">⏸</span>
       <h2>Not enough data yet</h2>
-      <p id="empty-state-message">Telematics idle-hour data is needed to calculate idle cost for this vehicle. This will populate automatically once Navman telematics data is available for this date range.</p>
+      <p id="empty-state-message">Telematics idle-hour data is needed to calculate idle cost for this vehicle. This will populate automatically once eROAD telematics data is available for this date range.</p>
     </div>
 
     <div id="fleet-view">
@@ -272,6 +272,7 @@
 <script src="js/subscription-guard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="js/fleet-cost-model.js"></script>
 <script src="js/sidebar-nav.js"></script>
 <script>
 (function() {
@@ -286,6 +287,7 @@
   var fleetRows = [];
   var fleetSortKey = 'idleFuelCost';
   var fleetSortDir = 'desc';
+  var FCM = window.FleetCostModel;
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer', 'Truck & Trailer'];
   var ELEVATED_IDLE_THRESHOLD_HOURS = 3;
@@ -319,22 +321,23 @@
 
   // ── Idle-monitor-specific helpers ──
   function effectiveIdleRate(asset) {
-    return asset.idle_burn_rate_lph || DEFAULT_IDLE_RATES[asset.asset_type] || 3.0;
+    return FCM.resolvedIdleRate(asset).rate;
   }
 
   function calibrationStatus(asset) {
-    if (asset.last_calibrated_at) {
+    var idle = FCM.resolvedIdleRate(asset);
+    if (idle.source === 'calibrated') {
       var r2 = asset.travel_rate_r2 != null ? parseFloat(asset.travel_rate_r2) : null;
       return {
         calibrated: true,
         label: 'Calibrated',
-        sub: (r2 != null && !isNaN(r2)) ? ('R² = ' + r2.toFixed(3)) : null
+        sub: FCM.formatIdleRate(idle.rate) + ' L/hr'
       };
     }
     return {
       calibrated: false,
-      label: 'Estimated',
-      sub: asset.idle_burn_rate_lph != null ? 'Manually set rate' : ('Default rate for ' + (asset.asset_type || 'vehicle type'))
+      label: idle.label,
+      sub: FCM.formatIdleRate(idle.rate) + ' L/hr'
     };
   }
 
@@ -407,16 +410,11 @@
     });
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
-    var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
-      ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
-    document.getElementById('user-name').textContent = name;
-    document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+    await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
-    var today = new Date();
-    var monthAgo = new Date();
-    monthAgo.setMonth(monthAgo.getMonth() - 1);
-    document.getElementById('date-to').value = fmtDate(today);
-    document.getElementById('date-from').value = fmtDate(monthAgo);
+    var today = FCM.nzTodayISO();
+    document.getElementById('date-to').value = today;
+    document.getElementById('date-from').value = FCM.addDaysISO(today, -30);
 
     await loadVehicles();
     setView('fleet');
@@ -438,10 +436,10 @@
       select.innerHTML = '<option value="">No on-road vehicles found</option>';
       return;
     }
-    select.innerHTML = '<option value="">Select a vehicle...</option>' +
-      vehiclesList.map(function(v) {
-        return '<option value="' + v.id + '">' + esc(v.asset_name) + '</option>';
-      }).join('');
+    select.innerHTML = vehiclesList.map(function(v, i) {
+      return '<option value="' + v.id + '"' + (i === 0 ? ' selected' : '') + '>' + esc(v.asset_name) + '</option>';
+    }).join('');
+    selectedVehicle = vehiclesList[0];
   }
 
   document.getElementById('vehicle-select').addEventListener('change', function() {
@@ -541,7 +539,7 @@
     }
 
     if (dailyRows.length === 0) {
-      showEmptyState('Telematics idle-hour data is needed to calculate idle cost for this vehicle. This will populate automatically once Navman telematics data is available for this date range.');
+      showEmptyState('Telematics idle-hour data is needed to calculate idle cost for this vehicle. This will populate automatically once eROAD telematics data is available for this date range.');
       return;
     }
 

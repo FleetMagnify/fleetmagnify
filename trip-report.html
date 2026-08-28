@@ -76,6 +76,7 @@
   .cost-stack-seg.depr { background: #4A9EFF; }
   .cost-stack-seg.serv { background: #8B7CF6; }
   .cost-stack-seg.maint { background: #EF9F27; }
+  .cost-stack-seg.ruc { background: #E2754A; }
   .stack-legend { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
   .stack-legend span { font-size: 11px; color: #5A6474; display: flex; align-items: center; gap: 5px; }
   .stack-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
@@ -114,11 +115,11 @@
   <div class="page-content">
     <div class="page-eyebrow"><div class="dash"></div> Truck Fleet</div>
     <h1 class="page-title">Trip Cost Report</h1>
-    <p class="page-sub">Generate a full cost and emissions summary for a specific trip window using Navman telematics, rolling fuel rates, and asset cost data.</p>
+    <p class="page-sub">Generate a full cost and emissions summary for a specific trip window using eROAD telematics, rolling fuel rates, and asset cost data.</p>
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this works:</strong> Trip distance comes from the closest Navman odometer readings to your start and end times. Fuel cost uses the truck's <strong>most recent fill-to-fill rate</strong> before the trip ends — not fuel bought during the trip itself. Depreciation, servicing, and maintenance are applied per km from your asset profile.</p>
+      <p><strong>How this works:</strong> Trip distance comes from the closest eROAD odometer readings to your start and end times. Fuel cost uses the truck's <strong>most recent fill-to-fill rate</strong> before the trip ends — not fuel bought during the trip itself. Depreciation, servicing, maintenance, and RUC are applied per km from your asset profile.</p>
     </div>
 
     <div class="filter-bar">
@@ -180,6 +181,10 @@
             <div class="cost-pill-label">Maintenance</div>
             <div class="cost-pill-value" id="report-maint-cost"></div>
           </div>
+          <div class="cost-pill">
+            <div class="cost-pill-label">RUC</div>
+            <div class="cost-pill-value" id="report-ruc-cost"></div>
+          </div>
         </div>
         <div class="cost-stack" id="cost-stack"></div>
         <div class="stack-legend">
@@ -187,6 +192,7 @@
           <span><i style="background:#4A9EFF;"></i> Depreciation</span>
           <span><i style="background:#8B7CF6;"></i> Servicing</span>
           <span><i style="background:#EF9F27;"></i> Maintenance</span>
+          <span><i style="background:#E2754A;"></i> RUC</span>
         </div>
       </div>
 
@@ -227,7 +233,7 @@
   var tripReport = null;
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer', 'Truck & Trailer'];
-  var EMISSION_FACTORS = { Diesel: 2.68, Petrol: 2.31, Hybrid: 1.5, Electric: 0 };
+  var EMISSION_FACTORS = { Diesel: 2.68, Petrol: 2.31 };
   var MILEAGE_BUFFER_DAYS = 45;
   // How far back getLatestFillPeriod will walk past a telematics-gap period
   // to find a clean one before giving up.
@@ -459,7 +465,7 @@
     }
     var computed = computePeriods(eligible, mileageRows, presenceRows);
     if (computed.error === 'no_mileage') {
-      return { error: 'No Navman telematics data to calculate fill-to-fill fuel rates' };
+      return { error: 'No eROAD telematics data to calculate fill-to-fill fuel rates' };
     }
     if (computed.error) {
       return { error: 'Could not calculate a fill-to-fill fuel period from available purchases' };
@@ -542,9 +548,7 @@
     });
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
-    companyName = await window.FleetMagnifyReportTheme.resolveAccountDisplayName(supabase, effectiveAccountId);
-    document.getElementById('user-name').textContent = companyName;
-    document.getElementById('user-avatar').textContent = companyName.charAt(0).toUpperCase();
+    companyName = await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
     var now = new Date();
     var yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -569,10 +573,11 @@
       select.innerHTML = '<option value="">No on-road vehicles found</option>';
       return;
     }
-    select.innerHTML = '<option value="">Select a vehicle...</option>' +
-      vehiclesList.map(function(v) {
-        return '<option value="' + v.id + '">' + esc(v.asset_name) + '</option>';
-      }).join('');
+    select.innerHTML = vehiclesList.map(function(v, i) {
+      return '<option value="' + v.id + '"' + (i === 0 ? ' selected' : '') + '>' + esc(v.asset_name) + '</option>';
+    }).join('');
+    selectedVehicle = vehiclesList[0];
+    updateGenerateBtn();
   }
 
   function updateGenerateBtn() {
@@ -676,14 +681,14 @@
       return;
     }
     if (!mileageRows.length) {
-      showError('No Navman telematics data covering the trip window.');
+      showError('No eROAD telematics data covering the trip window.');
       return;
     }
 
     var startReading = closestReadingToDatetime(mileageRows, startDt);
     var endReading = closestReadingToDatetime(mileageRows, endDt);
     if (!startReading || !endReading) {
-      showError('Could not find Navman odometer readings near the trip start and end times.');
+      showError('Could not find eROAD odometer readings near the trip start and end times.');
       return;
     }
 
@@ -718,7 +723,9 @@
     var tripDeprCost = deprPerKm !== null ? tripKm * deprPerKm : null;
     var tripServCost = servPerKm !== null ? tripKm * servPerKm : null;
     var tripMaintCost = tripKm * maintPerKm;
-    var totalCost = tripFuelCost + tripMaintCost +
+    var rucPerKm = FCM.defaultRucPerKm(selectedVehicle);
+    var tripRucCost = tripKm * rucPerKm;
+    var totalCost = tripFuelCost + tripMaintCost + tripRucCost +
       (tripDeprCost !== null ? tripDeprCost : 0) +
       (tripServCost !== null ? tripServCost : 0);
     var tripEmissionsKg = tripFuelLitres * getEmissionFactor(selectedVehicle.fuel_type);
@@ -741,6 +748,8 @@
       servCost: tripServCost,
       servMissing: servResult.ok ? null : servResult.missing,
       maintCost: tripMaintCost,
+      rucCost: tripRucCost,
+      rucPerKm: rucPerKm,
       totalCost: totalCost,
       deprUnavailable: deprPerKm === null,
       servUnavailable: servPerKm === null,
@@ -817,6 +826,7 @@
       servEl.removeAttribute('title');
     }
     document.getElementById('report-maint-cost').textContent = fmtMoney(r.maintCost);
+    document.getElementById('report-ruc-cost').textContent = fmtMoney(r.rucCost);
     document.getElementById('report-emissions').textContent = fmtNum(r.emissionsKg, 2) + ' kg CO₂';
 
     var total = r.totalCost || 1;
@@ -824,7 +834,8 @@
       { cls: 'fuel', pct: (r.fuelCost / total) * 100 },
       { cls: 'depr', pct: r.deprUnavailable ? 0 : (r.deprCost / total) * 100 },
       { cls: 'serv', pct: r.servUnavailable ? 0 : (r.servCost / total) * 100 },
-      { cls: 'maint', pct: (r.maintCost / total) * 100 }
+      { cls: 'maint', pct: (r.maintCost / total) * 100 },
+      { cls: 'ruc', pct: (r.rucCost / total) * 100 }
     ];
     document.getElementById('cost-stack').innerHTML = segs.map(function(s) {
       return '<div class="cost-stack-seg ' + s.cls + '" style="width:' + Math.max(s.pct, 0.5).toFixed(1) + '%"></div>';
@@ -835,7 +846,8 @@
       formatDateShort(r.fillPeriod.periodStart) + ' → ' + formatDateShort(r.fillPeriod.periodEnd) +
       '</strong> (' + fmtNum(r.fillPeriod.litresUsed, 1) + ' L over ' + fmtNum(r.fillPeriod.kmDriven, 1) + ' km). ' +
       'Applied rates: <strong>' + fmtNum(r.litresPerKm, 3) + ' L/km</strong> and <strong>' + fmtMoney(r.pricePerLitre) + '/L</strong>. ' +
-      'These reflect the truck\'s most recent fuel consumption and price before the trip ended, not fuel purchased during the trip itself.';
+      'These reflect the truck\'s most recent fuel consumption and price before the trip ended, not fuel purchased during the trip itself. RUC is included at <strong>' +
+      fmtMoney(r.rucPerKm) + '/km</strong> from the truck profile (or GVM-class default).';
   }
 
   document.getElementById('export-pdf-btn').addEventListener('click', function() {
@@ -867,7 +879,8 @@
       ['Fuel Cost', fmtMoney(r.fuelCost)],
       ['Depreciation Cost', r.deprUnavailable ? '—' : fmtMoney(r.deprCost)],
       ['Servicing Cost', r.servUnavailable ? '—' : fmtMoney(r.servCost)],
-      ['Maintenance Cost', fmtMoney(r.maintCost)]
+      ['Maintenance Cost', fmtMoney(r.maintCost)],
+      ['RUC', fmtMoney(r.rucCost)]
     ];
     if (r.payloadTonnes) {
       var pdfCostPerTonneKm = pdfCostPerKm !== null ? pdfCostPerKm / r.payloadTonnes : null;

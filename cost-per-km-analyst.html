@@ -172,11 +172,11 @@
   <div class="page-content">
     <div class="page-eyebrow"><div class="dash"></div> Truck Fleet</div>
     <h1 class="page-title">Total Cost Per Kilometre</h1>
-    <p class="page-sub">Blended fill-to-fill analysis for on-road vehicles — fuel, depreciation, and maintenance per km, with manual overrides per period.</p>
+    <p class="page-sub">Blended running cost for on-road vehicles — fuel, depreciation, servicing, maintenance, and RUC per km.</p>
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this is calculated:</strong> Fuel cost per km comes from fill-to-fill periods (BP purchases and Navman odometer). Depreciation per km is <strong>(current value − end of life value) ÷ remaining km</strong>. Maintenance per km is <strong>annual repair cost ÷ estimated annual km</strong>. Use overrides when a calculated figure doesn't reflect reality for a specific period.</p>
+      <p><strong>How this is calculated:</strong> The headline fuel rate is the <strong>calibrated fill-to-fill regression</strong> (travel L/km × trailing average BP $/L) — labelled separately from each period’s own fill-to-fill $/km in the table. Depreciation per km is <strong>(current value − end of life value) ÷ remaining km</strong>. Servicing is the profile’s service cost per km. Maintenance is <strong>annual repair cost ÷ estimated annual km</strong>. RUC is the editable rate on the truck profile (or a GVM-class default). Depreciation, servicing, maintenance, and RUC are annualised constants from the asset profile — they do not change period-to-period unless you override them. Use overrides when a calculated figure doesn’t reflect reality for a specific period.</p>
     </div>
 
     <div class="filter-bar">
@@ -204,12 +204,12 @@
     <div id="empty-state" class="empty-state" hidden>
       <span class="icon">🚛</span>
       <h2>Not enough data yet</h2>
-      <p>At least two fuel fills and corresponding odometer readings are needed to calculate cost per km. This will populate automatically once your Navman telematics and BP integrations are connected.</p>
+      <p>At least two fuel fills and corresponding odometer readings are needed to calculate cost per km. This will populate automatically once your eROAD telematics and BP integrations are connected.</p>
     </div>
 
     <div id="dashboard-content" class="dashboard-content" hidden>
       <div class="hero-kpi">
-        <div class="kpi-label">Total Cost Per KM</div>
+        <div class="kpi-label">Calibrated Total Cost Per KM</div>
         <div class="hero-value" id="hero-total">—</div>
         <div class="hero-breakdown" id="hero-breakdown"></div>
       </div>
@@ -235,21 +235,22 @@
           <div class="kpi-value teal" id="kpi-fuel">—</div>
           <span class="badge-rate" id="fuel-rate-badge">—</span>
           <div class="kpi-sub-rate" id="fuel-rate-sub"></div>
+          <div class="kpi-sub">calibrated L/km × trailing avg $/L</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Depreciation Per KM</div>
           <div class="kpi-value teal" id="kpi-depr">—</div>
-          <div class="kpi-sub">most recent period</div>
+          <div class="kpi-sub">annualised from asset profile</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Maintenance Per KM</div>
           <div class="kpi-value teal" id="kpi-maint">—</div>
-          <div class="kpi-sub">most recent period</div>
+          <div class="kpi-sub">annualised from asset profile</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Servicing Per KM</div>
           <div class="kpi-value teal" id="kpi-serv">—</div>
-          <div class="kpi-sub">most recent period</div>
+          <div class="kpi-sub">annualised from asset profile</div>
         </div>
       </div>
 
@@ -261,6 +262,7 @@
             <div class="legend-item"><div class="legend-dot" style="background:#4A9EFF;"></div> Depreciation</div>
             <div class="legend-item"><div class="legend-dot" style="background:#EF9F27;"></div> Maintenance</div>
             <div class="legend-item"><div class="legend-dot" style="background:#8B7CF6;"></div> Servicing</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#E2754A;"></div> RUC</div>
           </div>
         </div>
         <div class="chart-wrap"><canvas id="stack-chart"></canvas></div>
@@ -271,7 +273,7 @@
           <div class="chart-card-header">
             <div class="chart-card-title">Fleet Comparison — Latest Total Cost Per KM</div>
             <div class="chart-legend">
-              <div class="legend-item"><span style="font-size:12px;color:#5A6474;">All on-road vehicles · most recent fill-to-fill period</span></div>
+              <div class="legend-item"><span style="font-size:12px;color:#5A6474;">All on-road vehicles · calibrated fuel + profile costs. Amber = intermittent / on-call (high $/km is expected on few kilometres).</span></div>
             </div>
           </div>
           <div class="chart-wrap"><canvas id="fleet-chart"></canvas></div>
@@ -410,18 +412,9 @@
     return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
   }
 
-  function getRucRatePerKm(gvmTonnes) {
-    if (!gvmTonnes || isNaN(gvmTonnes)) return null;
-    var gvm = parseFloat(gvmTonnes);
-    if (gvm <= 3.5)  return 0.076;
-    if (gvm <= 6)    return 0.120;
-    if (gvm <= 10)   return 0.180;
-    if (gvm <= 14)   return 0.220;
-    if (gvm <= 18)   return 0.260;
-    if (gvm <= 22)   return 0.295;
-    if (gvm <= 28)   return 0.340;
-    if (gvm <= 32)   return 0.385;
-    return 0.430;
+  function getRucRatePerKm(asset) {
+    if (!asset) return null;
+    return FCM.defaultRucPerKm(asset);
   }
 
   function fmtDateShort(dateStr) {
@@ -756,7 +749,8 @@
       var deprLifeNearLimit = deprOv ? false : !!deprBase.lifeNearLimit;
       var maintMissing = maintOv ? null : (maintBase.ok ? null : maintBase.missing);
       var servMissing = servOv ? null : (servBase.ok ? null : servBase.missing);
-      var rucPerKm = asset.gvm_tonnes ? getRucRatePerKm(asset.gvm_tonnes) : null;
+      var rucOv = findOverride(overrides, 'ruc', p.periodStart, p.periodEnd);
+      var rucPerKm = rucOv ? parseFloat(rucOv.override_value_per_km) : getRucRatePerKm(asset);
       var totalMissing = buildTotalMissing(fuelPerKm, deprMissing, deprLifeExceeded, deprLifeNearLimit, maintMissing, servMissing);
       var totalPerKm = calcPartialTotalPerKm(
         fuelPerKm, deprPerKm, deprMissing, deprLifeExceeded, maintPerKm, maintMissing, servPerKm, servMissing, rucPerKm
@@ -777,7 +771,7 @@
         deprPerKm: deprPerKm,
         maintPerKm: maintPerKm,
         servPerKm: servPerKm,
-        rucPerKm: asset.gvm_tonnes ? getRucRatePerKm(asset.gvm_tonnes) : null,
+        rucPerKm: rucPerKm,
         rucOverride: findOverride(overrides, 'ruc', p.periodStart, p.periodEnd),
         totalPerKm: totalPerKm,
         totalMissing: totalMissing,
@@ -890,16 +884,11 @@
     });
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
-    var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
-      ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
-    document.getElementById('user-name').textContent = name;
-    document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+    await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
-    var today = new Date();
-    var monthAgo = new Date();
-    monthAgo.setMonth(monthAgo.getMonth() - 1);
-    document.getElementById('date-to').value = fmtDate(today);
-    document.getElementById('date-from').value = fmtDate(monthAgo);
+    var today = FCM.nzTodayISO();
+    document.getElementById('date-to').value = today;
+    document.getElementById('date-from').value = FCM.addDaysISO(today, -30);
 
     await loadVehicles();
     await loadFleetComparison();
@@ -950,10 +939,13 @@
       select.innerHTML = '<option value="">No on-road vehicles found</option>';
       return;
     }
-    select.innerHTML = '<option value="">Select a vehicle...</option>' +
-      vehiclesList.map(function(v) {
-        return '<option value="' + v.id + '">' + esc(v.asset_name) + '</option>';
-      }).join('');
+    select.innerHTML = vehiclesList.map(function(v, i) {
+      return '<option value="' + v.id + '"' + (i === 0 ? ' selected' : '') + '>' + esc(v.asset_name) + '</option>';
+    }).join('');
+    selectedVehicle = vehiclesList[0];
+    document.getElementById('apply-filters-btn').disabled = false;
+    showMissingBanner(selectedVehicle);
+    runAnalysis();
   }
 
   document.getElementById('vehicle-select').addEventListener('change', function() {
@@ -1186,7 +1178,8 @@
           { label: 'Fuel', data: series(function(p) { return p.fuelPerKm; }), backgroundColor: '#0EA57A', stack: 'cost' },
           { label: 'Depreciation', data: series(function(p) { return p.deprPerKm; }), backgroundColor: '#4A9EFF', stack: 'cost' },
           { label: 'Maintenance', data: series(function(p) { return p.maintPerKm; }), backgroundColor: '#EF9F27', stack: 'cost' },
-          { label: 'Servicing', data: series(function(p) { return p.servPerKm; }), backgroundColor: '#8B7CF6', stack: 'cost' }
+          { label: 'Servicing', data: series(function(p) { return p.servPerKm; }), backgroundColor: '#8B7CF6', stack: 'cost' },
+          { label: 'RUC', data: series(function(p) { return p.rucPerKm; }), backgroundColor: '#E2754A', stack: 'cost' }
         ]
       },
       options: {
@@ -1446,7 +1439,11 @@
       var latest = enrichPeriods(v, [computed.periods[computed.periods.length - 1]], overrides)[0];
 
       if (latest.totalPerKm !== null && !isNaN(latest.totalPerKm)) {
-        fleetData.push({ name: v.asset_name, totalPerKm: latest.totalPerKm });
+        fleetData.push({
+          name: v.asset_name,
+          totalPerKm: latest.totalPerKm,
+          intermittent: FCM.isIntermittentUsage(v)
+        });
       }
     }
 
@@ -1477,7 +1474,7 @@
         labels: fleetData.map(function(f) { return f.name; }),
         datasets: [{
           data: fleetData.map(function(f) { return Math.round(f.totalPerKm * 1000) / 1000; }),
-          backgroundColor: '#0EA57A',
+          backgroundColor: fleetData.map(function(f) { return f.intermittent ? '#EF9F27' : '#0EA57A'; }),
           borderRadius: 4
         }]
       },
@@ -1489,7 +1486,11 @@
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: function(ctx) { return '$' + ctx.parsed.x.toFixed(3) + ' / km total'; }
+              label: function(ctx) {
+                var row = fleetData[ctx.dataIndex];
+                var extra = row && row.intermittent ? ' (intermittent / on-call — few km, high $/km expected)' : '';
+                return '$' + ctx.parsed.x.toFixed(3) + ' / km total' + extra;
+              }
             }
           }
         },

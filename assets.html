@@ -590,8 +590,8 @@
       </div>
     </div>
   </div>
-    <button type="button" class="fab-download" id="fab-download-btn">
-      📋 Complete Asset Profiles
+    <button type="button" class="fab-download" id="fab-download-btn" title="Downloads an Excel template so you can complete asset profiles offline, then re-upload via Import Excel">
+      📥 Download Profile Template
     </button>
     <div class="profile-editor-overlay" id="profile-editor-overlay">
       <div class="profile-editor-topbar">
@@ -704,7 +704,7 @@
     </div>
     <div class="form-group">
       <label for="asset-idle-rate">Idle Burn Rate (litres per hour)</label>
-      <input type="number" id="asset-idle-rate" placeholder="e.g. 4.0" step="0.1" min="0">
+      <input type="number" id="asset-idle-rate" placeholder="e.g. 4.0" step="0.01" min="0">
       <div class="form-hint" id="hint-idle-rate">Leave blank to use a default estimate based on asset type. You can update this anytime once you know your actual idle fuel usage.</div>
     </div>
     <div class="form-group field-shared-cost field-hidden" id="field-current-value">
@@ -741,6 +741,19 @@
       <label for="asset-estimated-annual-km">Estimated Annual KM</label>
       <input type="number" id="asset-estimated-annual-km" placeholder="e.g. 80000" step="1" min="0">
       <div class="form-hint" id="hint-estimated-annual-km">Expected kilometres driven per year — used to spread annual repair cost into a per-km maintenance rate.</div>
+    </div>
+    <div class="form-group field-on-road field-hidden" id="field-ruc">
+      <label for="asset-ruc-rate">RUC Rate ($/km)</label>
+      <input type="number" id="asset-ruc-rate" placeholder="e.g. 0.430" step="0.001" min="0">
+      <div class="form-hint" id="hint-ruc">NZ Road User Charges per kilometre. Leave blank to use the GVM-class default (shown in Cost Per KM Analyst and Trip Report).</div>
+    </div>
+    <div class="form-group" id="field-usage-profile">
+      <label for="asset-usage-profile">Usage Profile</label>
+      <select id="asset-usage-profile">
+        <option value="regular">Regular / scheduled</option>
+        <option value="intermittent">Intermittent / on-call</option>
+      </select>
+      <div class="form-hint">Intermittent assets (e.g. plant transporters) are scored on days worked, not a flat utilisation %, and skip target warnings on active days.</div>
     </div>
     <div class="form-group field-construction field-hidden" id="field-life-hours">
       <label for="asset-life-hours">Expected Total Life (hours)</label>
@@ -857,6 +870,7 @@
 <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
 <script src="js/fleet-cost-model.js"></script>
 <script src="js/sidebar-nav.js"></script>
+<script>if (window.FleetMagnifySidebar) window.FleetMagnifySidebar.mount('assets.html');</script>
 <script>
 (function() {
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
@@ -905,6 +919,7 @@
     { key: 'estimated_annual_repair_cost',   label: 'Annual Repair Cost ($)',   required: true  },
     { key: 'service_cost_per_km',            label: 'Service Cost/km ($)',      required: true  },
     { key: 'idle_burn_rate_lph',             label: 'Idle Burn Rate (L/hr)',    required: false },
+    { key: 'ruc_rate_per_km',                label: 'RUC ($/km)',               required: false },
   ];
 
   function openProfileEditor() {
@@ -955,17 +970,48 @@
         var val = asset[col.key];
         var isEmpty = val === null || val === undefined || val === '';
         var cls = isEmpty && col.required ? ' needs-value' : '';
-        tbodyHtml += '<td><input type="number" step="any" ' +
+        var displayVal = isEmpty ? '' : formatProfileNumber(col.key, val);
+        tbodyHtml += '<td><input type="number" step="' + (col.key === 'idle_burn_rate_lph' || col.key === 'ruc_rate_per_km' ? '0.01' : 'any') + '" ' +
           'class="profile-field' + cls + '" ' +
           'data-asset-id="' + asset.id + '" ' +
           'data-field="' + col.key + '" ' +
-          'value="' + (isEmpty ? '' : esc(String(val))) + '" ' +
+          'value="' + (isEmpty ? '' : esc(displayVal)) + '" ' +
           'placeholder="' + (col.required ? 'Required' : 'Optional') + '">' +
           '</td>';
       });
       tbodyHtml += '</tr>';
     });
     tbody.innerHTML = tbodyHtml;
+    maybeWarnDepreciationOutliers(assets, isTruck);
+  }
+
+  function formatProfileNumber(key, val) {
+    var n = parseFloat(val);
+    if (isNaN(n)) return String(val);
+    if (key === 'idle_burn_rate_lph' || key === 'ruc_rate_per_km' || key === 'service_cost_per_km' || key === 'service_cost_per_hour') {
+      return n.toFixed(2);
+    }
+    return String(val);
+  }
+
+  function maybeWarnDepreciationOutliers(assets, isTruck) {
+    var statusEl = document.getElementById('profile-editor-save-status');
+    if (!statusEl || isTruck || !window.FleetCostModel) return;
+    var rates = [];
+    assets.forEach(function(a) {
+      var r = window.FleetCostModel.calcDepreciationPerHour(a);
+      if (r.ok) rates.push({ name: a.asset_name, value: r.value });
+    });
+    if (rates.length < 2) return;
+    var sorted = rates.map(function(r) { return r.value; }).sort(function(a, b) { return a - b; });
+    var median = sorted[Math.floor(sorted.length / 2)];
+    if (!median) return;
+    var outliers = rates.filter(function(r) { return r.value > median * 2.5; });
+    if (!outliers.length) return;
+    statusEl.textContent = '⚠ ' + outliers.map(function(o) { return o.name; }).join(', ') +
+      ' depreciation/hour is much higher than the fleet median — check Current Value and Expected Life Hours.';
+    statusEl.style.color = '#EF9F27';
+    statusEl.classList.add('visible');
   }
 
   async function saveProfileField(assetId, field, value) {
@@ -1006,7 +1052,7 @@
     'Truck & Trailer': true,
     'Truck and Trailer / B-Train': true
   };
-  var ON_ROAD_FIELD_IDS = ['field-life-km', 'field-service-km', 'field-current-odometer', 'field-estimated-annual-km'];
+  var ON_ROAD_FIELD_IDS = ['field-life-km', 'field-service-km', 'field-current-odometer', 'field-estimated-annual-km', 'field-ruc'];
   var SHARED_COST_FIELD_IDS = ['field-current-value', 'field-eol-value', 'field-annual-repair'];
   var CONSTRUCTION_FIELD_IDS = ['field-life-hours', 'field-service-hour', 'field-available-hours', 'field-target-utilisation'];
   var supportsIsOnRoad = true;
@@ -1042,10 +1088,7 @@
     });
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
-    var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
-      ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
-    document.getElementById('user-name').textContent = name;
-    document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+    await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
     await loadCompanyIntegrationState();
     loadAssets();
     loadPendingAssets();
@@ -1149,7 +1192,7 @@
       });
     }
 
-    section.style.display = 'block';
+    section.style.display = unmatchedCards.length ? 'block' : 'none';
     renderCardMatching();
     await refreshIgnoredAssetsUi();
   }
@@ -1986,7 +2029,7 @@
     if (e.target === this) closeMergeConfirm();
   });
 
-  var ASSET_FIELD_IDS = ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-current-value','asset-eol-value','asset-annual-repair','asset-life-km','asset-service-cost-km','asset-current-odometer','asset-estimated-annual-km','asset-life-hours','asset-service-cost','asset-available-hours','asset-target-utilisation','asset-bp-card','asset-mobil-card'];
+  var ASSET_FIELD_IDS = ['asset-name','asset-type','fuel-type','asset-make','asset-model','asset-year','asset-rego','asset-idle-rate','asset-current-value','asset-eol-value','asset-annual-repair','asset-life-km','asset-service-cost-km','asset-current-odometer','asset-estimated-annual-km','asset-ruc-rate','asset-usage-profile','asset-life-hours','asset-service-cost','asset-available-hours','asset-target-utilisation','asset-bp-card','asset-mobil-card'];
 
   function parseOptionalFloat(raw) {
     if (raw === '' || raw == null) return null;
@@ -2223,6 +2266,7 @@
       payload.service_cost_per_km = parseOptionalFloat(document.getElementById('asset-service-cost-km').value);
       payload.current_odometer = parseOptionalFloat(document.getElementById('asset-current-odometer').value);
       payload.estimated_annual_km = parseOptionalFloat(document.getElementById('asset-estimated-annual-km').value);
+      payload.ruc_rate_per_km = parseOptionalFloat(document.getElementById('asset-ruc-rate').value);
       payload.expected_life_hours = null;
       payload.service_cost_per_hour = null;
       payload.available_hours_per_week = null;
@@ -2236,15 +2280,28 @@
       payload.service_cost_per_km = null;
       payload.current_odometer = null;
       payload.estimated_annual_km = null;
+      payload.ruc_rate_per_km = null;
     }
     if (supportsIsOnRoad) {
       payload.is_on_road = onRoad;
     }
     appendTelematicsToPayload(payload);
+    var usageEl = document.getElementById('asset-usage-profile');
+    if (usageEl) payload.usage_profile = usageEl.value || 'regular';
     return payload;
   }
 
   async function persistAsset(assetId, payload) {
+    var result = await persistAssetOnce(assetId, payload);
+    if (result.error && /column|schema cache|usage_profile|ruc_rate_per_km/i.test(result.error.message || '')) {
+      delete payload.usage_profile;
+      delete payload.ruc_rate_per_km;
+      result = await persistAssetOnce(assetId, payload);
+    }
+    return result;
+  }
+
+  async function persistAssetOnce(assetId, payload) {
     if (assetId != null) {
       return supabase.from('assets')
         .update(payload)
@@ -2309,7 +2366,7 @@
     document.getElementById('asset-rego').value = asset.registration || '';
     document.getElementById('asset-bp-card').value = asset.bp_card_number || '';
     document.getElementById('asset-mobil-card').value = asset.mobil_card_number || '';
-    document.getElementById('asset-idle-rate').value = asset.idle_burn_rate_lph != null ? asset.idle_burn_rate_lph : '';
+    document.getElementById('asset-idle-rate').value = asset.idle_burn_rate_lph != null ? Number(asset.idle_burn_rate_lph).toFixed(2) : '';
     document.getElementById('asset-current-value').value = asset.current_value != null ? asset.current_value : '';
     document.getElementById('asset-eol-value').value = asset.estimated_end_of_life_value != null ? asset.estimated_end_of_life_value : '';
     document.getElementById('asset-annual-repair').value = asset.estimated_annual_repair_cost != null ? asset.estimated_annual_repair_cost : '';
@@ -2317,6 +2374,12 @@
     document.getElementById('asset-service-cost-km').value = asset.service_cost_per_km != null ? asset.service_cost_per_km : '';
     document.getElementById('asset-current-odometer').value = asset.current_odometer != null ? asset.current_odometer : '';
     document.getElementById('asset-estimated-annual-km').value = asset.estimated_annual_km != null ? asset.estimated_annual_km : '';
+    document.getElementById('asset-ruc-rate').value = asset.ruc_rate_per_km != null ? Number(asset.ruc_rate_per_km).toFixed(3) : '';
+    var usageEl = document.getElementById('asset-usage-profile');
+    if (usageEl) {
+      var profile = String(asset.usage_profile || 'regular').toLowerCase();
+      usageEl.value = (profile === 'intermittent' || profile === 'on-call' || profile === 'on_call') ? 'intermittent' : 'regular';
+    }
     document.getElementById('asset-life-hours').value = asset.expected_life_hours != null ? asset.expected_life_hours : '';
     document.getElementById('asset-service-cost').value = asset.service_cost_per_hour != null ? asset.service_cost_per_hour : '';
     document.getElementById('asset-available-hours').value = asset.available_hours_per_week != null ? asset.available_hours_per_week : '';
@@ -3014,7 +3077,7 @@
       return;
     }
     await buildExcelTemplate();
-    showToast('Template downloaded — fill in the yellow columns and re-upload via Import Excel', 'success');
+    showToast('Excel template downloaded — fill in the yellow columns and re-upload via Import Excel', 'success');
   });
 
   document.getElementById('edit-profiles-btn').addEventListener('click', openProfileEditor);

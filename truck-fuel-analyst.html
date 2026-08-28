@@ -123,7 +123,7 @@
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this is calculated:</strong> Each period runs from one fuel fill to the next. Litres and cost come from the second fill; kilometres driven are the odometer difference between readings closest to each fill date. Periods above <strong>$0.155/km</strong> are flagged as above benchmark.</p>
+      <p><strong>How this is calculated:</strong> Each period runs from one fuel fill to the next. Litres and cost come from the second fill; kilometres driven are the odometer difference between readings closest to each fill date. This fill-to-fill rate is the platform’s canonical fuel cost per km. Periods more than 25% above this vehicle’s own average for the selected range are flagged as unusual — not against a flat industry number.</p>
     </div>
 
     <div class="filter-bar">
@@ -152,16 +152,16 @@
     <div id="dashboard-content" class="dashboard-content">
       <div class="kpi-row">
         <div class="kpi-card">
-          <div class="kpi-label">Current Cost Per KM</div>
+          <div class="kpi-label">Latest fill-to-fill fuel $/km</div>
           <div class="kpi-value teal" id="kpi-cost-km">—</div>
           <span class="badge-rate" id="fuel-rate-badge">—</span>
-          <div class="kpi-sub">Benchmark: $0.15 – $0.16 / km</div>
+          <div class="kpi-sub" id="kpi-cost-km-bench">vs this vehicle’s own average</div>
           <div class="kpi-sub-rate" id="kpi-cost-km-basis"></div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Total KM Driven</div>
           <div class="kpi-value white" id="kpi-total-km">—</div>
-          <div class="kpi-sub">selected date range</div>
+          <div class="kpi-sub">sum of fill-to-fill periods below</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Total Fuel Cost</div>
@@ -171,7 +171,7 @@
         <div class="kpi-card">
           <div class="kpi-label">Anomaly Count</div>
           <div class="kpi-value amber" id="kpi-anomalies">—</div>
-          <div class="kpi-sub">periods above $0.155/km</div>
+          <div class="kpi-sub">periods &gt;25% above this vehicle’s average</div>
         </div>
       </div>
 
@@ -180,8 +180,8 @@
           <div class="chart-card-title">Cost Per KM — Fill to Fill</div>
           <div class="chart-legend">
             <div class="legend-item"><div class="legend-dot" style="background:#0EA57A;"></div> Normal</div>
-            <div class="legend-item"><div class="legend-dot" style="background:#EF9F27;"></div> Above benchmark</div>
-            <div class="legend-item"><div class="legend-line"></div> $0.155 benchmark</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#EF9F27;"></div> Above own average</div>
+            <div class="legend-item"><div class="legend-line"></div> This vehicle’s average</div>
           </div>
         </div>
         <div class="chart-wrap"><canvas id="cost-chart"></canvas></div>
@@ -229,9 +229,11 @@
 <script src="js/subscription-guard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="js/fleet-cost-model.js"></script>
 <script src="js/sidebar-nav.js"></script>
 <script>
 (function() {
+  var FCM = window.FleetCostModel;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
   var effectiveAccountId = null;
@@ -240,16 +242,10 @@
   var costChart = null;
   var fleetChart = null;
 
-  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer', 'Truck & Trailer'];
-  var BENCHMARK = 0.155;
+  var ON_ROAD_TYPES = FCM.ON_ROAD_TYPES;
   var DATE_BUFFER_DAYS = 21;
   var PRICE_HISTORY_MONTHS = 6;
-  var DEFAULT_IDLE_RATES = {
-    'Light Vehicle': 1.2, 'Rigid Truck': 2.5, 'Semi Trailer': 3.0, 'Truck & Trailer': 3.0, 'Truck and Trailer / B-Train': 3.0
-  };
-  var DEFAULT_TRAVEL_RATES = {
-    'Light Vehicle': 0.12, 'Rigid Truck': 0.25, 'Semi Trailer': 0.40, 'Truck & Trailer': 0.40, 'Truck and Trailer / B-Train': 0.40
-  };
+  var OWN_AVG_ANOMALY = 1.25;
 
   function fmtDate(d) {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -295,23 +291,37 @@
   }
 
   function effectiveTravelRate(asset) {
-    return asset.travel_rate_lpk || DEFAULT_TRAVEL_RATES[asset.asset_type] || 0.30;
+    return asset.travel_rate_lpk || FCM.DEFAULT_TRAVEL_RATES[asset.asset_type] || 0.30;
   }
 
   function travelRateStatus(asset) {
+    var idle = FCM.resolvedIdleRate(asset);
     if (asset.last_calibrated_at) {
       var r2 = asset.travel_rate_r2 != null ? parseFloat(asset.travel_rate_r2) : null;
       return {
-        calibrated: true,
-        label: 'Calibrated',
-        sub: (r2 != null && !isNaN(r2)) ? ('R² = ' + r2.toFixed(3)) : null
+        calibrated: idle.source === 'calibrated',
+        label: idle.source === 'calibrated' ? 'Calibrated' : 'Default estimate',
+        sub: (r2 != null && !isNaN(r2)) ? ('Travel R² = ' + r2.toFixed(3) + ' · idle ' + FCM.formatIdleRate(idle.rate) + ' L/hr (' + idle.label + ')') : idle.label
       };
     }
     return {
       calibrated: false,
-      label: 'Estimated',
+      label: 'Default estimate',
       sub: 'Default rate for ' + (asset.asset_type || 'vehicle type')
     };
+  }
+
+  function flagAgainstOwnAverage(periods) {
+    var vals = periods.filter(function(p) { return !p.excluded && p.costPerKm != null; }).map(function(p) { return p.costPerKm; });
+    var avg = null;
+    if (vals.length) {
+      avg = vals.reduce(function(a, b) { return a + b; }, 0) / vals.length;
+    }
+    periods.forEach(function(p) {
+      p.ownAverage = avg;
+      p.anomaly = vals.length >= 3 && !p.excluded && p.costPerKm != null && p.costPerKm > avg * OWN_AVG_ANOMALY;
+    });
+    return avg;
   }
 
   // Ported from lib/fuel-regression.js — same NZ public holiday list and
@@ -475,7 +485,7 @@
         idleHours: idleHours,
         idleFuelCost: idleFuelCost,
         costPerKm: gapExcluded ? null : costPerKm,
-        anomaly: !gapExcluded && costPerKm > BENCHMARK,
+        anomaly: false,
         excluded: gapExcluded,
         exclusionReason: exclusionReason
       });
@@ -518,16 +528,11 @@
     });
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
-    var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
-      ? currentUser.user_metadata.company_name : currentUser.email.split('@')[0];
-    document.getElementById('user-name').textContent = name;
-    document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+    await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
-    var today = new Date();
-    var monthAgo = new Date();
-    monthAgo.setMonth(monthAgo.getMonth() - 1);
-    document.getElementById('date-to').value = fmtDate(today);
-    document.getElementById('date-from').value = fmtDate(monthAgo);
+    var today = FCM.nzTodayISO();
+    document.getElementById('date-to').value = today;
+    document.getElementById('date-from').value = FCM.addDaysISO(today, -30);
 
     await loadVehicles();
     await loadFleetComparison();
@@ -548,10 +553,12 @@
       select.innerHTML = '<option value="">No on-road vehicles found</option>';
       return;
     }
-    select.innerHTML = '<option value="">Select a vehicle...</option>' +
-      vehiclesList.map(function(v) {
-        return '<option value="' + v.id + '">' + esc(v.asset_name) + '</option>';
-      }).join('');
+    select.innerHTML = vehiclesList.map(function(v, i) {
+      return '<option value="' + v.id + '"' + (i === 0 ? ' selected' : '') + '>' + esc(v.asset_name) + '</option>';
+    }).join('');
+    selectedVehicle = vehiclesList[0];
+    document.getElementById('apply-filters-btn').disabled = false;
+    runAnalysis();
   }
 
   document.getElementById('vehicle-select').addEventListener('change', function() {
@@ -693,13 +700,14 @@
     }
 
     var computed = computePeriods(data.fuel, data.mileage, data.idle,
-      selectedVehicle.idle_burn_rate_lph || DEFAULT_IDLE_RATES[selectedVehicle.asset_type] || 3.0);
+      FCM.resolvedIdleRate(selectedVehicle).rate);
     if (computed.error === 'insufficient_fuel' || computed.error === 'no_mileage' || computed.error === 'no_periods') {
       showEmpty();
       return;
     }
 
     var inRange = filterPeriodsByRange(computed.periods, dateFrom, dateTo);
+    flagAgainstOwnAverage(inRange);
     if (inRange.length === 0) {
       showEmpty();
       return;
@@ -726,27 +734,31 @@
       if (p.anomaly) anomalyCount++;
     });
 
-    var dateFrom = document.getElementById('date-from').value;
-    var dateTo = document.getElementById('date-to').value;
-
-    var travelRate = effectiveTravelRate(selectedVehicle);
-    var priceInfo = await fetchAvgPricePerLitre(selectedVehicle.id, dateTo);
-    var costPerKm = travelRate * priceInfo.avgPricePerLitre;
-    var isAnomaly = costPerKm > BENCHMARK;
+    var included = periods.filter(function(p) { return !p.excluded && p.costPerKm != null; });
+    var latest = included.length ? included[included.length - 1] : null;
+    var ownAvg = latest && latest.ownAverage;
+    var fillToFill = latest ? latest.costPerKm : null;
+    var isAnomaly = !!(latest && latest.anomaly);
 
     var costKmEl = document.getElementById('kpi-cost-km');
-    costKmEl.textContent = fmtMoney(costPerKm);
+    costKmEl.textContent = fillToFill != null ? fmtMoney(fillToFill) : '—';
     costKmEl.className = 'kpi-value ' + (isAnomaly ? 'amber' : 'teal');
 
     var rateStatus = travelRateStatus(selectedVehicle);
     var fuelBadgeEl = document.getElementById('fuel-rate-badge');
     fuelBadgeEl.textContent = rateStatus.label;
     fuelBadgeEl.className = 'badge-rate ' + (rateStatus.calibrated ? 'calibrated' : 'estimated');
-    document.getElementById('kpi-cost-km-basis').textContent = rateStatus.sub || '';
+    var basis = 'Fill-to-fill (canonical)';
+    if (ownAvg != null) basis += ' · this vehicle avg ' + fmtMoney(ownAvg) + '/km';
+    if (rateStatus.sub) basis += ' · ' + rateStatus.sub;
+    document.getElementById('kpi-cost-km-basis').textContent = basis;
+    var benchEl = document.getElementById('kpi-cost-km-bench');
+    if (benchEl) benchEl.textContent = ownAvg != null ? ('this vehicle’s average ' + fmtMoney(ownAvg) + '/km') : 'need 3+ periods to flag vs own average';
 
-    var rangeKm = await fetchRangeDistanceKm(selectedVehicle.id, dateFrom, dateTo);
+    var rowKm = 0;
+    periods.forEach(function(p) { if (!p.excluded) rowKm += p.kmDriven || 0; });
     document.getElementById('kpi-total-km').textContent =
-      rangeKm != null ? (Math.round(rangeKm).toLocaleString() + ' km') : '—';
+      rowKm > 0 ? (Math.round(rowKm).toLocaleString() + ' km') : '—';
 
     document.getElementById('kpi-total-cost').textContent = fmtMoney(totalCost);
     document.getElementById('kpi-anomalies').textContent = String(anomalyCount);
@@ -764,7 +776,8 @@
     var labels = periods.map(function(p) { return fmtDateShort(p.periodEnd); });
     var values = periods.map(function(p) { return p.excluded ? null : Math.round(p.costPerKm * 1000) / 1000; });
     var pointColors = periods.map(function(p) { return p.anomaly ? '#EF9F27' : '#0EA57A'; });
-    var benchmarkLine = periods.map(function() { return BENCHMARK; });
+    var ownAvg = periods[0] && periods[0].ownAverage;
+    var benchmarkLine = periods.map(function() { return ownAvg; });
 
     if (costChart) costChart.destroy();
     costChart = new Chart(ctx, {
@@ -806,7 +819,7 @@
           tooltip: {
             callbacks: {
               label: function(ctx) {
-                if (ctx.datasetIndex === 1) return 'Benchmark: $' + BENCHMARK.toFixed(3) + '/km';
+                if (ctx.datasetIndex === 1) return 'This vehicle’s average: $' + (ctx.parsed.y != null ? ctx.parsed.y.toFixed(3) : '—') + '/km';
                 return 'Cost: $' + ctx.parsed.y.toFixed(3) + '/km';
               }
             }
@@ -848,7 +861,7 @@
         '<td class="cell-amber">' + fmtMoney(p.idleFuelCost) + '</td>' +
         '<td class="' + (p.anomaly ? 'cell-amber' : 'cell-teal') + '">' + fmtMoney(p.costPerKm) + '</td>' +
         '<td><span class="status-badge ' + (p.anomaly ? 'anomaly' : 'normal') + '">' +
-          (p.anomaly ? 'Above Benchmark' : 'Normal') + '</span></td>' +
+          (p.anomaly ? 'Above own average' : 'Normal') + '</span></td>' +
       '</tr>';
     }).join('');
   }
@@ -867,7 +880,7 @@
       var data = await fetchVehicleData(v.id, wideFrom, wideTo);
       if (data.fuel.length < 2 || !data.mileage.length) continue;
       var computed = computePeriods(data.fuel, data.mileage, data.idle,
-        v.idle_burn_rate_lph || DEFAULT_IDLE_RATES[v.asset_type] || 3.0);
+        FCM.resolvedIdleRate(v).rate);
       if (!computed.periods.length) continue;
       var nonExcluded = computed.periods.filter(function(p) { return !p.excluded; });
       if (!nonExcluded.length) continue;
@@ -902,7 +915,7 @@
         labels: fleetData.map(function(f) { return f.name; }),
         datasets: [{
           data: fleetData.map(function(f) { return Math.round(f.costPerKm * 1000) / 1000; }),
-          backgroundColor: fleetData.map(function(f) { return f.anomaly ? '#EF9F27' : '#0EA57A'; }),
+          backgroundColor: fleetData.map(function() { return '#0EA57A'; }),
           borderRadius: 4
         }]
       },

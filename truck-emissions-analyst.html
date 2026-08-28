@@ -131,11 +131,11 @@
   <div class="page-content">
     <div class="page-eyebrow"><div class="dash"></div> Truck Fleet</div>
     <h1 class="page-title">Emissions Per Kilometre</h1>
-    <p class="page-sub">Fill-to-fill CO₂ analysis for on-road vehicles using fuel consumption and Navman odometer readings.</p>
+    <p class="page-sub">Fill-to-fill CO₂ analysis for on-road vehicles using BP fuel purchases and eROAD odometer readings.</p>
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this is calculated:</strong> Each period runs from one fuel fill to the next. Litres come from the second fill; kilometres driven are the odometer difference between readings closest to each fill date. Total emissions = litres × emission factor for the vehicle's fuel type (Diesel 2.68, Petrol 2.31, Hybrid 1.5, Electric 0 kg CO₂/L).</p>
+      <p><strong>How this is calculated:</strong> Each period runs from one fuel fill to the next. Litres come from the second fill; kilometres driven are the odometer difference between readings closest to each fill date. Total emissions = litres × NZ MfE combustion factor for the vehicle's fuel type (Diesel 2.68 kg CO₂-e/L, Petrol 2.31). A litre of diesel emits the same regardless of drivetrain — there is no separate hybrid/electric litre factor.</p>
     </div>
 
     <div class="filter-bar">
@@ -158,7 +158,7 @@
     <div id="empty-state" class="empty-state" hidden>
       <span class="icon">🌿</span>
       <h2>Not enough data yet</h2>
-      <p>At least two fuel fills and corresponding Navman odometer readings are needed to calculate emissions per km. This will populate automatically once your fuel purchase and mileage data is available.</p>
+      <p>At least two fuel fills and corresponding eROAD odometer readings are needed to calculate emissions per km. This will populate automatically once your fuel purchase and mileage data is available.</p>
     </div>
 
     <div id="dashboard-content" class="dashboard-content" hidden>
@@ -177,7 +177,7 @@
         <div class="kpi-card">
           <div class="kpi-label">Total KM Driven</div>
           <div class="kpi-value white" id="kpi-total-km">—</div>
-          <div class="kpi-sub">selected date range</div>
+          <div class="kpi-sub" id="kpi-total-km-sub">sum of fill-to-fill periods below</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Total Fuel Consumed</div>
@@ -255,6 +255,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="js/fleet-cost-model.js"></script>
 <script src="js/report-theme.js"></script>
 <script src="js/sidebar-nav.js"></script>
 <script>
@@ -272,7 +273,8 @@
   var latestPeriod = null;
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer', 'Truck & Trailer'];
-  var EMISSION_FACTORS = { Diesel: 2.68, Petrol: 2.31, Hybrid: 1.5, Electric: 0 };
+  var EMISSION_FACTORS = { Diesel: 2.68, Petrol: 2.31 };
+  var FCM = window.FleetCostModel;
   var DATE_BUFFER_DAYS = 21;
   var DEFAULT_TRAVEL_RATES = {
     'Light Vehicle': 0.12, 'Rigid Truck': 0.25, 'Semi Trailer': 0.40, 'Truck & Trailer': 0.40, 'Truck and Trailer / B-Train': 0.40
@@ -572,15 +574,11 @@
     });
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
-    companyName = await window.FleetMagnifyReportTheme.resolveAccountDisplayName(supabase, effectiveAccountId);
-    document.getElementById('user-name').textContent = companyName;
-    document.getElementById('user-avatar').textContent = companyName.charAt(0).toUpperCase();
+    companyName = await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
-    var today = new Date();
-    var monthAgo = new Date();
-    monthAgo.setMonth(monthAgo.getMonth() - 1);
-    document.getElementById('date-to').value = fmtDate(today);
-    document.getElementById('date-from').value = fmtDate(monthAgo);
+    var today = FCM.nzTodayISO();
+    document.getElementById('date-to').value = today;
+    document.getElementById('date-from').value = FCM.addDaysISO(today, -30);
 
     await loadVehicles();
     await loadFleetComparison();
@@ -628,10 +626,12 @@
       select.innerHTML = '<option value="">No on-road vehicles found</option>';
       return;
     }
-    select.innerHTML = '<option value="">Select a vehicle...</option>' +
-      vehiclesList.map(function(v) {
-        return '<option value="' + v.id + '">' + esc(vehicleLabel(v)) + '</option>';
-      }).join('');
+    select.innerHTML = vehiclesList.map(function(v, i) {
+      return '<option value="' + v.id + '"' + (i === 0 ? ' selected' : '') + '>' + esc(vehicleLabel(v)) + '</option>';
+    }).join('');
+    selectedVehicle = vehiclesList[0];
+    document.getElementById('apply-filters-btn').disabled = false;
+    runAnalysis();
   }
 
   document.getElementById('vehicle-select').addEventListener('change', function() {
@@ -786,13 +786,15 @@
       totalEmissionsKg += p.totalEmissionsKg;
     });
 
-    var dateFrom = document.getElementById('date-from').value;
-    var dateTo = document.getElementById('date-to').value;
-    var rangeKm = await fetchRangeDistanceKm(selectedVehicle.id, dateFrom, dateTo);
+    var periodKm = 0;
+    periods.forEach(function(p) {
+      if (!p.excluded) periodKm += p.kmDriven || 0;
+    });
 
     document.getElementById('kpi-total-emissions').textContent = fmtNum(totalEmissionsKg / 1000, 2) + ' t';
     document.getElementById('kpi-emissions-km').textContent = fmtNum(headlineEmissionsPerKm, 3) + ' kg';
-    document.getElementById('kpi-total-km').textContent = rangeKm != null ? (Math.round(rangeKm).toLocaleString() + ' km') : '—';
+    document.getElementById('kpi-total-km').textContent = periodKm > 0 ? (Math.round(periodKm).toLocaleString() + ' km') : '—';
+    document.getElementById('kpi-total-km-sub').textContent = 'sum of fill-to-fill periods below';
     document.getElementById('kpi-total-litres').textContent = fmtNum(totalLitres, 1) + ' L';
 
     renderEmissionsChart(periods);

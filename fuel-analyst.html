@@ -195,9 +195,9 @@
   </div>
 
   <div class="page-content">
-    <div class="page-eyebrow"><div class="dash"></div> Fuel Analysis</div>
+    <div class="page-eyebrow"><div class="dash"></div> Machinery</div>
     <h1 class="page-title">Fuel Consumption Breakdown</h1>
-    <p class="page-sub">True travel vs. idle fuel cost, calculated from your actual fuel invoices and telematics hours.</p>
+    <p class="page-sub">True travel vs. idle fuel cost for plant and machinery, from VisionLink litres and bulk-tank pricing. Truck fill-to-fill analysis lives in <a href="truck-fuel-analyst.html" style="color:#0EA57A;">Fuel Cost Analyst</a>.</p>
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
@@ -340,6 +340,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="js/fleet-cost-model.js"></script>
 <script src="js/sidebar-nav.js"></script>
 <script>
 (function() {
@@ -352,6 +353,7 @@
   var lastDateFrom = '';
   var lastDateTo = '';
   var defaultMachineryFuelCostPerLitre = null;
+  var FCM = window.FleetCostModel;
 
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer', 'Truck & Trailer'];
   var NO_ODOMETER_MSG = 'No odometer data available yet — this will populate automatically once your eRoad integration is connected';
@@ -716,17 +718,11 @@
     });
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
-    var name = (currentUser.user_metadata && currentUser.user_metadata.company_name)
-      ? currentUser.user_metadata.company_name
-      : currentUser.email.split('@')[0];
-    document.getElementById('user-name').textContent = name;
-    document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+    await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
-    var today = new Date();
-    var monthAgo = new Date();
-    monthAgo.setDate(monthAgo.getDate() - 30);
-    document.getElementById('date-to').value = today.toISOString().slice(0,10);
-    document.getElementById('date-from').value = monthAgo.toISOString().slice(0,10);
+    var today = FCM.nzTodayISO();
+    document.getElementById('date-to').value = today;
+    document.getElementById('date-from').value = FCM.addDaysISO(today, -30);
 
     await loadUserSettings();
     await loadAssets();
@@ -735,17 +731,34 @@
   async function loadAssets() {
     var { data, error } = await supabase
       .from('assets')
-      .select('id, asset_name, asset_type, idle_burn_rate_lph')
+      .select('id, asset_name, asset_type, idle_burn_rate_lph, last_calibrated_at')
       .eq('user_id', effectiveAccountId)
       .eq('is_ignored', false)
       .order('asset_name');
     if (error || !data) return;
-    assetsList = data;
+    assetsList = data.filter(function(a) { return !FCM.isOnRoad(a); });
     var select = document.getElementById('asset-select');
-    select.innerHTML = '<option value="">Select an asset...</option>' +
-      assetsList.map(function(a) {
-        return '<option value="' + a.id + '">' + esc(a.asset_name) + '</option>';
-      }).join('');
+    if (!assetsList.length) {
+      select.innerHTML = '<option value="">No machinery assets found</option>';
+      return;
+    }
+    select.innerHTML = assetsList.map(function(a, i) {
+      return '<option value="' + a.id + '"' + (i === 0 ? ' selected' : '') + '>' + esc(a.asset_name) + '</option>';
+    }).join('');
+    selectedAsset = assetsList[0];
+    updateIdleRateDisplay();
+    document.getElementById('apply-filters-btn').disabled = false;
+    runAnalysis();
+  }
+
+  function updateIdleRateDisplay() {
+    var display = document.getElementById('idle-rate-display');
+    if (!selectedAsset) {
+      display.textContent = '— select an asset —';
+      return;
+    }
+    var idle = FCM.resolvedIdleRate(selectedAsset);
+    display.textContent = FCM.formatIdleRate(idle.rate) + ' L/hr (' + idle.label.toLowerCase() + ')';
   }
 
   document.getElementById('asset-select').addEventListener('change', function() {
@@ -761,15 +774,9 @@
       hideNoFuelBanner();
       return;
     }
-    setViewMode(isOnRoadAsset(selectedAsset));
-    resetKpis(isOnRoadAsset(selectedAsset));
-    var rate = selectedAsset.idle_burn_rate_lph;
-    var isDefault = false;
-    if (!rate) {
-      rate = DEFAULT_IDLE_RATES[selectedAsset.asset_type] || 3.0;
-      isDefault = true;
-    }
-    display.textContent = rate.toFixed(1) + ' L/hr' + (isDefault ? ' (default estimate)' : ' (set on asset)');
+    setViewMode(false);
+    resetKpis(false);
+    updateIdleRateDisplay();
     applyBtn.disabled = false;
   });
 
@@ -786,8 +793,16 @@
     var btn = document.getElementById('apply-filters-btn');
     btn.disabled = true; btn.textContent = 'Loading...';
 
-    var idleRate = selectedAsset.idle_burn_rate_lph || DEFAULT_IDLE_RATES[selectedAsset.asset_type] || 3.0;
-    var isOnRoad = isOnRoadAsset(selectedAsset);
+    var idle = FCM.resolvedIdleRate(selectedAsset);
+    var idleRate = idle.rate;
+    var isOnRoad = FCM.isOnRoad(selectedAsset);
+    if (isOnRoad) {
+      btn.disabled = false;
+      btn.textContent = 'Apply Filters';
+      document.getElementById('chart-empty').style.display = 'block';
+      document.getElementById('chart-empty').innerHTML = '<span class="icon">🚛</span>On-road vehicles are analysed in Fuel Cost Analyst (fill-to-fill). This module is machinery-only.';
+      return;
+    }
 
     var telSelect = 'record_date, operating_hours, idle_hours, total_engine_hours, odometer_km';
     if (!isOnRoad) telSelect += ', litres_consumed';
