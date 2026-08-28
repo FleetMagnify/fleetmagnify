@@ -9,7 +9,12 @@
  *     telematics-day floors before any write.
  *
  *   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
- *     node scripts/generate-demo-history.js [--dry-run]
+ *     node scripts/generate-demo-history.js [--dry-run] [--only kenworth]
+ *
+ *   --only <profile-key>  Regenerates one asset (telematics + fuel +
+ *     calibration rows for that asset id). Does not touch jobs or
+ *     user_settings. Known keys: excavator, grader, dozer, adt,
+ *     compactor, isuzu, hino, volvoFh, kenworth, transporter.
  *
  * Safety:
  *   - Looks up asset IDs at runtime (never hardcoded)
@@ -165,13 +170,24 @@ var PROFILES = [
     kind: 'truck',
     startOdo: 385000,
     weekdayKm: [380, 640],
-    saturdayKm: [80, 280],
+    saturdayKm: [220, 420],
     avgSpeedKmh: 68,
-    idleHours: [0.5, 1.4],
+    idleHours: [0.5, 1.1],
+    idleVsKm: 'inverse',
+    // Yard-idle weekdays (0 km, engine on) give the one-variable
+    // regression idle hours that are not absorbed into L/km. Clustered
+    // "50 km / 7 h" loading days previously became their own fill window.
+    yardIdleDays: 12,
+    yardClusterSize: 4,
+    yardIdle: [3.8, 5.6],
+    minFillGapDays: 2,
+    minIntervalKm: 500,
+    alignFillsToRegression: true,
+    targetResidualIdleLph: 3.0,
     travelLpk: 0.515,
     idleLph: 3.2,
-    tankL: 900,
-    targetFills: 15
+    tankL: 1400,
+    targetFills: 16
   },
   {
     key: 'transporter',
@@ -526,7 +542,90 @@ function buildTransporterActiveSet(dates, rng) {
   return active;
 }
 
-function dailyActivity(profile, dateStr, rng, transporterActive) {
+function buildSiteDays(dates, rng, weekCount) {
+  var set = {};
+  if (!weekCount) return set;
+  var starts = [];
+  dates.forEach(function(d, idx) {
+    if (isWeekend(d) || NZ_HOLIDAYS[d]) return;
+    var block = [];
+    for (var k = 0; k < 4; k++) {
+      if (idx + k >= dates.length) return;
+      var day = dates[idx + k];
+      if (isWeekend(day) || NZ_HOLIDAYS[day]) return;
+      block.push(day);
+    }
+    starts.push(block);
+  });
+  // Shuffle
+  for (var i = starts.length - 1; i > 0; i--) {
+    var j = Math.floor(rng() * (i + 1));
+    var tmp = starts[i];
+    starts[i] = starts[j];
+    starts[j] = tmp;
+  }
+  var used = {};
+  var placed = 0;
+  starts.forEach(function(block) {
+    if (placed >= weekCount) return;
+    var overlap = block.some(function(d) { return used[d]; });
+    if (overlap) return;
+    block.forEach(function(d) {
+      set[d] = true;
+      used[d] = true;
+    });
+    placed += 1;
+  });
+  return set;
+}
+
+function buildYardDays(dates, rng, count, clusterSize) {
+  var set = {};
+  if (!count) return set;
+  var size = clusterSize || 4;
+  var clustersNeeded = Math.max(1, Math.round(count / size));
+  var mondays = dates.filter(function(d) {
+    return dow(d) === 1 && !NZ_HOLIDAYS[d] && !RAIN_OUT[d];
+  });
+  if (!mondays.length) return set;
+  var usedIdx = {};
+  for (var c = 0; c < clustersNeeded; c++) {
+    var slot = (c + 0.5) / clustersNeeded;
+    var idx = clamp(Math.round(slot * (mondays.length - 1) + lerp(rng, -1, 1)), 0, mondays.length - 1);
+    var tries = 0;
+    while (usedIdx[idx] && tries < mondays.length) {
+      idx = (idx + 2) % mondays.length;
+      tries += 1;
+    }
+    if (usedIdx[idx]) continue;
+    usedIdx[idx] = true;
+    var start = mondays[idx];
+    var startPos = dates.indexOf(start);
+    var added = 0;
+    for (var k = 0; k < 8 && added < size && startPos + k < dates.length; k++) {
+      var day = dates[startPos + k];
+      if (isWeekend(day) || NZ_HOLIDAYS[day] || RAIN_OUT[day]) continue;
+      set[day] = true;
+      added += 1;
+    }
+  }
+  return set;
+}
+
+function generateDailyMap(profile, dates, rng) {
+  var transporterActive = profile.irregular ? buildTransporterActiveSet(dates, rng) : {};
+  var siteDays = profile.siteWeeks ? buildSiteDays(dates, rng, profile.siteWeeks) : {};
+  var yardDays = profile.yardIdleDays
+    ? buildYardDays(dates, rng, profile.yardIdleDays, profile.yardClusterSize)
+    : {};
+  var daily = {};
+  dates.forEach(function(d) {
+    daily[d] = dailyActivity(profile, d, rng, transporterActive, siteDays, yardDays);
+  });
+  return daily;
+}
+
+function dailyActivity(profile, dateStr, rng, transporterActive, siteDays, yardDays) {
   if (NZ_HOLIDAYS[dateStr] || isSunday(dateStr)) {
     return { active: false, operating: 0, idle: 0, km: 0, litres: 0 };
   }
@@ -535,6 +634,18 @@ function dailyActivity(profile, dateStr, rng, transporterActive) {
   }
   if (profile.irregular && !transporterActive[dateStr]) {
     return { active: false, operating: 0, idle: 0, km: 0, litres: 0 };
+  }
+
+  if (yardDays && yardDays[dateStr] && profile.kind === 'truck') {
+    var yardIdle = lerp(rng, profile.yardIdle[0], profile.yardIdle[1]);
+    var yardLitres = yardIdle * profile.idleLph * lerp(rng, 0.95, 1.05);
+    return {
+      active: true,
+      operating: 0.3,
+      idle: round1(yardIdle),
+      km: 0,
+      litres: round1(Math.max(0, yardLitres))
+    };
   }
 
   // Occasional random weekday off for every asset (breakdown / no work).
@@ -569,11 +680,20 @@ function dailyActivity(profile, dateStr, rng, transporterActive) {
   if (isSaturday(dateStr) && rng() < 0.35 && !profile.irregular) {
     return { active: false, operating: 0, idle: 0, km: 0, litres: 0 };
   }
-  var km = lerp(rng, kmRange[0], kmRange[1]);
+  var siteDay = !!(siteDays && siteDays[dateStr] && !isSaturday(dateStr));
+  var km = siteDay
+    ? lerp(rng, profile.siteKm[0], profile.siteKm[1])
+    : lerp(rng, kmRange[0], kmRange[1]);
   if (km < 8) {
     return { active: false, operating: 0, idle: 0, km: 0, litres: 0 };
   }
-  var idleH = lerp(rng, profile.idleHours[0], profile.idleHours[1]);
+  var idleH = siteDay
+    ? lerp(rng, profile.siteIdle[0], profile.siteIdle[1])
+    : lerp(rng, profile.idleHours[0], profile.idleHours[1]);
+  if (!siteDay && profile.idleVsKm === 'inverse') {
+    var typicalKm = (profile.weekdayKm[0] + profile.weekdayKm[1]) / 2;
+    idleH *= clamp(typicalKm / km, 0.5, 2.2);
+  }
   var drivingH = km / profile.avgSpeedKmh;
   var litresT = km * profile.travelLpk + idleH * profile.idleLph;
   litresT *= lerp(rng, 0.95, 1.05);
@@ -612,23 +732,34 @@ function placeFillDates(dates, daily, profile, rng) {
       var idx = Math.round(n * spacing + lerp(rng, -1.2, 1.2));
       idx = clamp(idx, 0, dates.length - 1);
       var candidate = dates[idx];
-      // Prefer a day that actually burned fuel, so the interval has distance/hours.
+      // Prefer an active highway-ish day so a site-wait cluster cannot
+      // become its own tiny fill-to-fill interval.
       var snapped = candidate;
-      if (!daily[candidate].active) {
-        for (var step = 1; step <= 3; step++) {
+      function fillQuality(day) {
+        if (!daily[day] || !daily[day].active) return -1;
+        return daily[day].km;
+      }
+      var minFillKm = profile.weekdayKm ? profile.weekdayKm[0] * 0.6 : 80;
+      if (fillQuality(candidate) < minFillKm) {
+        var best = candidate;
+        var bestQ = fillQuality(candidate);
+        for (var step = 1; step <= 5; step++) {
           var fwd = dates[clamp(idx + step, 0, dates.length - 1)];
           var back = dates[clamp(idx - step, 0, dates.length - 1)];
-          if (daily[fwd].active) { snapped = fwd; break; }
-          if (daily[back].active) { snapped = back; break; }
+          if (fillQuality(fwd) > bestQ) { best = fwd; bestQ = fillQuality(fwd); }
+          if (fillQuality(back) > bestQ) { best = back; bestQ = fillQuality(back); }
+          if (bestQ >= minFillKm) break;
         }
+        snapped = best;
       }
       if (fills.indexOf(snapped) === -1) fills.push(snapped);
     }
     fills.sort();
   }
 
-  // Dedup, enforce a 2-day gap (same-day fills create a zero-distance interval
-  // that the regression engine excludes), then top up to the minimum.
+    // Dedup, reject same-calendar-day fills (zero-distance interval that
+    // the regression engine excludes), then top up to the minimum.
+  var minGap = profile.minFillGapDays != null ? profile.minFillGapDays : 1;
   var uniq = [];
   fills.sort();
   fills.forEach(function(d) {
@@ -636,7 +767,7 @@ function placeFillDates(dates, daily, profile, rng) {
     if (uniq.length) {
       var prev = uniq[uniq.length - 1];
       var gap = (toUtcDate(d) - toUtcDate(prev)) / 86400000;
-      if (gap < 2) return;
+      if (gap < minGap) return;
     }
     uniq.push(d);
   });
@@ -648,7 +779,7 @@ function placeFillDates(dates, daily, profile, rng) {
     extras.forEach(function(d) {
       if (uniq.length >= need) return;
       var tooClose = uniq.some(function(u) {
-        return Math.abs((toUtcDate(d) - toUtcDate(u)) / 86400000) < 2;
+        return Math.abs((toUtcDate(d) - toUtcDate(u)) / 86400000) < minGap;
       });
       if (!tooClose) {
         uniq.push(d);
@@ -656,27 +787,85 @@ function placeFillDates(dates, daily, profile, rng) {
       }
     });
   }
+  if (profile.minIntervalKm) {
+    uniq = enforceMinIntervalKm(dates, daily, uniq, profile.minIntervalKm);
+  }
   return uniq;
 }
 
+function enforceMinIntervalKm(dates, daily, fillDates, minKm) {
+  var odo = 0;
+  var odoAt = {};
+  dates.forEach(function(d) {
+    odo = round1(odo + daily[d].km);
+    odoAt[d] = odo;
+  });
+  var out = [];
+  fillDates.forEach(function(d) {
+    if (!out.length) {
+      out.push(d);
+      return;
+    }
+    var km = odoAt[d] - odoAt[out[out.length - 1]];
+    if (km >= minKm) out.push(d);
+  });
+  return out;
+}
+
+function intervalWindow(dates, daily, start, end) {
+  var km = 0, idle = 0, burn = 0;
+  dates.forEach(function(day) {
+    if (day > start && day <= end) {
+      km += daily[day].km;
+      burn += daily[day].litres;
+    }
+    if (day >= start && day < end) idle += daily[day].idle;
+  });
+  return { km: km, idle: idle, burn: burn };
+}
+
+function idleKmRho(windows) {
+  var sumKmIdle = 0, sumKm = 0, sumKm2 = 0, sumIdle = 0;
+  windows.forEach(function(w) {
+    if (w.km <= 0) return;
+    sumKmIdle += w.km * w.idle;
+    sumKm += w.km;
+    sumKm2 += w.km * w.km;
+    sumIdle += w.idle;
+  });
+  if (sumKm2 <= 0 || sumIdle <= 0) return 0;
+  return (sumKmIdle * sumKm) / (sumKm2 * sumIdle);
+}
+
 function buildFills(dates, daily, profile, fillDates, price, rng) {
+  var windows = [];
+  for (var i = 1; i < fillDates.length; i++) {
+    windows.push(intervalWindow(dates, daily, fillDates[i - 1], fillDates[i]));
+  }
+  var idleCoeff = profile.idleLph;
+  if (profile.targetResidualIdleLph) {
+    var rho = idleKmRho(windows);
+    var denom = Math.max(0.28, 1 - rho);
+    idleCoeff = clamp(profile.targetResidualIdleLph / denom, profile.idleLph, 8);
+  }
+
   var fills = [];
   for (var i = 0; i < fillDates.length; i++) {
     var d = fillDates[i];
     var litres;
     if (i === 0) {
-      // Opening fill: a typical partial-to-full tank, not tied to a prior interval.
       litres = profile.tankL * lerp(rng, 0.55, 0.92);
     } else {
-      var prev = fillDates[i - 1];
-      var burn = 0;
-      dates.forEach(function(day) {
-        if (day > prev && day <= d) burn += daily[day].litres;
-      });
-      if (burn < 20) continue;
-      // Tank-timing noise so fills aren't a perfect accounting identity.
-      litres = burn * lerp(rng, 0.96, 1.05);
-      litres = clamp(litres, 20, profile.tankL * 1.05);
+      var w = windows[i - 1];
+      // Do NOT cap at tank size: a cap below actual interval burn understates
+      // litres on long-haul intervals, biases travel L/km down, and dumps the
+      // leftover into idle L/hr (Kenworth previously calibrated at ~8 L/hr).
+      if (profile.alignFillsToRegression || profile.targetResidualIdleLph) {
+        litres = (w.km * profile.travelLpk + w.idle * idleCoeff) * lerp(rng, 0.98, 1.02);
+      } else {
+        litres = w.burn * lerp(rng, 0.97, 1.03);
+      }
+      if (litres < 20) litres = Math.max(20, w.burn);
     }
     var ppl = price * lerp(rng, 0.975, 1.025);
     fills.push({
@@ -685,24 +874,129 @@ function buildFills(dates, daily, profile, fillDates, price, rng) {
       cost_nzd: round2(litres * ppl)
     });
   }
+  if (profile.targetResidualIdleLph) {
+    fills = retargetResidualIdle(dates, daily, fills, profile);
+  }
   return fills;
+}
+
+function retargetResidualIdle(dates, daily, fills, profile) {
+  if (fills.length < 3) return fills;
+  var cal = truckResidualIdle(dates, daily, fills, profile);
+  if (cal.idleLph == null || !cal.points.length) return fills;
+  var rho = idleKmRho(cal.points);
+  var alpha = (profile.targetResidualIdleLph - cal.idleLph) / Math.max(0.22, 1 - rho);
+  var byEnd = {};
+  cal.points.forEach(function(p) { byEnd[p.end] = p; });
+  return fills.map(function(f, idx) {
+    if (idx === 0) return f;
+    var p = byEnd[f.purchase_date];
+    if (!p) return f;
+    var old = f.litres;
+    var ppl = old > 0 ? f.cost_nzd / old : 1.85;
+    var nextLitres = round1(clamp(old + alpha * p.idle, old * 0.85, old * 1.45));
+    return {
+      purchase_date: f.purchase_date,
+      litres: nextLitres,
+      cost_nzd: round2(nextLitres * ppl)
+    };
+  });
+}
+
+function truckResidualIdle(dates, daily, fills, profile) {
+  var odoAt = {};
+  var odo = 0;
+  dates.forEach(function(d) {
+    odo = round1(odo + daily[d].km);
+    odoAt[d] = odo;
+  });
+  var typicalKm = (profile.weekdayKm[0] + profile.weekdayKm[1]) / 2;
+  var typicalIdle = (profile.idleHours[0] + profile.idleHours[1]) / 2;
+  var typicalIdlePer100 = typicalKm > 0 ? (typicalIdle / typicalKm) * 100 : 0;
+  // Flag only the pathological case (short distance, huge idle) that
+  // produced the 8 L/hr Kenworth rate — not a normal site-week interval.
+  var flagAt = Math.max(typicalIdlePer100 * 2.5, 4.0);
+  var points = [];
+  var flagged = [];
+  for (var i = 1; i < fills.length; i++) {
+    var start = fills[i - 1].purchase_date;
+    var end = fills[i].purchase_date;
+    var km = odoAt[end] - odoAt[start];
+    var idle = 0;
+    dates.forEach(function(d) {
+      // Match lib/fuel-regression.js evaluateInterval(): idle is summed
+      // over [startDate, endDate) via eachDateBetween().
+      if (d >= start && d < end) idle += daily[d].idle;
+    });
+    var litres = fills[i].litres;
+    if (km <= 0 || litres < 3) continue;
+    points.push({ km: km, idle: idle, litres: litres, start: start, end: end });
+    // keep points on the return value for simulate dumps
+    var idlePer100 = km > 0 ? (idle / km) * 100 : 0;
+    if (flagAt > 0 && idlePer100 > flagAt) {
+      flagged.push({
+        start: start,
+        end: end,
+        km: round1(km),
+        idle: round1(idle),
+        idlePer100km: round1(idlePer100),
+        litres: litres
+      });
+    }
+  }
+  var sxy = 0, sxx = 0, sumY = 0, sumX = 0, sumIdle = 0;
+  points.forEach(function(p) {
+    sxy += p.km * p.litres;
+    sxx += p.km * p.km;
+    sumY += p.litres;
+    sumX += p.km;
+    sumIdle += p.idle;
+  });
+  var slope = sxx > 0 ? sxy / sxx : 0;
+  var idleLitres = sumY - slope * sumX;
+  var idleLph = sumIdle > 0 ? Math.max(0, idleLitres) / sumIdle : null;
+  return {
+    intervals: points.length,
+    travelLpk: slope,
+    idleLph: idleLph,
+    flagged: flagged,
+    points: points
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
+function parseOnlyKey() {
+  var idx = process.argv.indexOf('--only');
+  if (idx === -1) return null;
+  var key = process.argv[idx + 1];
+  if (!key || key.charAt(0) === '-') {
+    throw new Error('--only requires a profile key (e.g. kenworth)');
+  }
+  var known = PROFILES.some(function(p) { return p.key === key; });
+  if (!known) {
+    throw new Error(
+      'Unknown --only key "' + key + '". Known: ' +
+      PROFILES.map(function(p) { return p.key; }).join(', ')
+    );
+  }
+  return key;
+}
+
 function simulateLocally() {
   var endDate = todayNz();
   var startDate = addDays(endDate, -(DAYS - 1));
   var dates = eachDateInclusive(startDate, endDate);
   var failed = false;
-  console.log('Local simulate ' + startDate + ' → ' + endDate + ' (' + dates.length + ' days)\n');
+  var onlyKey = parseOnlyKey();
+  console.log('Local simulate ' + startDate + ' → ' + endDate + ' (' + dates.length + ' days)' +
+    (onlyKey ? '  [--only ' + onlyKey + ']' : '') + '\n');
   PROFILES.forEach(function(profile, idx) {
+    if (onlyKey && profile.key !== onlyKey) return;
     var rng = mulberry32(hashSeed(profile.key + ':' + (100 + idx) + ':demo75'));
-    var transporterActive = profile.irregular ? buildTransporterActiveSet(dates, rng) : {};
-    var daily = {};
-    dates.forEach(function(d) { daily[d] = dailyActivity(profile, d, rng, transporterActive); });
+    var daily = generateDailyMap(profile, dates, rng);
     var telDays = 0;
     var activeDays = 0;
     dates.forEach(function(d) {
@@ -716,6 +1010,67 @@ function simulateLocally() {
     var problems = [];
     if (intervals < MIN_FUEL_INTERVALS) problems.push('intervals=' + intervals);
     if (telDays < MIN_TELEMATICS_DAYS) problems.push('telDays=' + telDays);
+    if (profile.kind === 'machinery') {
+      var litreDays = 0;
+      var totalLitres = 0, totalOp = 0, totalIdle = 0;
+      dates.forEach(function(d) {
+        if (daily[d].active && daily[d].litres > 0) litreDays += 1;
+        totalLitres += daily[d].litres;
+        totalOp += daily[d].operating;
+        totalIdle += daily[d].idle;
+      });
+      if (litreDays < 40) problems.push('litres_consumed days=' + litreDays);
+      // Fuel Analyst construction path reads these three telematics columns
+      // directly — no regression. Confirm they would populate the UI.
+      if (totalLitres < 500) problems.push('litres_consumed total=' + totalLitres.toFixed(0));
+      if (totalOp < 80) problems.push('operating_hours total=' + totalOp.toFixed(0));
+      if (totalIdle < 20) problems.push('idle_hours total=' + totalIdle.toFixed(0));
+      console.log(
+        '       Fuel Analyst (telematics): litres_consumed days=' + litreDays +
+        '  total=' + totalLitres.toFixed(0) + ' L  working=' + totalOp.toFixed(0) +
+        ' h  idle=' + totalIdle.toFixed(0) + ' h'
+      );
+    }
+    if (profile.kind === 'truck') {
+      var cal = truckResidualIdle(dates, daily, fills, profile);
+      if (profile.key === 'kenworth' && (cal.idleLph == null || cal.idleLph < 1.3 || cal.idleLph > 4.5)) {
+        problems.push('residual idle=' + (cal.idleLph != null ? cal.idleLph.toFixed(2) : 'n/a') + ' L/hr');
+      }
+      if (cal.flagged.length) {
+        cal.flagged.forEach(function(f) {
+          console.log(
+            '       idle-heavy ' + f.start + '→' + f.end +
+            '  ' + f.km + ' km / ' + f.idle + ' idle-h  (' + f.idlePer100km + ' h/100km)  ' + f.litres + ' L'
+          );
+        });
+      }
+      if (profile.key === 'kenworth') {
+        var siteDaysN = 0;
+        var yardDaysN = 0;
+        dates.forEach(function(d) {
+          if (daily[d].active && daily[d].km >= 8 && daily[d].km <= 240 && daily[d].idle >= 3.5) siteDaysN += 1;
+          if (daily[d].active && daily[d].km < 8 && daily[d].idle >= 3.0) yardDaysN += 1;
+        });
+        console.log('       site-wait days=' + siteDaysN + '  yard-idle days=' + yardDaysN);
+        console.log('       most idle-heavy fill intervals:');
+        var ranked = (cal.points || []).slice().sort(function(a, b) {
+          var aR = a.km > 0 ? a.idle / a.km : 0;
+          var bR = b.km > 0 ? b.idle / b.km : 0;
+          return bR - aR;
+        }).slice(0, 3);
+        ranked.forEach(function(p) {
+          console.log(
+            '       interval ' + p.start + '→' + p.end +
+            '  ' + round1(p.km) + ' km / ' + round1(p.idle) + ' idle-h  (' +
+            round1(p.km > 0 ? (p.idle / p.km) * 100 : 0) + ' h/100km)  ' + p.litres + ' L'
+          );
+        });
+      }
+      console.log(
+        '       travel=' + cal.travelLpk.toFixed(3) + ' L/km  residual idle=' +
+        (cal.idleLph != null ? cal.idleLph.toFixed(2) : 'n/a') + ' L/hr  (target idle ' + profile.idleLph + ')'
+      );
+    }
     if (profile.irregular) {
       var longestZero = 0, run = 0;
       dates.forEach(function(d) {
@@ -733,6 +1088,33 @@ function simulateLocally() {
       (problems.length ? '  ' + problems.join('; ') : '')
     );
   });
+  if (!onlyKey || onlyKey === 'kenworth') {
+    var kenworth = PROFILES.filter(function(p) { return p.key === 'kenworth'; })[0];
+    var sweepBad = 0;
+    var sweepMin = Infinity;
+    var sweepMax = -Infinity;
+    var sweepN = 0;
+    for (var sid = 1; sid <= 60; sid++) {
+      var sRng = mulberry32(hashSeed('kenworth:' + sid + ':demo75'));
+      var sDaily = generateDailyMap(kenworth, dates, sRng);
+      var sFills = buildFills(dates, sDaily, kenworth, placeFillDates(dates, sDaily, kenworth, sRng), 1.85, sRng);
+      var sCal = truckResidualIdle(dates, sDaily, sFills, kenworth);
+      if (sCal.idleLph == null) { sweepBad += 1; continue; }
+      sweepN += 1;
+      sweepMin = Math.min(sweepMin, sCal.idleLph);
+      sweepMax = Math.max(sweepMax, sCal.idleLph);
+      if (sCal.idleLph < 1.3 || sCal.idleLph > 4.5) sweepBad += 1;
+    }
+    console.log(
+      'Kenworth seed sweep (ids 1–60): residual idle ' +
+      (sweepN ? sweepMin.toFixed(2) + '–' + sweepMax.toFixed(2) : 'n/a') +
+      ' L/hr  outside 1.3–4.5: ' + sweepBad + '/60'
+    );
+    if (sweepBad > 6) {
+      console.error('Kenworth residual idle is seed-fragile — ' + sweepBad + ' of 60 ids outside 1.3–4.5 L/hr');
+      failed = true;
+    }
+  }
   if (failed) {
     console.error('\nSimulate failed');
     process.exit(1);
@@ -747,6 +1129,7 @@ async function main() {
   }
 
   var dryRun = process.argv.indexOf('--dry-run') !== -1;
+  var onlyKey = parseOnlyKey();
   var supabaseUrl = process.env.SUPABASE_URL || 'https://pddsgvuzvuwueuvpoytw.supabase.co';
   var serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -767,6 +1150,7 @@ async function main() {
   console.log('  user_id:   ' + DEMO_USER_ID);
   console.log('  window:    ' + startDate + ' → ' + endDate + ' (' + dates.length + ' days)');
   console.log('  mode:      ' + (dryRun ? 'DRY RUN (no writes)' : 'LIVE WRITE'));
+  if (onlyKey) console.log('  --only:    ' + onlyKey + ' (jobs and user_settings left untouched)');
   console.log('');
 
   console.log('Probing live schemas…');
@@ -847,7 +1231,15 @@ async function main() {
   });
 
   var missingProfiles = PROFILES.filter(function(p) { return !byKey[p.key]; });
-  if (missingProfiles.length) {
+  if (onlyKey) {
+    if (!byKey[onlyKey]) {
+      throw new Error('--only ' + onlyKey + ' did not match a demo asset. Matched keys: ' + Object.keys(byKey).join(', '));
+    }
+    var kept = byKey[onlyKey];
+    byKey = {};
+    byKey[onlyKey] = kept;
+    console.log('  --only ' + onlyKey + ': regenerating this asset only');
+  } else if (missingProfiles.length) {
     throw new Error(
       'Could not match all 10 demo assets. Missing: ' +
       missingProfiles.map(function(p) { return p.key; }).join(', ') +
@@ -881,13 +1273,29 @@ async function main() {
     var entry = byKey[key];
     var asset = entry.asset;
     var profile = entry.profile;
-    var rng = mulberry32(hashSeed(profile.key + ':' + asset.id + ':demo75'));
-    var transporterActive = profile.irregular ? buildTransporterActiveSet(dates, rng) : {};
-
-    var daily = {};
-    dates.forEach(function(d) {
-      daily[d] = dailyActivity(profile, d, rng, transporterActive);
-    });
+    var salt = 'demo75';
+    if (profile.key === 'kenworth') {
+      var kenworthSalts = ['demo75', 'demo75b', 'demo75c', 'demo75d', 'demo75e', 'demo75f'];
+      var trialPpl = pricing.fleetPrice;
+      for (var si = 0; si < kenworthSalts.length; si++) {
+        var trialRng = mulberry32(hashSeed(profile.key + ':' + asset.id + ':' + kenworthSalts[si]));
+        var trialDaily = generateDailyMap(profile, dates, trialRng);
+        var trialFillDates = placeFillDates(dates, trialDaily, profile, trialRng);
+        var trialFills = buildFills(dates, trialDaily, profile, trialFillDates, trialPpl, trialRng);
+        var trialCal = truckResidualIdle(dates, trialDaily, trialFills, profile);
+        if (trialCal.idleLph != null && trialCal.idleLph >= 1.8 && trialCal.idleLph <= 4.2) {
+          salt = kenworthSalts[si];
+          if (si > 0) console.log('  Kenworth seed salt=' + salt + ' (residual idle ' + trialCal.idleLph.toFixed(2) + ' L/hr)');
+          break;
+        }
+        if (si === kenworthSalts.length - 1) {
+          salt = kenworthSalts[0];
+          console.log('  WARN: Kenworth residual idle stayed outside 1.8–4.2 L/hr across salts; using demo75');
+        }
+      }
+    }
+    var rng = mulberry32(hashSeed(profile.key + ':' + asset.id + ':' + salt));
+    var daily = generateDailyMap(profile, dates, rng);
 
     var cumHours = profile.startHours || 0;
     var cumOdo = profile.startOdo || 0;
@@ -1013,7 +1421,8 @@ async function main() {
       firstFill: fills[0] && fills[0].purchase_date,
       lastFill: fills[fills.length - 1] && fills[fills.length - 1].purchase_date,
       daily: daily,
-      fillDates: fillDates
+      fillDates: fillDates,
+      residual: profile.kind === 'truck' ? truckResidualIdle(dates, daily, fills, profile) : null
     });
   });
 
@@ -1055,6 +1464,10 @@ async function main() {
     if (s.kind === 'truck' && Math.abs(s.finalOdo - (s.startOdo + s.totalKm)) > 0.2) {
       problems.push('odometer mismatch');
     }
+    if (s.key === 'kenworth' && s.residual &&
+        (s.residual.idleLph == null || s.residual.idleLph < 1.3 || s.residual.idleLph > 4.5)) {
+      problems.push('residual idle=' + (s.residual.idleLph != null ? s.residual.idleLph.toFixed(2) : 'n/a') + ' L/hr');
+    }
     if (problems.length) {
       sanityFailed = true;
       console.log('  FAIL ' + s.name + ': ' + problems.join('; '));
@@ -1065,7 +1478,7 @@ async function main() {
   if (sanityFailed) throw new Error('Pre-write sanity checks failed — nothing written');
 
   if (dryRun) {
-    printSummary(summaries, jobPayloads, startDate, endDate, pricing);
+    printSummary(summaries, onlyKey ? [] : jobPayloads, startDate, endDate, pricing);
     console.log('\nDRY RUN complete — no database writes.');
     return;
   }
@@ -1100,15 +1513,6 @@ async function main() {
     });
   }
 
-  // Remove existing demo jobs (this account is dedicated demo).
-  var existingJobs = await supabase.from('jobs').select('id').eq('user_id', DEMO_USER_ID);
-  if (existingJobs.error) throw new Error('jobs list failed: ' + existingJobs.error.message);
-  var existingJobIds = (existingJobs.data || []).map(function(j) { return j.id; });
-  if (existingJobIds.length) {
-    await deleteScoped(supabase, 'job_assets', { user_id: DEMO_USER_ID, job_id: { in: existingJobIds } });
-    await deleteScoped(supabase, 'jobs', { user_id: DEMO_USER_ID, id: { in: existingJobIds } });
-  }
-
   console.log('Inserting ' + telRows.length + ' telematics_records…');
   await batchedInsert(supabase, 'telematics_records', telRows);
 
@@ -1129,57 +1533,71 @@ async function main() {
     if (upd.error) throw new Error('asset update id=' + id + ' failed: ' + upd.error.message);
   }
 
-  if (settingsExist && jobCols.existing) {
-    var existingSettings = await supabase
-      .from('user_settings')
-      .select('user_id, machinery_fuel_cost_per_litre')
-      .eq('user_id', DEMO_USER_ID)
-      .maybeSingle();
-    if (!existingSettings.error) {
-      if (existingSettings.data) {
-        if (existingSettings.data.machinery_fuel_cost_per_litre == null) {
-          var setUpd = await supabase
-            .from('user_settings')
-            .update({ machinery_fuel_cost_per_litre: pricing.bulkPrice })
-            .eq('user_id', DEMO_USER_ID);
-          if (setUpd.error) console.log('  WARN user_settings update: ' + setUpd.error.message);
-          else console.log('  set user_settings.machinery_fuel_cost_per_litre = ' + pricing.bulkPrice);
+  var insertedJobs = [];
+  if (onlyKey) {
+    console.log('  --only: leaving jobs and user_settings untouched');
+  } else {
+    if (settingsExist && jobCols.existing) {
+      var existingSettings = await supabase
+        .from('user_settings')
+        .select('user_id, machinery_fuel_cost_per_litre')
+        .eq('user_id', DEMO_USER_ID)
+        .maybeSingle();
+      if (!existingSettings.error) {
+        if (existingSettings.data) {
+          if (existingSettings.data.machinery_fuel_cost_per_litre == null) {
+            var setUpd = await supabase
+              .from('user_settings')
+              .update({ machinery_fuel_cost_per_litre: pricing.bulkPrice })
+              .eq('user_id', DEMO_USER_ID);
+            if (setUpd.error) console.log('  WARN user_settings update: ' + setUpd.error.message);
+            else console.log('  set user_settings.machinery_fuel_cost_per_litre = ' + pricing.bulkPrice);
+          } else {
+            console.log('  leaving existing machinery_fuel_cost_per_litre = ' + existingSettings.data.machinery_fuel_cost_per_litre);
+          }
         } else {
-          console.log('  leaving existing machinery_fuel_cost_per_litre = ' + existingSettings.data.machinery_fuel_cost_per_litre);
+          var setIns = await supabase.from('user_settings').insert({
+            user_id: DEMO_USER_ID,
+            machinery_fuel_cost_per_litre: pricing.bulkPrice
+          });
+          if (setIns.error) console.log('  WARN user_settings insert: ' + setIns.error.message);
+          else console.log('  inserted user_settings.machinery_fuel_cost_per_litre = ' + pricing.bulkPrice);
         }
-      } else {
-        var setIns = await supabase.from('user_settings').insert({
-          user_id: DEMO_USER_ID,
-          machinery_fuel_cost_per_litre: pricing.bulkPrice
-        });
-        if (setIns.error) console.log('  WARN user_settings insert: ' + setIns.error.message);
-        else console.log('  inserted user_settings.machinery_fuel_cost_per_litre = ' + pricing.bulkPrice);
       }
     }
-  }
 
-  console.log('Inserting jobs…');
-  var jobInsert = await supabase.from('jobs').insert(jobPayloads).select('id, job_name, start_date, end_date');
-  if (jobInsert.error) throw new Error('jobs insert failed: ' + jobInsert.error.message);
-  var insertedJobs = jobInsert.data || [];
+    // Remove existing demo jobs (this account is dedicated demo).
+    var existingJobs = await supabase.from('jobs').select('id').eq('user_id', DEMO_USER_ID);
+    if (existingJobs.error) throw new Error('jobs list failed: ' + existingJobs.error.message);
+    var existingJobIds = (existingJobs.data || []).map(function(j) { return j.id; });
+    if (existingJobIds.length) {
+      await deleteScoped(supabase, 'job_assets', { user_id: DEMO_USER_ID, job_id: { in: existingJobIds } });
+      await deleteScoped(supabase, 'jobs', { user_id: DEMO_USER_ID, id: { in: existingJobIds } });
+    }
 
-  var jobAssetRows = [];
-  insertedJobs.forEach(function(job) {
-    var spec = JOB_SPECS.filter(function(s) { return s.job_name === job.job_name; })[0];
-    spec.assetKeys.forEach(function(assetKey) {
-      var assetId = Number(byKey[assetKey].asset.id);
-      workDatesFor(spec, assetKey).forEach(function(d) {
-        jobAssetRows.push(pickColumns({
-          user_id: DEMO_USER_ID,
-          job_id: job.id,
-          asset_id: assetId,
-          work_date: d
-        }, jobAssetCols.existing));
+    console.log('Inserting jobs…');
+    var jobInsert = await supabase.from('jobs').insert(jobPayloads).select('id, job_name, start_date, end_date');
+    if (jobInsert.error) throw new Error('jobs insert failed: ' + jobInsert.error.message);
+    insertedJobs = jobInsert.data || [];
+
+    var jobAssetRows = [];
+    insertedJobs.forEach(function(job) {
+      var spec = JOB_SPECS.filter(function(s) { return s.job_name === job.job_name; })[0];
+      spec.assetKeys.forEach(function(assetKey) {
+        var assetId = Number(byKey[assetKey].asset.id);
+        workDatesFor(spec, assetKey).forEach(function(d) {
+          jobAssetRows.push(pickColumns({
+            user_id: DEMO_USER_ID,
+            job_id: job.id,
+            asset_id: assetId,
+            work_date: d
+          }, jobAssetCols.existing));
+        });
       });
     });
-  });
-  console.log('Inserting ' + jobAssetRows.length + ' job_assets…');
-  await batchedInsert(supabase, 'job_assets', jobAssetRows);
+    console.log('Inserting ' + jobAssetRows.length + ' job_assets…');
+    await batchedInsert(supabase, 'job_assets', jobAssetRows);
+  }
 
   // -------------------------------------------------------------------------
   // Post-write sanity
@@ -1279,16 +1697,23 @@ function printSummary(summaries, jobs, startDate, endDate, pricing) {
       console.log('  odometer:        ' + s.startOdo.toFixed(1) + ' → ' + s.finalOdo.toFixed(1) +
         ' km  (distance ' + s.totalKm.toFixed(1) + ' km, idle ' + s.totalIdle.toFixed(1) + 'h)');
       console.log('  litres (fills):  modelled from ' + s.totalLitres.toFixed(1) + ' L burned');
+      if (s.residual) {
+        console.log('  regression (predicted): travel ' + s.residual.travelLpk.toFixed(3) +
+          ' L/km  residual idle ' +
+          (s.residual.idleLph != null ? s.residual.idleLph.toFixed(2) : 'n/a') + ' L/hr');
+      }
     }
   });
   console.log('');
-  console.log('Jobs:');
-  jobs.forEach(function(j) {
-    var spec = JOB_SPECS.filter(function(s) { return s.job_name === j.job_name; })[0];
-    console.log('  ' + j.job_name + '  ' + (j.start_date || spec && addDays(endDate, -spec.startOffset)) +
-      ' → ' + (j.end_date || '') + '  [' + (j.status || (spec && spec.status)) + ']  assets=' +
-      (spec ? spec.assetKeys.join(', ') : ''));
-  });
+  if (jobs && jobs.length) {
+    console.log('Jobs:');
+    jobs.forEach(function(j) {
+      var spec = JOB_SPECS.filter(function(s) { return s.job_name === j.job_name; })[0];
+      console.log('  ' + j.job_name + '  ' + (j.start_date || spec && addDays(endDate, -spec.startOffset)) +
+        ' → ' + (j.end_date || '') + '  [' + (j.status || (spec && spec.status)) + ']  assets=' +
+        (spec ? spec.assetKeys.join(', ') : ''));
+    });
+  }
   console.log('==========================================');
 }
 
