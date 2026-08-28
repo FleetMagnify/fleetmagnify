@@ -2288,14 +2288,28 @@
     appendTelematicsToPayload(payload);
     var usageEl = document.getElementById('asset-usage-profile');
     if (usageEl) payload.usage_profile = usageEl.value || 'regular';
+    var idleRate = payload.idle_burn_rate_lph;
+    var prevIdle = null;
+    if (editingAssetId != null) {
+      var existing = (allAssets || []).filter(function(a) {
+        return Number(a.id) === Number(editingAssetId);
+      })[0];
+      prevIdle = existing ? parseOptionalFloat(existing.idle_burn_rate_lph) : null;
+    }
+    var idleUnchanged = (idleRate == null && prevIdle == null) ||
+      (idleRate != null && prevIdle != null && Math.abs(idleRate - prevIdle) < 1e-6);
+    if (editingAssetId == null || !idleUnchanged) {
+      payload.idle_rate_source = idleRate != null ? 'set' : null;
+    }
     return payload;
   }
 
   async function persistAsset(assetId, payload) {
     var result = await persistAssetOnce(assetId, payload);
-    if (result.error && /column|schema cache|usage_profile|ruc_rate_per_km/i.test(result.error.message || '')) {
+    if (result.error && /column|schema cache|usage_profile|ruc_rate_per_km|idle_rate_source/i.test(result.error.message || '')) {
       delete payload.usage_profile;
       delete payload.ruc_rate_per_km;
+      delete payload.idle_rate_source;
       result = await persistAssetOnce(assetId, payload);
     }
     return result;
@@ -2761,6 +2775,9 @@
     if (supportsIsOnRoad && assetType) {
       rec.is_on_road = onRoad;
     }
+    if (Object.prototype.hasOwnProperty.call(row, 'idle_burn_rate_lph') && hasCellValue(row, 'idle_burn_rate_lph')) {
+      rec.idle_rate_source = rec.idle_burn_rate_lph != null ? 'set' : null;
+    }
     return rec;
   }
 
@@ -2780,6 +2797,9 @@
     });
     if (hasCellValue(row, 'asset_type') && supportsIsOnRoad) {
       patch.is_on_road = isOnRoadType(row.asset_type);
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'idle_burn_rate_lph')) {
+      patch.idle_rate_source = patch.idle_burn_rate_lph != null ? 'set' : null;
     }
     return patch;
   }

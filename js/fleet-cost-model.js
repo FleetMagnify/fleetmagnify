@@ -354,21 +354,29 @@
     return isOnRoad(asset) ? 3.0 : 3.0;
   }
 
+  function idleRateSourceOf(asset) {
+    return String((asset && asset.idle_rate_source) || '').toLowerCase().trim();
+  }
+
+  // last_calibrated_at is a *travel* timestamp. The idle residual is only
+  // Calibrated when the regression actually accepted and stored it
+  // (idle_rate_source = 'calibrated'). A leftover class-default such as
+  // Semi Trailer 3.00 L/hr plus a travel timestamp must not be labelled
+  // Calibrated — that is the Argosy false-positive.
   function resolvedIdleRate(asset) {
     var stored = asset ? num(asset.idle_burn_rate_lph) : null;
-    if (isPlausibleIdleRate(asset, stored)) {
-      var calibrated = !!(asset.last_calibrated_at) && isOnRoad(asset);
+    if (!isPlausibleIdleRate(asset, stored)) {
       return {
-        rate: stored,
-        source: calibrated ? 'calibrated' : 'set',
-        label: calibrated ? 'Calibrated' : 'Set on asset'
+        rate: defaultIdleRateForAsset(asset),
+        source: 'default',
+        label: 'Default estimate'
       };
     }
-    return {
-      rate: defaultIdleRateForAsset(asset),
-      source: 'default',
-      label: 'Default estimate'
-    };
+    var src = idleRateSourceOf(asset);
+    if (src === 'calibrated') {
+      return { rate: stored, source: 'calibrated', label: 'Calibrated' };
+    }
+    return { rate: stored, source: 'set', label: 'Set on asset' };
   }
 
   function formatIdleRate(rate) {
@@ -529,4 +537,8 @@
     addDaysISO: addDaysISO,
     formatDateNZ: formatDateNZ
   };
-})(window);
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = global.FleetCostModel;
+  }
+})(typeof window !== 'undefined' ? window : globalThis);

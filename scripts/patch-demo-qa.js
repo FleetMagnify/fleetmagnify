@@ -11,16 +11,16 @@ var { createClient } = require('@supabase/supabase-js');
 var DEMO_USER_ID = '023182a8-1563-46dd-a7c3-1430fbfad5df';
 
 var PATCHES = [
-  { match: /hitachi.*zx350|zx350.*excavator/i, idle_burn_rate_lph: 6.4, telematics_provider: 'VisionLink' },
-  { match: /komatsu.*gd655|gd655.*grader/i, idle_burn_rate_lph: 5.2, telematics_provider: 'VisionLink', current_value: 215000 },
-  { match: /caterpillar.*d8|d8.*bulldozer|d8t/i, idle_burn_rate_lph: 8.2, telematics_provider: 'VisionLink' },
-  { match: /volvo.*a30g|a30g.*articulated|articulated dump/i, idle_burn_rate_lph: 6.0, telematics_provider: 'VisionLink' },
-  { match: /caterpillar.*cs56|cs56.*compactor/i, idle_burn_rate_lph: 3.4, telematics_provider: 'VisionLink' },
-  { match: /isuzu.*frr|frr.*tipper/i, idle_burn_rate_lph: null, telematics_provider: 'eRoad' },
-  { match: /hino.*500|500.*tipper/i, idle_burn_rate_lph: null, telematics_provider: 'eRoad' },
-  { match: /volvo.*fh|fh.*volvo/i, idle_burn_rate_lph: null, telematics_provider: 'eRoad' },
-  { match: /kenworth/i, idle_burn_rate_lph: 3.0, telematics_provider: 'eRoad' },
-  { match: /freightliner.*argosy|argosy.*low-?loader|transporter/i, idle_burn_rate_lph: 3.0, telematics_provider: 'eRoad', usage_profile: 'intermittent' }
+  { match: /hitachi.*zx350|zx350.*excavator/i, idle_burn_rate_lph: 6.4, idle_rate_source: 'set', telematics_provider: 'VisionLink' },
+  { match: /komatsu.*gd655|gd655.*grader/i, idle_burn_rate_lph: 5.2, idle_rate_source: 'set', telematics_provider: 'VisionLink', current_value: 215000 },
+  { match: /caterpillar.*d8|d8.*bulldozer|d8t/i, idle_burn_rate_lph: 8.2, idle_rate_source: 'set', telematics_provider: 'VisionLink' },
+  { match: /volvo.*a30g|a30g.*articulated|articulated dump/i, idle_burn_rate_lph: 6.0, idle_rate_source: 'set', telematics_provider: 'VisionLink' },
+  { match: /caterpillar.*cs56|cs56.*compactor/i, idle_burn_rate_lph: 3.4, idle_rate_source: 'set', telematics_provider: 'VisionLink' },
+  { match: /isuzu.*frr|frr.*tipper/i, idle_burn_rate_lph: null, idle_rate_source: null, telematics_provider: 'eRoad' },
+  { match: /hino.*500|500.*tipper/i, idle_burn_rate_lph: null, idle_rate_source: null, telematics_provider: 'eRoad' },
+  { match: /volvo.*fh|fh.*volvo/i, idle_burn_rate_lph: null, idle_rate_source: null, telematics_provider: 'eRoad' },
+  { match: /kenworth/i, idle_burn_rate_lph: 3.0, idle_rate_source: 'calibrated', telematics_provider: 'eRoad' },
+  { match: /freightliner.*argosy|argosy.*low-?loader|transporter/i, idle_burn_rate_lph: null, idle_rate_source: null, telematics_provider: 'eRoad', usage_profile: 'intermittent' }
 ];
 
 async function probeColumn(supabase, table, col) {
@@ -46,8 +46,10 @@ async function main() {
 
   var hasUsage = await probeColumn(supabase, 'assets', 'usage_profile');
   var hasRuc = await probeColumn(supabase, 'assets', 'ruc_rate_per_km');
+  var hasIdleSource = await probeColumn(supabase, 'assets', 'idle_rate_source');
   console.log('usage_profile column:', hasUsage ? 'yes' : 'no');
   console.log('ruc_rate_per_km column:', hasRuc ? 'yes' : 'no');
+  console.log('idle_rate_source column:', hasIdleSource ? 'yes' : 'no');
 
   var rows = assets.data || [];
   for (var i = 0; i < rows.length; i++) {
@@ -64,6 +66,7 @@ async function main() {
     if (spec.current_value != null) patch.current_value = spec.current_value;
     if (spec.usage_profile && hasUsage) patch.usage_profile = spec.usage_profile;
     if (spec.ruc_rate_per_km != null && hasRuc) patch.ruc_rate_per_km = spec.ruc_rate_per_km;
+    if (hasIdleSource && spec.idle_rate_source !== undefined) patch.idle_rate_source = spec.idle_rate_source;
     console.log('  ' + (dryRun ? 'would patch' : 'patch') + ' ' + asset.asset_name, patch);
     if (!dryRun) {
       var upd = await supabase.from('assets').update(patch).eq('id', asset.id).eq('user_id', DEMO_USER_ID);
