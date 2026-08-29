@@ -74,7 +74,7 @@
   .tonnekm-save-status { font-size: 11px; color: #0EA57A; opacity: 0; transition: opacity 0.3s; }
   .tonnekm-save-status.visible { opacity: 1; }
 
-  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 28px; }
+  .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 28px; }
   .kpi-card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 20px 22px; }
   .kpi-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3A4A5C; margin-bottom: 10px; }
   .kpi-value { font-size: 28px; font-weight: 800; letter-spacing: -1px; line-height: 1.2; margin-bottom: 4px; }
@@ -150,7 +150,8 @@
   .modal-error { display: none; font-size: 12px; color: #F0A8A7; margin-bottom: 12px; padding: 10px 12px; background: rgba(226,75,74,0.10); border-radius: 8px; }
   .modal-error.visible { display: block; }
 
-  @media (max-width: 1100px) { .kpi-row { grid-template-columns: 1fr; } }
+  @media (max-width: 1200px) { .kpi-row { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 768px) { .kpi-row { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -251,6 +252,11 @@
           <div class="kpi-label">Servicing Per KM</div>
           <div class="kpi-value teal" id="kpi-serv">—</div>
           <div class="kpi-sub">annualised from asset profile</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">RUC Per KM</div>
+          <div class="kpi-value teal" id="kpi-ruc">—</div>
+          <div class="kpi-sub">from truck profile (or GVM-class default)</div>
         </div>
       </div>
 
@@ -1148,6 +1154,7 @@
     setKpiEl('kpi-depr', latest.deprPerKm, latest.deprOverride, latest.deprMissing, latest.deprLifeExceeded, latest.deprLifeNearLimit);
     setKpiEl('kpi-maint', latest.maintPerKm, latest.maintOverride, latest.maintMissing, false);
     setKpiEl('kpi-serv', latest.servPerKm, latest.servOverride, latest.servMissing, false);
+    setKpiEl('kpi-ruc', latest.rucPerKm, latest.rucOverride, null, false);
 
     renderStackChart(periods);
     renderTable(periods);

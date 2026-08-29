@@ -328,6 +328,35 @@
     return String(asset.asset_name || '').trim() || 'Unnamed asset';
   }
 
+  // Compact x/y-axis tick: fleet code in the name (EX01, T03, ADT01) or a
+  // short registration. Full name stays on the bar tooltip.
+  function extractAssetCode(asset) {
+    var name = String(asset.asset_name || '').trim();
+    var leading = name.match(/^([A-Za-z]{1,4}\d{1,3})\b/);
+    if (leading) return leading[1].toUpperCase();
+    var parens = name.match(/\(([A-Za-z]{1,4}\d{1,3})\)/);
+    if (parens) return parens[1].toUpperCase();
+    var rego = String(asset.registration || '').trim();
+    if (/^[A-Za-z]{1,4}\d{1,3}$/.test(rego)) return rego.toUpperCase();
+    return '';
+  }
+
+  function chartAxisLabels(rows) {
+    return rows.map(function(a, i) { return a.code || String(i + 1); });
+  }
+
+  function chartTooltipFor(rows) {
+    return {
+      callbacks: {
+        title: function(items) {
+          if (!items.length) return '';
+          var row = rows[items[0].dataIndex];
+          return row ? row.name : '';
+        }
+      }
+    };
+  }
+
   function monthName(offset) {
     var d = new Date();
     d.setDate(1);
@@ -443,6 +472,7 @@
       return {
         id: asset.id,
         name: chartLabel(asset),
+        code: extractAssetCode(asset),
         fuelCost: fuelCost,
         idleFuelCost: idleCosts.fuel,
         deprCost: idleCosts.depreciation,
@@ -571,20 +601,13 @@
     Object.keys(charts).forEach(function(k) { if (charts[k]) { charts[k].destroy(); charts[k] = null; } });
   }
 
-  function chartTickOptions(labelCount, horizontal) {
+  function chartTickOptions() {
     return {
       color: '#CBD5E1',
       font: { size: 11 },
       maxRotation: 0,
       minRotation: 0,
-      autoSkip: true,
-      maxTicksLimit: horizontal ? 12 : 8,
-      callback: function(value) {
-        var label = this.getLabelForValue(value);
-        if (typeof label !== 'string') return label;
-        if (label.length <= 24) return label;
-        return label.slice(0, 22) + '…';
-      }
+      autoSkip: false
     };
   }
 
@@ -661,14 +684,14 @@
     charts.fuel = new Chart(document.getElementById('chart-fuel'), {
       type: 'bar',
       data: {
-        labels: fuelChart.rows.map(function(a) { return a.name; }),
+        labels: chartAxisLabels(fuelChart.rows),
         datasets: [{ data: fuelChart.rows.map(function(a) { return Math.round(a.fuelCost); }), backgroundColor: '#0EA57A', borderRadius: 4 }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
+        plugins: { legend: { display: false }, tooltip: chartTooltipFor(fuelChart.rows) },
         scales: {
-          x: { grid: { display: false }, ticks: chartTickOptions(fuelChart.rows.length) },
+          x: { grid: { display: false }, ticks: chartTickOptions() },
           y: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 12 }, callback: function(v) { return '$' + v; } } }
         }
       }
@@ -677,7 +700,7 @@
     charts.idle = new Chart(document.getElementById('chart-idle'), {
       type: 'bar',
       data: {
-        labels: idleChart.rows.map(function(a) { return a.name; }),
+        labels: chartAxisLabels(idleChart.rows),
         datasets: [
           { label: 'Idle Fuel', data: idleChart.rows.map(function(a) { return Math.round(a.idleFuelCost); }), backgroundColor: '#0EA57A' },
           { label: 'Depreciation', data: idleChart.rows.map(function(a) { return Math.round(a.deprCost); }), backgroundColor: '#EF9F27' },
@@ -687,9 +710,9 @@
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { labels: { color: '#5A6474', font: { size: 10 } } } },
+        plugins: { legend: { labels: { color: '#5A6474', font: { size: 10 } } }, tooltip: chartTooltipFor(idleChart.rows) },
         scales: {
-          x: { stacked: true, grid: { display: false }, ticks: chartTickOptions(idleChart.rows.length) },
+          x: { stacked: true, grid: { display: false }, ticks: chartTickOptions() },
           y: { stacked: true, grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 12 }, callback: function(v) { return '$' + v; } } }
         }
       }
@@ -698,15 +721,15 @@
     charts.emissions = new Chart(document.getElementById('chart-emissions'), {
       type: 'bar',
       data: {
-        labels: emissionsChart.rows.map(function(a) { return a.name; }),
+        labels: chartAxisLabels(emissionsChart.rows),
         datasets: [{ data: emissionsChart.rows.map(function(a) { return Math.round(a.emissionsKg); }), backgroundColor: '#0EA57A', borderRadius: 4 }]
       },
       options: {
         indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
+        plugins: { legend: { display: false }, tooltip: chartTooltipFor(emissionsChart.rows) },
         scales: {
           x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 12 }, callback: function(v) { return v + ' kg'; } } },
-          y: { grid: { display: false }, ticks: chartTickOptions(emissionsChart.rows.length, true) }
+          y: { grid: { display: false }, ticks: chartTickOptions() }
         }
       }
     });
@@ -714,7 +737,7 @@
     charts.util = new Chart(document.getElementById('chart-util'), {
       type: 'bar',
       data: {
-        labels: utilChart.rows.map(function(a) { return a.name; }),
+        labels: chartAxisLabels(utilChart.rows),
         datasets: [{
           data: utilChart.rows.map(function(a) { return Math.round(a.utilRate * 10) / 10; }),
           backgroundColor: utilChart.rows.map(function(a) {
@@ -727,10 +750,10 @@
       },
       options: {
         indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
+        plugins: { legend: { display: false }, tooltip: chartTooltipFor(utilChart.rows) },
         scales: {
           x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 12 }, callback: function(v) { return v + '%'; } } },
-          y: { grid: { display: false }, ticks: chartTickOptions(utilChart.rows.length, true) }
+          y: { grid: { display: false }, ticks: chartTickOptions() }
         }
       }
     });
