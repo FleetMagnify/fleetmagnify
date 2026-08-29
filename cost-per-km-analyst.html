@@ -176,7 +176,7 @@
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this is calculated:</strong> The headline fuel rate is the <strong>calibrated fill-to-fill regression</strong> (travel L/km × trailing average BP $/L) — labelled separately from each period’s own fill-to-fill $/km in the table. Depreciation per km is <strong>(current value − end of life value) ÷ remaining km</strong>. Servicing is the profile’s service cost per km. Maintenance is <strong>annual repair cost ÷ estimated annual km</strong>. RUC is the editable rate on the truck profile (or a GVM-class default). Depreciation, servicing, maintenance, and RUC are annualised constants from the asset profile — they do not change period-to-period unless you override them. Use overrides when a calculated figure doesn’t reflect reality for a specific period.</p>
+      <p><strong>How this is calculated:</strong> The headline fuel rate is the <strong>calibrated fill-to-fill regression</strong> (travel L/km × trailing average BP $/L) — labelled separately from each period’s own fill-to-fill $/km in the table. Depreciation per km is <strong>(current value − end of life value) ÷ expected total life km</strong>. Servicing is the profile’s service cost per km. Maintenance is <strong>annual repair cost ÷ estimated annual km</strong>. RUC is the editable rate on the truck profile (or a GVM-class default). Depreciation, servicing, maintenance, and RUC are annualised constants from the asset profile — they do not change period-to-period unless you override them. Use overrides when a calculated figure doesn’t reflect reality for a specific period.</p>
     </div>
 
     <div class="filter-bar">
@@ -645,7 +645,6 @@
     if (FCM.num(asset.current_value) === null) gaps.push('Current Value');
     if (FCM.num(asset.estimated_end_of_life_value) === null) gaps.push('Estimated End of Life Value');
     if (FCM.num(asset.expected_life_km) === null) gaps.push('Expected Total Life (km)');
-    if (FCM.num(asset.current_odometer) === null) gaps.push('Current Odometer (km)');
     if (FCM.num(asset.estimated_annual_repair_cost) === null) gaps.push('Estimated Annual Repair Cost');
     if (FCM.num(asset.estimated_annual_km) === null) gaps.push('Estimated Annual KM');
     if (FCM.num(asset.service_cost_per_km) === null) gaps.push('Service Cost Per KM');

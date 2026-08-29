@@ -155,8 +155,17 @@
       </div>
     </div>
 
+    <!--
+      Account-Level Connections UI intentionally hidden 29 Aug 2026 (not deleted).
+      The API integration path (Fuel/Telematics provider dropdowns, eROAD/BP keys
+      stored on company_integrations) is not currently supported. Live ingestion
+      uses the email/parser pipeline. Restore this section (remove `hidden`) when
+      account-level API integrations are built out. Underlying form, JS, and
+      company_integrations read/write are kept so reversal is a one-line unhide
+      and so the per-asset modal can still read a previously saved telematics provider.
+    -->
     <!-- SECTION 1: Account-Level Connections -->
-    <div class="section-card">
+    <div class="section-card" hidden>
       <div class="section-header">
         <div>
           <div class="section-tag">🏢 Account Level</div>
@@ -441,6 +450,10 @@
     });
   }
 
+  // Account-Level Connections UI hidden 29 Aug 2026 (not deleted) — this loader
+  // still runs so a saved company_integrations.telematics_provider can drive the
+  // per-asset "Manage Connection" modal (eROAD Machine ID field). Re-enable the
+  // Account Level section in the HTML to restore the Fuel/Telematics form.
   async function loadCompanyIntegration() {
     var result = await supabase
       .from('company_integrations')

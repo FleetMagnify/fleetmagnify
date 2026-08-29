@@ -735,7 +735,7 @@
     <div class="form-group field-on-road field-hidden" id="field-current-odometer">
       <label for="asset-current-odometer">Current Odometer (km)</label>
       <input type="number" id="asset-current-odometer" placeholder="e.g. 185000" step="1" min="0">
-      <div class="form-hint" id="hint-current-odometer">Current odometer reading — used with expected life (km) to calculate remaining depreciation life.</div>
+      <div class="form-hint" id="hint-current-odometer">Current odometer reading — used to track remaining expected life and match telematics distance data.</div>
     </div>
     <div class="form-group field-on-road field-hidden" id="field-estimated-annual-km">
       <label for="asset-estimated-annual-km">Estimated Annual KM</label>
@@ -2227,7 +2227,7 @@
       regoInput.placeholder = 'e.g. ABC123 — matches eRoad / telematics';
       document.getElementById('hint-rego').innerHTML = '<span class="emphasis">Important for on-road assets.</span> Used to match fuel invoices and telematics odometer data. Keep this aligned with your eRoad integration plate number.';
       document.getElementById('hint-idle-rate').textContent = 'Used to calculate idle fuel waste while stationary (e.g. traffic, loading). On-road fuel efficiency is calculated per KM from odometer data.';
-      document.getElementById('hint-life-km').textContent = 'Total kilometres expected over the vehicle\'s useful life — used with current odometer to calculate remaining depreciation life.';
+      document.getElementById('hint-life-km').innerHTML = '<span class="emphasis">Key for depreciation.</span> Total kilometres over the vehicle\'s useful life — depreciation per km is (current value − end of life value) ÷ this figure.';
       document.getElementById('hint-service-km').textContent = 'Scheduled servicing cost per kilometre (oil changes, routine intervals) — separate from annual repair cost above.';
     } else {
       contextText.innerHTML = '<strong>Hours-based asset.</strong> Fuel Analyst splits invoiced fuel into <strong>operating vs idle</strong> using telematics hours and idle burn rate. Accurate idle burn rate and cost-per-operating-hour settings drive the most reliable results.';

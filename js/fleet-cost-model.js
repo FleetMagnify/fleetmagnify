@@ -36,19 +36,8 @@
   var LIFE_NEAR_LIMIT_MESSAGE =
     'Cannot calculate — asset is within 2% of its expected life limit and the depreciation rate is no longer meaningful. Update Expected Life Hours (or Expected Life KM) on the Assets page to continue tracking depreciation.';
 
-  var MIN_REMAINING_LIFE_KM = 100;
-  var REMAINING_LIFE_PCT = 0.02;
-
   function formatLifeExceededMessage(nearLimit) {
     return nearLimit ? LIFE_NEAR_LIMIT_MESSAGE : LIFE_EXCEEDED_MESSAGE;
-  }
-
-  function minRemainingLife(expectedLife, floor) {
-    return Math.max(expectedLife * REMAINING_LIFE_PCT, floor);
-  }
-
-  function lifeExceededResult(nearLimit) {
-    return { ok: false, lifeExceeded: true, lifeNearLimit: !!nearLimit };
   }
 
   function formatDepreciationUnavailableMessage(missing, lifeExceeded, lifeNearLimit) {
@@ -95,9 +84,6 @@
     if (num(asset.estimated_end_of_life_value) === null) missing.push('Estimated End of Life Value');
     if (isOnRoad(asset)) {
       if (num(asset.expected_life_km) === null) missing.push('Expected Total Life (km)');
-      var odo = context.currentOdometer !== undefined && context.currentOdometer !== null
-        ? num(context.currentOdometer) : num(asset.current_odometer);
-      if (odo === null) missing.push('Current Odometer (km)');
     } else {
       if (num(asset.expected_life_hours) === null) missing.push('Expected Total Life (hours)');
     }
@@ -142,22 +128,21 @@
     return { ok: true, value: perHour < 0 ? 0 : perHour };
   }
 
+  // Per-km depreciation is straight-line over expected total life:
+  // (current value − end of life value) / expected_life_km.
+  // currentOdometer is unused for the rate (kept so existing call sites
+  // stay valid). Remaining-life as the denominator inflated the rate as
+  // the vehicle aged — the same bug fixed for hours-based machinery.
   function calcDepreciationPerKm(asset, currentOdometer) {
-    var odo = currentOdometer !== undefined && currentOdometer !== null
-      ? num(currentOdometer) : num(asset.current_odometer);
-    var missing = getMissingDepreciationFields(asset, { currentOdometer: odo });
+    var missing = getMissingDepreciationFields(asset);
     if (missing.length) return { ok: false, missing: missing };
     var currentValue = num(asset.current_value);
     var eolValue = num(asset.estimated_end_of_life_value);
     var lifeKm = num(asset.expected_life_km);
-    var remaining = lifeKm - odo;
-    if (remaining <= 0) {
-      return lifeExceededResult(false);
+    if (lifeKm === null || lifeKm <= 0) {
+      return { ok: false, missing: ['Expected Total Life (km)'] };
     }
-    if (remaining <= minRemainingLife(lifeKm, MIN_REMAINING_LIFE_KM)) {
-      return lifeExceededResult(true);
-    }
-    var perKm = (currentValue - eolValue) / remaining;
+    var perKm = (currentValue - eolValue) / lifeKm;
     return { ok: true, value: perKm < 0 ? 0 : perKm };
   }
 
