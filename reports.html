@@ -381,25 +381,34 @@
   async function fetchRecords(assetIds, dateFrom, dateTo) {
     var fuelQ = supabase.from('fuel_records').select('asset_id, record_date, litres, total_cost')
       .eq('user_id', effectiveAccountId).gte('record_date', dateFrom).lte('record_date', dateTo);
-    var telQ = supabase.from('telematics_records').select('asset_id, record_date, operating_hours, idle_hours, total_engine_hours')
+    var telQ = supabase.from('telematics_records').select('asset_id, record_date, operating_hours, idle_hours, total_engine_hours, litres_consumed, daily_distance_km')
       .eq('user_id', effectiveAccountId).gte('record_date', dateFrom).lte('record_date', dateTo);
+    var purchaseQ = supabase.from('fuel_purchases').select('vehicle_id, litres, cost_nzd, purchase_date')
+      .eq('user_id', effectiveAccountId).gte('purchase_date', dateFrom).lte('purchase_date', dateTo);
     if (assetIds.length === 1) {
       fuelQ = fuelQ.eq('asset_id', assetIds[0]);
       telQ = telQ.eq('asset_id', assetIds[0]);
+      purchaseQ = purchaseQ.eq('vehicle_id', assetIds[0]);
     } else if (assetIds.length > 0) {
       fuelQ = fuelQ.in('asset_id', assetIds);
       telQ = telQ.in('asset_id', assetIds);
+      purchaseQ = purchaseQ.in('vehicle_id', assetIds);
     }
-    var results = await Promise.all([fuelQ, telQ]);
+    var results = await Promise.all([fuelQ, telQ, purchaseQ]);
     if (results[0].error) throw new Error(results[0].error.message);
     if (results[1].error) throw new Error(results[1].error.message);
-    return { fuel: results[0].data || [], tel: results[1].data || [] };
+    if (results[2].error) throw new Error(results[2].error.message);
+    return { fuel: results[0].data || [], tel: results[1].data || [], purchases: results[2].data || [] };
   }
 
   function assetIdMatch(a, b) { return Number(a) === Number(b); }
 
   function filterByAsset(rows, assetId) {
     return rows.filter(function(r) { return assetIdMatch(r.asset_id, assetId); });
+  }
+
+  function filterPurchasesByAsset(rows, assetId) {
+    return (rows || []).filter(function(r) { return Number(r.vehicle_id) === Number(assetId); });
   }
 
   function getIdleRate(asset) {
@@ -447,7 +456,33 @@
       actual: totalActual,
       rate: rate,
       dataFrom: dataDateFrom,
-      dataTo: dataDateTo
+      dataTo: dataDateTo,
+      unit: 'hours'
+    };
+  }
+
+  function calcTruckKmUtilisation(asset, assetTel) {
+    var byDate = {};
+    (assetTel || []).forEach(function(r) {
+      byDate[r.record_date] = (byDate[r.record_date] || 0) + (parseFloat(r.daily_distance_km) || 0);
+    });
+    var dataDates = Object.keys(byDate).sort();
+    if (!dataDates.length) return null;
+    var totalKm = 0;
+    dataDates.forEach(function(date) { totalKm += byDate[date] || 0; });
+    var annualKm = FCM.num(asset.estimated_annual_km);
+    if (annualKm === null || annualKm <= 0 || totalKm <= 0) return null;
+    var dataDateFrom = dataDates[0];
+    var dataDateTo = dataDates[dataDates.length - 1];
+    var expectedKm = annualKm * (calendarDaysInRange(dataDateFrom, dataDateTo) / 365);
+    if (expectedKm <= 0) return null;
+    return {
+      available: expectedKm,
+      actual: totalKm,
+      rate: (totalKm / expectedKm) * 100,
+      dataFrom: dataDateFrom,
+      dataTo: dataDateTo,
+      unit: 'km'
     };
   }
 
@@ -1052,58 +1087,82 @@
     };
   }
 
-  function buildFleetSummary(assets, fuel, tel, dateFrom, dateTo) {
+  function buildFleetSummary(assets, fuel, tel, dateFrom, dateTo, purchases) {
     var assetSummaries = [];
-    var fleet = { fuelCost: 0, idleCost: 0, co2: 0, actualHours: 0, availableHours: 0 };
+    var fleet = { fuelCost: 0, idleCost: 0, co2: 0, actualHours: 0, availableHours: 0, kmRates: [], hoursAssets: 0 };
 
     assets.forEach(function(asset) {
       var assetFuel = filterByAsset(fuel, asset.id);
       var assetTel = filterByAsset(tel, asset.id);
       var idleRate = getIdleRate(asset);
       var factor = getEmissionFactor(asset.fuel_type);
+      var onRoad = FCM.isOnRoad(asset);
 
       var totalLitres = 0;
       var totalFuelCost = 0;
       var totalOpHours = 0;
       var totalIdleHours = 0;
-      assetFuel.forEach(function(r) {
-        totalLitres += parseFloat(r.litres) || 0;
-        totalFuelCost += parseFloat(r.total_cost) || 0;
-      });
       assetTel.forEach(function(r) {
         totalOpHours += parseFloat(r.operating_hours) || 0;
         totalIdleHours += parseFloat(r.idle_hours) || 0;
       });
 
-      var hasFuel = assetFuel.length > 0 && totalLitres > 0;
-      var hasTelActivity = totalOpHours > 0 || totalIdleHours > 0;
-      var onRoad = FCM.isOnRoad(asset);
-      var awaitingFuel = !onRoad && !hasFuel && hasTelActivity;
+      var totalIdleCost;
+      var util;
+      var hasFuel;
+      var awaitingFuel;
 
-      var avgCostPerLitre = totalLitres > 0 ? totalFuelCost / totalLitres : 0;
-      var purchasePrice = parseFloat(asset.purchase_price) || 0;
-      var lifeHours = parseFloat(asset.expected_life_hours) || 0;
-      var servicePerHour = parseFloat(asset.service_cost_per_hour) || 0;
-      var deprPerHour = lifeHours > 0 ? purchasePrice / lifeHours : 0;
-      var idleFuelCost = totalIdleHours * idleRate * avgCostPerLitre;
-      var deprCost = totalIdleHours * deprPerHour;
-      var serviceCost = totalIdleHours * servicePerHour;
-      var totalIdleCost = idleFuelCost + deprCost + serviceCost;
+      if (onRoad) {
+        var truckFuel = FCM.assetFuelTotals(asset, {
+          purchaseRows: filterPurchasesByAsset(purchases, asset.id)
+        });
+        totalLitres = truckFuel.litres;
+        totalFuelCost = truckFuel.cost;
+        hasFuel = totalLitres > 0;
+        var hasTelActivity = totalOpHours > 0 || totalIdleHours > 0 || assetTel.length > 0;
+        awaitingFuel = !hasFuel && hasTelActivity;
+        var truckCpl = totalLitres > 0 ? totalFuelCost / totalLitres : 0;
+        var truckIdle = FCM.calcIdleHourCosts(
+          asset,
+          totalIdleHours,
+          truckCpl,
+          FCM.resolvedIdleRate(asset).rate,
+          null,
+          hasFuel
+        );
+        totalIdleCost = (truckIdle.fuel || 0) + (truckIdle.depreciation || 0) +
+          (truckIdle.servicing || 0) + (truckIdle.maintenance || 0);
+        var hoursUtil = calcAssetUtilisationForAsset(asset, assetTel);
+        util = (hoursUtil && hoursUtil.actual > 0) ? hoursUtil : (calcTruckKmUtilisation(asset, assetTel) || hoursUtil);
+      } else {
+        assetFuel.forEach(function(r) {
+          totalLitres += parseFloat(r.litres) || 0;
+          totalFuelCost += parseFloat(r.total_cost) || 0;
+        });
+        hasFuel = assetFuel.length > 0 && totalLitres > 0;
+        awaitingFuel = !hasFuel && (totalOpHours > 0 || totalIdleHours > 0);
+        var avgCostPerLitre = totalLitres > 0 ? totalFuelCost / totalLitres : 0;
+        var purchasePrice = parseFloat(asset.purchase_price) || 0;
+        var lifeHours = parseFloat(asset.expected_life_hours) || 0;
+        var servicePerHour = parseFloat(asset.service_cost_per_hour) || 0;
+        var deprPerHour = lifeHours > 0 ? purchasePrice / lifeHours : 0;
+        totalIdleCost = totalIdleHours * idleRate * avgCostPerLitre +
+          totalIdleHours * deprPerHour + totalIdleHours * servicePerHour;
+        util = calcAssetUtilisationForAsset(asset, assetTel);
+      }
+
       var totalCo2 = totalLitres * factor;
-      var util = onRoad ? null : calcAssetUtilisationForAsset(asset, assetTel);
 
       assetSummaries.push({
         assetName: asset.asset_name,
         isOnRoad: onRoad,
         awaitingFuel: awaitingFuel,
-        fuelCost: onRoad ? 0 : totalFuelCost,
-        idleCost: onRoad ? 0 : totalIdleCost,
-        co2: onRoad ? 0 : totalCo2,
+        fuelCost: totalFuelCost,
+        idleCost: totalIdleCost,
+        co2: totalCo2,
         utilRate: util ? util.rate : null,
         hasUtil: !!util
       });
-
-      if (onRoad) return;
 
       if (!awaitingFuel) {
         fleet.fuelCost += totalFuelCost;
@@ -1111,12 +1170,30 @@
       }
       fleet.idleCost += totalIdleCost;
       if (util) {
-        fleet.actualHours += util.actual;
-        fleet.availableHours += util.available;
+        if (util.unit === 'km') {
+          fleet.kmRates.push(util.rate);
+        } else {
+          fleet.actualHours += util.actual;
+          fleet.availableHours += util.available;
+          fleet.hoursAssets += 1;
+        }
       }
     });
 
-    var fleetUtil = fleet.availableHours > 0 ? (fleet.actualHours / fleet.availableHours) * 100 : 0;
+    var hoursUtil = fleet.availableHours > 0 ? (fleet.actualHours / fleet.availableHours) * 100 : null;
+    var kmAvg = null;
+    if (fleet.kmRates.length) {
+      kmAvg = fleet.kmRates.reduce(function(s, r) { return s + r; }, 0) / fleet.kmRates.length;
+    }
+    var fleetUtil = 0;
+    if (hoursUtil !== null && kmAvg !== null) {
+      fleetUtil = (hoursUtil * fleet.hoursAssets + kmAvg * fleet.kmRates.length) /
+        (fleet.hoursAssets + fleet.kmRates.length);
+    } else if (hoursUtil !== null) {
+      fleetUtil = hoursUtil;
+    } else if (kmAvg !== null) {
+      fleetUtil = kmAvg;
+    }
     var fleetRow = {
       assetName: 'FLEET TOTAL',
       isFleetRow: true,
@@ -1125,7 +1202,7 @@
       idleCost: fleet.idleCost,
       co2: fleet.co2,
       utilRate: fleetUtil,
-      hasUtil: fleet.availableHours > 0
+      hasUtil: fleet.availableHours > 0 || fleet.kmRates.length > 0
     };
 
     return {
@@ -1151,15 +1228,6 @@
             fmtMoney(a.idleCost),
             a.co2.toFixed(1),
             a.utilRate.toFixed(1) + '%'
-          ];
-        }
-        if (a.isOnRoad) {
-          return [
-            a.assetName,
-            TRUCK_MODULES_MSG,
-            fmtMoney(0),
-            TRUCK_MODULES_MSG,
-            '—'
           ];
         }
         if (a.awaitingFuel) {
@@ -1188,7 +1256,7 @@
       case 'idle': return buildIdleReport(assets, records.fuel, records.tel);
       case 'emissions': return buildEmissionsReport(assets, records.fuel, records.tel);
       case 'utilisation': return buildUtilisationReport(assets, records.fuel, records.tel, dateFrom, dateTo);
-      case 'fleet': return buildFleetSummary(assets, records.fuel, records.tel, dateFrom, dateTo);
+      case 'fleet': return buildFleetSummary(assets, records.fuel, records.tel, dateFrom, dateTo, records.purchases);
       default: throw new Error('Unknown report type');
     }
   }
@@ -1215,7 +1283,7 @@
     }
     if (report.reportType === 'fleet') {
       downloadStructuredReportCsv(report, config, assets, filename, 'Full Fleet Summary Report',
-        'Note: "' + AWAITING_SHORT + '" indicates telematics without fuel records. "' + TRUCK_MODULES_MSG + '" indicates on-road assets tracked in Truck Modules.');
+        'Note: "' + AWAITING_SHORT + '" indicates telematics without fuel records.');
       return;
     }
     var lines = [report.csvHeaders.join(',')];
