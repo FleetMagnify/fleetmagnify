@@ -115,11 +115,11 @@
   <div class="page-content">
     <div class="page-eyebrow"><div class="dash"></div> Truck Fleet</div>
     <h1 class="page-title">Trip Cost Report</h1>
-    <p class="page-sub">Generate a full cost and emissions summary for a specific trip window using eROAD telematics, rolling fuel rates, and asset cost data.</p>
+    <p class="page-sub">Generate a full cost and emissions summary for a trip date range using daily eROAD or Navman distance, rolling fuel rates, and asset cost data.</p>
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this works:</strong> Trip distance comes from the closest eROAD odometer readings to your start and end times. Fuel cost uses the truck's <strong>most recent fill-to-fill rate</strong> before the trip ends — not fuel bought during the trip itself. Depreciation, servicing, maintenance, and RUC are applied per km from your asset profile.</p>
+      <p><strong>How this works:</strong> Truck telematics only provide one distance figure per calendar day — there is no hourly breakdown. Trip distance uses the closest daily odometer readings to your start and end <strong>dates</strong> (or that day's km if start and end are the same date). Fuel cost uses the truck's <strong>most recent fill-to-fill rate</strong> before the trip ends — not fuel bought during the trip itself. Depreciation, servicing, maintenance, and RUC are applied per km from your asset profile.</p>
     </div>
 
     <div class="filter-bar">
@@ -131,11 +131,11 @@
       </div>
       <div class="filter-group">
         <label for="trip-start">Trip Start</label>
-        <input type="datetime-local" id="trip-start">
+        <input type="date" id="trip-start">
       </div>
       <div class="filter-group">
         <label for="trip-end">Trip End</label>
-        <input type="datetime-local" id="trip-end">
+        <input type="date" id="trip-end">
       </div>
       <div class="filter-group">
         <label for="trip-payload">Average Payload (tonnes)</label>
@@ -257,27 +257,19 @@
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
-  function fmtDateTimeLocal(d) {
-    return fmtDate(d) + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-  }
-
   function addDays(dateStr, days) {
     var d = new Date(dateStr + 'T12:00:00');
     d.setDate(d.getDate() + days);
     return fmtDate(d);
   }
 
-  function parseDateTimeLocal(value) {
-    if (!value) return null;
-    var d = new Date(value);
-    return isNaN(d.getTime()) ? null : d;
+  function isIsoDate(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(value || '');
   }
 
-  function formatTripRange(startDt, endDt) {
-    var opts = { day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true };
-    var s = startDt.toLocaleString('en-NZ', opts).replace(',', ',');
-    var e = endDt.toLocaleString('en-NZ', opts).replace(',', ',');
-    return s + ' to ' + e;
+  function formatTripRange(startDate, endDate) {
+    if (startDate === endDate) return formatDateShort(startDate);
+    return formatDateShort(startDate) + ' to ' + formatDateShort(endDate);
   }
 
   function formatDateShort(dateStr) {
@@ -549,10 +541,9 @@
     if (!hasAccess) return;
     companyName = await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
-    var now = new Date();
-    var yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    document.getElementById('trip-end').value = fmtDateTimeLocal(now);
-    document.getElementById('trip-start').value = fmtDateTimeLocal(yesterday);
+    var today = FCM.nzTodayISO();
+    document.getElementById('trip-end').value = today;
+    document.getElementById('trip-start').value = addDays(today, -1);
 
     await loadVehicles();
   }
@@ -609,7 +600,7 @@
   async function fetchMileage(vehicleId, fromDate, toDate) {
     var result = await supabase
       .from('telematics_records')
-      .select('record_date, odometer_km')
+      .select('record_date, odometer_km, daily_distance_km')
       .eq('asset_id', Number(vehicleId))
       .eq('user_id', effectiveAccountId)
       .gte('record_date', fromDate)
@@ -638,14 +629,14 @@
     if (!selectedVehicle) return;
     hideError();
 
-    var startDt = parseDateTimeLocal(document.getElementById('trip-start').value);
-    var endDt = parseDateTimeLocal(document.getElementById('trip-end').value);
-    if (!startDt || !endDt) {
+    var tripStartDate = document.getElementById('trip-start').value;
+    var tripEndDate = document.getElementById('trip-end').value;
+    if (!isIsoDate(tripStartDate) || !isIsoDate(tripEndDate)) {
       showError('Please enter valid trip start and end dates.');
       return;
     }
-    if (endDt <= startDt) {
-      showError('Trip end must be after trip start.');
+    if (tripEndDate < tripStartDate) {
+      showError('Trip end must be on or after trip start.');
       return;
     }
 
@@ -662,8 +653,6 @@
       return;
     }
 
-    var tripEndDate = fmtDate(endDt);
-    var tripStartDate = fmtDate(startDt);
     var mileageFrom = addDays(tripStartDate, -MILEAGE_BUFFER_DAYS);
     var mileageTo = addDays(tripEndDate, MILEAGE_BUFFER_DAYS);
 
@@ -680,20 +669,25 @@
       return;
     }
     if (!mileageRows.length) {
-      showError('No eROAD telematics data covering the trip window.');
+      showError('No eROAD or Navman telematics data covering the selected dates.');
       return;
     }
 
-    var startReading = closestReadingToDatetime(mileageRows, startDt);
-    var endReading = closestReadingToDatetime(mileageRows, endDt);
+    var startReading = closestReading(mileageRows, tripStartDate);
+    var endReading = closestReading(mileageRows, tripEndDate);
     if (!startReading || !endReading) {
-      showError('Could not find eROAD odometer readings near the trip start and end times.');
+      showError('Could not find daily odometer readings for the selected start and end dates.');
       return;
     }
 
     var tripKm = parseFloat(endReading.odometer_km) - parseFloat(startReading.odometer_km);
-    if (tripKm <= 0) {
-      showError('Trip distance could not be calculated — end odometer must be greater than start odometer.');
+    if (tripStartDate === tripEndDate) {
+      var sameDayKm = parseFloat(startReading.daily_distance_km);
+      if (!(sameDayKm > 0)) sameDayKm = parseFloat(endReading.daily_distance_km);
+      if (sameDayKm > 0) tripKm = sameDayKm;
+    }
+    if (!(tripKm > 0)) {
+      showError('Trip distance could not be calculated — end odometer must be greater than start odometer, or the selected day needs a daily distance figure.');
       return;
     }
 
@@ -735,9 +729,9 @@
 
     tripReport = {
       assetName: selectedVehicle.asset_name,
-      tripRangeLabel: formatTripRange(startDt, endDt),
-      startDt: startDt,
-      endDt: endDt,
+      tripRangeLabel: formatTripRange(tripStartDate, tripEndDate),
+      startDate: tripStartDate,
+      endDate: tripEndDate,
       tripKm: tripKm,
       fuelCost: tripFuelCost,
       deprCost: tripDeprCost,
