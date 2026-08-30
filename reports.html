@@ -134,7 +134,7 @@
       <div class="report-card" data-report="idle">
         <div class="report-icon">⏱</div>
         <h2>Idle Cost Report</h2>
-        <p class="report-desc">Daily idle cost breakdown — fuel waste, depreciation, and service impact.</p>
+        <p class="report-desc">Daily idle cost — machinery uses hourly fuel + D/S/M; trucks use fuel purchases and idle burn rate (same as Truck Idle Monitor).</p>
         <div>
           <span class="field-label">Asset Scope</span>
           <div class="scope-toggle">
@@ -265,6 +265,7 @@
   var AWAITING_SHORT = 'Awaiting';
   var TRUCK_MODULES_MSG = 'See Truck Modules';
   var FLEET_PARTIAL_IDLE_MSG = '(partial — some assets have incomplete data)';
+  var PRICE_HISTORY_MONTHS = 6;
 
   var FUEL_PDF = {
     dark: [8, 12, 18],
@@ -378,13 +379,33 @@
     return assets.length ? assets[0].asset_name : 'Single Asset';
   }
 
+  function addMonthsISO(dateStr, months) {
+    var parts = String(dateStr).slice(0, 10).split('-').map(Number);
+    var d = new Date(parts[0], parts[1] - 1, parts[2]);
+    d.setMonth(d.getMonth() + months);
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
+  function normalizeDateKey(value) {
+    if (!value) return '';
+    return String(value).slice(0, 10);
+  }
+
   async function fetchRecords(assetIds, dateFrom, dateTo) {
+    var priceWindowFrom = addMonthsISO(dateTo, -PRICE_HISTORY_MONTHS);
+    var purchaseFrom = priceWindowFrom < dateFrom ? priceWindowFrom : dateFrom;
     var fuelQ = supabase.from('fuel_records').select('asset_id, record_date, litres, total_cost')
       .eq('user_id', effectiveAccountId).gte('record_date', dateFrom).lte('record_date', dateTo);
     var telQ = supabase.from('telematics_records').select('asset_id, record_date, operating_hours, idle_hours, total_engine_hours, litres_consumed, daily_distance_km')
       .eq('user_id', effectiveAccountId).gte('record_date', dateFrom).lte('record_date', dateTo);
+    // Truck Idle Monitor prices idle from a trailing 6-month window, not only
+    // fills that happen to fall inside the selected range.
     var purchaseQ = supabase.from('fuel_purchases').select('vehicle_id, litres, cost_nzd, purchase_date')
-      .eq('user_id', effectiveAccountId).gte('purchase_date', dateFrom).lte('purchase_date', dateTo);
+      .eq('user_id', effectiveAccountId).gte('purchase_date', purchaseFrom).lte('purchase_date', dateTo)
+      .limit(10000);
     if (assetIds.length === 1) {
       fuelQ = fuelQ.eq('asset_id', assetIds[0]);
       telQ = telQ.eq('asset_id', assetIds[0]);
@@ -398,33 +419,76 @@
     if (results[0].error) throw new Error(results[0].error.message);
     if (results[1].error) throw new Error(results[1].error.message);
     if (results[2].error) throw new Error(results[2].error.message);
-    return { fuel: results[0].data || [], tel: results[1].data || [], purchases: results[2].data || [] };
+    return {
+      fuel: results[0].data || [],
+      tel: results[1].data || [],
+      purchases: results[2].data || [],
+      priceWindowFrom: priceWindowFrom
+    };
   }
 
-  function assetIdMatch(a, b) { return Number(a) === Number(b); }
+  function assetIdMatch(a, b) {
+    if (a == null || b == null || a === '' || b === '') return false;
+    var na = Number(a);
+    var nb = Number(b);
+    if (!isNaN(na) && !isNaN(nb)) return na === nb;
+    return String(a) === String(b);
+  }
 
   function filterByAsset(rows, assetId) {
-    return rows.filter(function(r) { return assetIdMatch(r.asset_id, assetId); });
+    return (rows || []).filter(function(r) { return assetIdMatch(r.asset_id, assetId); });
   }
 
   function filterPurchasesByAsset(rows, assetId) {
-    return (rows || []).filter(function(r) { return Number(r.vehicle_id) === Number(assetId); });
+    return (rows || []).filter(function(r) {
+      return assetIdMatch(r.vehicle_id, assetId) || assetIdMatch(r.asset_id, assetId);
+    });
+  }
+
+  function mapFuelRow(r) {
+    return {
+      record_date: normalizeDateKey(r.record_date || r.purchase_date),
+      litres: parseFloat(r.litres) || 0,
+      total_cost: parseFloat(r.total_cost != null ? r.total_cost : r.cost_nzd) || 0
+    };
+  }
+
+  function mapPurchaseRow(r) {
+    return {
+      record_date: normalizeDateKey(r.purchase_date),
+      litres: parseFloat(r.litres) || 0,
+      total_cost: parseFloat(r.cost_nzd != null ? r.cost_nzd : r.total_cost) || 0
+    };
+  }
+
+  function rowsInRange(rows, dateFrom, dateTo) {
+    return (rows || []).filter(function(r) {
+      var d = normalizeDateKey(r.record_date);
+      return d && d >= dateFrom && d <= dateTo;
+    });
+  }
+
+  function sumFuelRows(rows) {
+    var litres = 0;
+    var cost = 0;
+    (rows || []).forEach(function(r) {
+      litres += parseFloat(r.litres) || 0;
+      cost += parseFloat(r.total_cost) || 0;
+    });
+    return { litres: litres, cost: cost, cpl: litres > 0 ? cost / litres : 0 };
   }
 
   // Machinery fuel lives on fuel_records; truck fuel lives on fuel_purchases.
   // Every fleet-wide report must use this so trucks are not treated as
   // "awaiting data" just because they have no VisionLink-style daily rows.
+  // If a truck is mis-typed as machinery but has purchases and no daily
+  // fuel rows, use purchases (same source as Truck Idle Monitor / Cost Per KM).
   function fuelRowsForAsset(asset, fuelRecords, purchases) {
-    if (FCM.isOnRoad(asset)) {
-      return filterPurchasesByAsset(purchases, asset.id).map(function(r) {
-        return {
-          record_date: r.purchase_date,
-          litres: parseFloat(r.litres) || 0,
-          total_cost: parseFloat(r.cost_nzd != null ? r.cost_nzd : r.total_cost) || 0
-        };
-      });
-    }
-    return filterByAsset(fuelRecords || [], asset.id);
+    var fromPurchases = filterPurchasesByAsset(purchases, asset.id).map(mapPurchaseRow);
+    var fromRecords = filterByAsset(fuelRecords || [], asset.id).map(mapFuelRow);
+    if (FCM.isOnRoad(asset)) return fromPurchases;
+    if (fromPurchases.length && !fromRecords.length) return fromPurchases;
+    return fromRecords;
   }
 
   function telActivityForAsset(assetTel) {
@@ -522,25 +586,29 @@
   function mergeByDate(fuelRows, telRows) {
     var byDate = {};
     fuelRows.forEach(function(r) {
-      byDate[r.record_date] = byDate[r.record_date] || {};
-      byDate[r.record_date].litres = (byDate[r.record_date].litres || 0) + (parseFloat(r.litres) || 0);
-      byDate[r.record_date].cost = (byDate[r.record_date].cost || 0) + (parseFloat(r.total_cost) || 0);
+      var date = normalizeDateKey(r.record_date);
+      if (!date) return;
+      byDate[date] = byDate[date] || {};
+      byDate[date].litres = (byDate[date].litres || 0) + (parseFloat(r.litres) || 0);
+      byDate[date].cost = (byDate[date].cost || 0) + (parseFloat(r.total_cost) || 0);
     });
     telRows.forEach(function(r) {
-      byDate[r.record_date] = byDate[r.record_date] || {};
-      byDate[r.record_date].operating_hours = (byDate[r.record_date].operating_hours || 0) + (parseFloat(r.operating_hours) || 0);
-      byDate[r.record_date].idle_hours = (byDate[r.record_date].idle_hours || 0) + (parseFloat(r.idle_hours) || 0);
+      var date = normalizeDateKey(r.record_date);
+      if (!date) return;
+      byDate[date] = byDate[date] || {};
+      byDate[date].operating_hours = (byDate[date].operating_hours || 0) + (parseFloat(r.operating_hours) || 0);
+      byDate[date].idle_hours = (byDate[date].idle_hours || 0) + (parseFloat(r.idle_hours) || 0);
     });
     return byDate;
   }
 
-  function buildFuelReport(assets, fuel, tel, purchases) {
+  function buildFuelReport(assets, fuel, tel, purchases, dateFrom, dateTo) {
     var assetSummaries = [];
     var dailySections = [];
     var totals = { litres: 0, cost: 0, idleFuel: 0, opFuel: 0, opHours: 0, idleHours: 0 };
 
     assets.forEach(function(asset) {
-      var assetFuel = fuelRowsForAsset(asset, fuel, purchases);
+      var assetFuel = rowsInRange(fuelRowsForAsset(asset, fuel, purchases), dateFrom, dateTo);
       var assetTel = filterByAsset(tel, asset.id);
       var idleRate = FCM.resolvedIdleRate(asset).rate;
 
@@ -735,7 +803,7 @@
     ];
   }
 
-  function buildIdleReport(assets, fuel, tel, purchases) {
+  function buildIdleReport(assets, fuel, tel, purchases, dateFrom, dateTo, priceWindowFrom) {
     var assetSummaries = [];
     var dailySections = [];
     var totals = { idleHours: 0, fuelCost: 0, depr: 0, service: 0, maint: 0 };
@@ -745,19 +813,16 @@
     var anyDeprLifeNearLimit = false;
     var anyServMissing = false;
     var anyMaintMissing = false;
+    var pricingFrom = priceWindowFrom || dateFrom;
 
     assets.forEach(function(asset) {
-      var assetFuel = fuelRowsForAsset(asset, fuel, purchases);
+      var allFuel = fuelRowsForAsset(asset, fuel, purchases);
+      var pricing = sumFuelRows(rowsInRange(allFuel, pricingFrom, dateTo));
       var assetTel = filterByAsset(tel, asset.id);
       var idleRate = FCM.resolvedIdleRate(asset).rate;
-
-      var totalLitres = 0;
-      var totalFuelCost = 0;
-      assetFuel.forEach(function(r) {
-        totalLitres += parseFloat(r.litres) || 0;
-        totalFuelCost += parseFloat(r.total_cost) || 0;
-      });
-      var fuelPricingAvailable = assetFuel.length > 0 && totalLitres > 0;
+      // Same rule as Truck Idle Monitor: a trailing price window is enough
+      // to price idle litres. In-range fills are not required.
+      var fuelPricingAvailable = pricing.litres > 0;
 
       var totalIdleHours = 0;
       var byDateIdle = {};
@@ -765,13 +830,15 @@
         var idleHours = parseFloat(r.idle_hours) || 0;
         totalIdleHours += idleHours;
         if (idleHours > 0) {
-          byDateIdle[r.record_date] = (byDateIdle[r.record_date] || 0) + idleHours;
+          var idleDate = normalizeDateKey(r.record_date);
+          if (!idleDate) return;
+          byDateIdle[idleDate] = (byDateIdle[idleDate] || 0) + idleHours;
         }
       });
 
       if (totalIdleHours <= 0) return;
 
-      var avgCostPerLitre = totalLitres > 0 ? totalFuelCost / totalLitres : 0;
+      var avgCostPerLitre = pricing.cpl;
       var totalEngineHours = FCM.getLatestEngineHours(assetTel, asset.id);
 
       var sumFuel = 0;
@@ -920,13 +987,13 @@
     };
   }
 
-  function buildEmissionsReport(assets, fuel, tel, purchases) {
+  function buildEmissionsReport(assets, fuel, tel, purchases, dateFrom, dateTo) {
     var assetSummaries = [];
     var dailySections = [];
     var totals = { litres: 0, co2: 0, opCo2: 0, idleCo2: 0 };
 
     assets.forEach(function(asset) {
-      var assetFuel = fuelRowsForAsset(asset, fuel, purchases);
+      var assetFuel = rowsInRange(fuelRowsForAsset(asset, fuel, purchases), dateFrom, dateTo);
       var assetTel = filterByAsset(tel, asset.id);
       var idleRate = FCM.resolvedIdleRate(asset).rate;
       var factor = getEmissionFactor(asset.fuel_type);
@@ -1136,40 +1203,40 @@
     };
   }
 
-  function buildFleetSummary(assets, fuel, tel, dateFrom, dateTo, purchases) {
+  function buildFleetSummary(assets, fuel, tel, dateFrom, dateTo, purchases, priceWindowFrom) {
     var assetSummaries = [];
     var fleet = { fuelCost: 0, idleCost: 0, co2: 0, actualHours: 0, availableHours: 0, kmRates: [], hoursAssets: 0 };
+    var pricingFrom = priceWindowFrom || dateFrom;
 
     assets.forEach(function(asset) {
-      var assetFuel = fuelRowsForAsset(asset, fuel, purchases);
+      var allFuel = fuelRowsForAsset(asset, fuel, purchases);
+      var rangeFuel = sumFuelRows(rowsInRange(allFuel, dateFrom, dateTo));
+      var pricingFuel = sumFuelRows(rowsInRange(allFuel, pricingFrom, dateTo));
       var assetTel = filterByAsset(tel, asset.id);
       var idleRate = getIdleRate(asset);
       var factor = getEmissionFactor(asset.fuel_type);
       var onRoad = FCM.isOnRoad(asset);
       var telAct = telActivityForAsset(assetTel);
 
-      var totalLitres = 0;
-      var totalFuelCost = 0;
-      assetFuel.forEach(function(r) {
-        totalLitres += parseFloat(r.litres) || 0;
-        totalFuelCost += parseFloat(r.total_cost) || 0;
-      });
+      var totalLitres = rangeFuel.litres;
+      var totalFuelCost = rangeFuel.cost;
       var totalOpHours = telAct.opHours;
       var totalIdleHours = telAct.idleHours;
-      var hasFuel = assetFuel.length > 0 && totalLitres > 0;
+      var hasFuel = rangeFuel.litres > 0;
+      var hasPricing = pricingFuel.litres > 0;
       var awaitingFuel = !hasFuel && telAct.hasActivity;
 
       var totalIdleCost;
       var util;
       if (onRoad) {
-        var truckCpl = totalLitres > 0 ? totalFuelCost / totalLitres : 0;
+        var truckCpl = pricingFuel.cpl;
         var truckIdle = FCM.calcIdleHourCosts(
           asset,
           totalIdleHours,
           truckCpl,
           FCM.resolvedIdleRate(asset).rate,
           null,
-          hasFuel
+          hasPricing
         );
         totalIdleCost = (truckIdle.fuel || 0) + (truckIdle.depreciation || 0) +
           (truckIdle.servicing || 0) + (truckIdle.maintenance || 0);
@@ -1287,11 +1354,11 @@
 
   function buildReport(type, assets, records, dateFrom, dateTo) {
     switch (type) {
-      case 'fuel': return buildFuelReport(assets, records.fuel, records.tel, records.purchases);
-      case 'idle': return buildIdleReport(assets, records.fuel, records.tel, records.purchases);
-      case 'emissions': return buildEmissionsReport(assets, records.fuel, records.tel, records.purchases);
+      case 'fuel': return buildFuelReport(assets, records.fuel, records.tel, records.purchases, dateFrom, dateTo);
+      case 'idle': return buildIdleReport(assets, records.fuel, records.tel, records.purchases, dateFrom, dateTo, records.priceWindowFrom);
+      case 'emissions': return buildEmissionsReport(assets, records.fuel, records.tel, records.purchases, dateFrom, dateTo);
       case 'utilisation': return buildUtilisationReport(assets, records.fuel, records.tel, dateFrom, dateTo);
-      case 'fleet': return buildFleetSummary(assets, records.fuel, records.tel, dateFrom, dateTo, records.purchases);
+      case 'fleet': return buildFleetSummary(assets, records.fuel, records.tel, dateFrom, dateTo, records.purchases, records.priceWindowFrom);
       default: throw new Error('Unknown report type');
     }
   }
@@ -1303,7 +1370,7 @@
     }
     if (report.reportType === 'idle') {
       downloadStructuredReportCsv(report, config, assets, filename, 'Idle Cost Report',
-        'Note: "' + AWAITING_FUEL_MSG + '" indicates missing data. Totals marked partial exclude unavailable components.');
+        'Note: "' + AWAITING_FUEL_MSG + '" indicates missing fuel pricing (machinery fuel records or truck fuel purchases). Truck idle cost is fuel-only — depreciation, servicing and maintenance accrue per km, not while idling. Totals marked partial exclude unavailable components.');
       return;
     }
     if (report.reportType === 'emissions') {
@@ -1318,7 +1385,7 @@
     }
     if (report.reportType === 'fleet') {
       downloadStructuredReportCsv(report, config, assets, filename, 'Full Fleet Summary Report',
-        'Note: "' + AWAITING_SHORT + '" indicates telematics without fuel records.');
+        'Note: "' + AWAITING_SHORT + '" indicates telematics without in-range fuel (machinery fuel records or truck fuel purchases). Truck idle cost is priced from fuel purchases (6-month trailing average if needed).');
       return;
     }
     var lines = [report.csvHeaders.join(',')];
@@ -1377,7 +1444,7 @@
 
   function downloadIdleCsv(report, config, assets, filename) {
     downloadStructuredReportCsv(report, config, assets, filename, 'Idle Cost Report',
-      'Note: "' + AWAITING_FUEL_MSG + '" indicates missing data. Totals marked partial exclude unavailable components.');
+      'Note: "' + AWAITING_FUEL_MSG + '" indicates missing fuel pricing (machinery fuel records or truck fuel purchases). Truck idle cost is fuel-only — depreciation, servicing and maintenance accrue per km, not while idling. Totals marked partial exclude unavailable components.');
   }
 
   function csvEscape(value) {
@@ -1590,6 +1657,15 @@
 
     fuelPdfDrawHeaderBand(doc, pageW, margin, title);
     var y = fuelPdfDrawMetadata(doc, pageW, margin, FUEL_PDF.headerBandH + 6, config, assets, generatedAt);
+    if (report.reportType === 'idle') {
+      doc.setFont(FUEL_PDF.font, 'normal');
+      doc.setFontSize(7);
+      fuelPdfSetColor(doc, FUEL_PDF.labelGrey);
+      var idleNote = 'Truck idle cost is fuel-only (fuel purchases × idle burn rate), same as Truck Idle Monitor. Depreciation, servicing and maintenance accrue per kilometre, so those columns are $0 for on-road assets while idling.';
+      var idleNoteLines = doc.splitTextToSize(idleNote, pageW - margin * 2);
+      doc.text(idleNoteLines, margin, y);
+      y += idleNoteLines.length * 3.4 + 3;
+    }
     y = fuelPdfDrawFleetSummaryCard(doc, pageW, margin, y, report.summary);
 
     y = fuelPdfDrawSectionBar(doc, pageW, margin, y, 'Asset Summary');
