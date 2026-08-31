@@ -8,7 +8,7 @@ window.FleetMagnifySidebar = (function() {
     { type: 'link', href: 'fuel-analyst.html', icon: '⛽', text: 'Fuel Analyst' },
     { type: 'link', href: 'idle-cost-analyst.html', icon: '⏱', text: 'Idle Cost Analyst' },
     { type: 'link', href: 'emissions-intelligence.html', icon: '🌍', text: 'Emissions Intelligence' },
-    { type: 'link', href: 'utilisation-analyst.html', icon: '📊', text: 'Utilisation Analyst' },
+    { type: 'link', href: 'utilisation-analyst.html', icon: '📊', text: 'True Utilisation Analyst' },
     { type: 'link', href: 'job-cost-analyst.html', icon: '🏗', text: 'Job Cost Analyst' },
     { type: 'label', text: 'Truck Modules' },
     { type: 'link', href: 'truck-fuel-analyst.html', icon: '🚛', text: 'Fuel Cost Analyst' },

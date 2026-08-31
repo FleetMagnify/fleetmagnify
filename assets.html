@@ -768,7 +768,7 @@
     <div class="form-group field-construction field-hidden" id="field-available-hours">
       <label for="asset-available-hours">Available Hours Per Week</label>
       <input type="number" id="asset-available-hours" placeholder="e.g. 40, leave blank to default to 40" step="0.5" min="0">
-      <div class="form-hint" id="hint-available-hours">Leave blank to default to 40 hours per week in Utilisation Analyst.</div>
+      <div class="form-hint" id="hint-available-hours">Leave blank to default to 40 hours per week in True Utilisation Analyst.</div>
     </div>
     <div class="form-group field-construction field-hidden" id="field-target-utilisation">
       <label for="asset-target-utilisation">Target Utilisation Percent</label>
@@ -2237,8 +2237,8 @@
       document.getElementById('hint-idle-rate').innerHTML = '<span class="emphasis">Critical for construction assets.</span> Litres per idle hour — drives Fuel Analyst and Idle Cost Analyst split between travelling and idle fuel. Leave blank to use a default by asset type.';
       document.getElementById('hint-life-hours').innerHTML = '<span class="emphasis">Key for depreciation.</span> Total operating hours over the asset\'s useful life — depreciation per hour is (current value − end of life value) ÷ this figure.';
       document.getElementById('hint-service-cost').innerHTML = '<span class="emphasis">Scheduled servicing only.</span> Routine service cost per operating hour — separate from annual repair cost above.';
-      document.getElementById('hint-available-hours').textContent = 'Hours per week the asset is available to work. Leave blank to default to 40 in Utilisation Analyst.';
-      document.getElementById('hint-target-utilisation').textContent = 'Target operating utilisation percentage — compared against actual hours in Utilisation Analyst.';
+      document.getElementById('hint-available-hours').textContent = 'Hours per week the asset is available to work. Leave blank to default to 40 in True Utilisation Analyst.';
+      document.getElementById('hint-target-utilisation').textContent = 'Target operating utilisation percentage — compared against actual hours in True Utilisation Analyst.';
     }
   }
 

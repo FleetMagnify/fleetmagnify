@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Utilisation Analyst | FleetMagnify</title>
+<title>True Utilisation Analyst | FleetMagnify</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/mobile-responsive.css">
@@ -177,8 +177,8 @@
 <div class="main">
   <div class="topbar">
     <div>
-      <div class="breadcrumb"><a href="home.html">Overview</a> / Utilisation Analyst</div>
-      <div class="topbar-title">Utilisation Analyst</div>
+      <div class="breadcrumb"><a href="home.html">Overview</a> / True Utilisation Analyst</div>
+      <div class="topbar-title">True Utilisation Analyst</div>
     </div>
     <div class="user-pill">
       <div class="user-avatar" id="user-avatar">?</div>
@@ -189,11 +189,11 @@
   <div class="page-content">
     <div class="page-eyebrow"><div class="dash"></div> Utilisation Analysis</div>
     <h1 class="page-title">Asset Utilisation Performance</h1>
-    <p class="page-sub">Compare actual operating hours against available capacity and your target utilisation benchmark — day by day.</p>
+    <p class="page-sub">Compare actual operating hours against available capacity and your target utilisation benchmark — day by day. Idle hours are stacked on the chart as context and do not change the utilisation rate.</p>
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this is calculated:</strong> Available hours = weekly capacity × weeks (calendar days ÷ 7), spread evenly across <strong>working days only</strong> (Mon–Fri). Headline utilisation uses the <strong>recorded-data window</strong> (first to last telematics date in your selection), not empty months in a wide filter. Daily utilisation = that day’s actual ÷ that day’s available hours. Assets tagged <strong>Intermittent / on-call</strong> report days worked instead of a flat utilisation %, and active days are not flagged against a 100% target. Set weekly capacity, target, and usage profile on the <a href="assets.html">Assets page</a>.</p>
+      <p><strong>How this is calculated:</strong> Available hours = weekly capacity × weeks (calendar days ÷ 7), spread evenly across <strong>working days only</strong> (Mon–Fri). Headline utilisation uses the <strong>recorded-data window</strong> (first to last telematics date in your selection), not empty months in a wide filter. Daily utilisation = that day’s operating hours ÷ that day’s available hours. The chart stacks idle hours on top of operating hours so you can see switched-on time; <strong>the utilisation % still uses operating hours only</strong>. Assets tagged <strong>Intermittent / on-call</strong> report days worked instead of a flat utilisation %, and active days are not flagged against a 100% target. Set weekly capacity, target, and usage profile on the <a href="assets.html">Assets page</a>.</p>
     </div>
 
     <div class="filter-bar">
@@ -254,11 +254,8 @@
       <div class="chart-card-header">
         <div class="chart-card-title">Daily Utilisation vs Target</div>
         <div class="chart-legend">
-          <div class="legend-item"><div class="legend-dot" style="background:#0EA57A;"></div> On or above target</div>
-          <div class="legend-item"><div class="legend-dot" style="background:#EF9F27;"></div> Below target</div>
-          <div class="legend-item"><div class="legend-dot" style="background:#E2754A;"></div> Over available hours</div>
-          <div class="legend-item"><div class="legend-dot" style="background:#6B7785;"></div> Parked (telematics received, no work)</div>
-          <div class="legend-item"><div class="legend-dot" style="background:#C4A484;"></div> No data (no telematics that day)</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#0EA57A;"></div> Operating</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#EF9F27;"></div> Idle</div>
           <div class="legend-item" id="legend-target" style="display:none;"><div class="legend-line"></div> Target</div>
         </div>
       </div>
@@ -484,11 +481,9 @@
     return { className: 'no-target', text: 'No Target Set' };
   }
 
-  function chartBarColor(rate, targetPercent) {
-    if (targetPercent == null) return '#0EA57A';
-    if (rate > 100) return '#E2754A';
-    if (rate >= targetPercent) return '#0EA57A';
-    return '#EF9F27';
+  function percentOfAvailable(hours, available) {
+    if (!(available > 0)) return null;
+    return (hours / available) * 100;
   }
 
   function updateAssetSettingsDisplay() {
@@ -553,7 +548,7 @@
     var targetPercent = getTargetPercent(selectedAsset);
     var telResult = await supabase
       .from('telematics_records')
-      .select('record_date, operating_hours')
+      .select('record_date, operating_hours, idle_hours')
       .eq('asset_id', selectedAsset.id)
       .eq('user_id', effectiveAccountId)
       .gte('record_date', dateFrom)
@@ -571,7 +566,11 @@
 
     var byDate = {};
     telRows.forEach(function(r) {
-      byDate[r.record_date] = (byDate[r.record_date] || 0) + (parseFloat(r.operating_hours) || 0);
+      if (!byDate[r.record_date]) {
+        byDate[r.record_date] = { operating: 0, idle: 0 };
+      }
+      byDate[r.record_date].operating += parseFloat(r.operating_hours) || 0;
+      byDate[r.record_date].idle += parseFloat(r.idle_hours) || 0;
     });
 
     var intermittent = FCM.isIntermittentUsage(selectedAsset);
@@ -596,13 +595,12 @@
 
     eachDateInRange(rowFrom, rowTo).forEach(function(date) {
       var hasTelematics = byDate[date] != null;
-      var actual = hasTelematics ? byDate[date] : 0;
+      var actual = hasTelematics ? byDate[date].operating : 0;
+      var idle = hasTelematics ? byDate[date].idle : 0;
       var isWknd = !isWeekday(date);
       var dayAvailable = dailyAvailableForDate(dataPeriodAvailable, date, dataWorkingDays);
-      var rate = null;
-      if (hasTelematics && dayAvailable > 0) {
-        rate = (actual / dayAvailable) * 100;
-      }
+      var rate = hasTelematics ? percentOfAvailable(actual, dayAvailable) : null;
+      var idleRate = hasTelematics ? percentOfAvailable(idle, dayAvailable) : null;
       totalActual += actual;
       if (!isWknd && actual > 0) workedWeekdays += 1;
 
@@ -610,7 +608,9 @@
         date: date,
         available: dayAvailable,
         actual: actual,
+        idle: idle,
         rate: rate,
+        idleRate: idleRate,
         status: dayStatus(rate, targetPercent, hasTelematics, dayAvailable, actual, intermittent, isWknd),
         hasTelematics: hasTelematics
       });
@@ -682,7 +682,9 @@
       varianceEl.className = 'kpi-value muted';
     }
 
-    renderChart(dailyRows.filter(function(r) { return r.hasTelematics && r.actual > 0 && r.rate != null; }), intermittent ? null : targetPercent);
+    renderChart(dailyRows.filter(function(r) {
+      return r.hasTelematics && r.rate != null && (r.actual > 0 || r.idle > 0);
+    }), intermittent ? null : targetPercent);
     renderTable(dailyRows, targetPercent);
   }
 
@@ -690,10 +692,20 @@
     document.getElementById('chart-empty').style.display = 'none';
     document.getElementById('legend-target').style.display = targetPercent != null ? 'flex' : 'none';
 
+    if (!rows.length) {
+      document.getElementById('chart-empty').style.display = 'block';
+      document.getElementById('legend-target').style.display = 'none';
+      if (utilisationChart) {
+        utilisationChart.destroy();
+        utilisationChart = null;
+      }
+      return;
+    }
+
     var ctx = document.getElementById('utilisation-chart').getContext('2d');
     var labels = rows.map(function(r) { return formatDateShort(r.date); });
-    var data = rows.map(function(r) { return Math.round(r.rate * 10) / 10; });
-    var colors = rows.map(function(r) { return chartBarColor(r.rate, targetPercent); });
+    var operatingData = rows.map(function(r) { return Math.round((r.rate || 0) * 10) / 10; });
+    var idleData = rows.map(function(r) { return Math.round((r.idleRate || 0) * 10) / 10; });
 
     var annotations = {};
     if (targetPercent != null) {
@@ -720,20 +732,33 @@
       type: 'bar',
       data: {
         labels: labels,
-        datasets: [{
-          label: 'Utilisation Rate (%)',
-          data: data,
-          backgroundColor: colors,
-          borderRadius: 4,
-          barThickness: 14
-        }]
+        datasets: [
+          {
+            label: 'Operating',
+            data: operatingData,
+            backgroundColor: '#0EA57A',
+            borderRadius: 4,
+            barThickness: 14,
+            stack: 'switchedOn'
+          },
+          {
+            label: 'Idle',
+            data: idleData,
+            backgroundColor: '#EF9F27',
+            borderRadius: 4,
+            barThickness: 14,
+            stack: 'switchedOn'
+          }
+        ]
       },
       options: {
         indexAxis: 'y',
         responsive: true,
         maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
         scales: {
           x: {
+            stacked: true,
             min: 0,
             grid: { color: 'rgba(255,255,255,0.04)' },
             ticks: {
@@ -743,13 +768,29 @@
             }
           },
           y: {
+            stacked: true,
             grid: { display: false },
             ticks: { color: '#CBD5E1', font: { size: 12 } }
           }
         },
         plugins: {
           legend: { display: false },
-          annotation: { annotations: annotations }
+          annotation: { annotations: annotations },
+          tooltip: {
+            callbacks: {
+              label: function(ctx) {
+                var row = rows[ctx.dataIndex];
+                var hours = ctx.datasetIndex === 0 ? row.actual : row.idle;
+                return ctx.dataset.label + ': ' + ctx.parsed.x.toFixed(1) + '% (' + hours.toFixed(1) + ' hr)';
+              },
+              footer: function(items) {
+                if (!items.length) return '';
+                var row = rows[items[0].dataIndex];
+                var combined = (row.rate || 0) + (row.idleRate || 0);
+                return 'Switched on: ' + (Math.round(combined * 10) / 10).toFixed(1) + '%';
+              }
+            }
+          }
         }
       }
     });
