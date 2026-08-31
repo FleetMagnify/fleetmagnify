@@ -755,7 +755,7 @@
         indexAxis: 'y',
         responsive: true,
         maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
+        interaction: { mode: 'index', intersect: false, axis: 'y' },
         scales: {
           x: {
             stacked: true,
@@ -777,15 +777,25 @@
           legend: { display: false },
           annotation: { annotations: annotations },
           tooltip: {
+            mode: 'index',
+            intersect: false,
+            axis: 'y',
             callbacks: {
+              title: function(items) {
+                if (!items.length) return '';
+                var row = rows[items[0].dataIndex];
+                return row ? formatDateShort(row.date) : items[0].label;
+              },
               label: function(ctx) {
                 var row = rows[ctx.dataIndex];
+                if (!row) return ctx.dataset.label;
                 var hours = ctx.datasetIndex === 0 ? row.actual : row.idle;
                 return ctx.dataset.label + ': ' + ctx.parsed.x.toFixed(1) + '% (' + hours.toFixed(1) + ' hr)';
               },
               footer: function(items) {
                 if (!items.length) return '';
                 var row = rows[items[0].dataIndex];
+                if (!row) return '';
                 var combined = (row.rate || 0) + (row.idleRate || 0);
                 return 'Switched on: ' + (Math.round(combined * 10) / 10).toFixed(1) + '%';
               }
