@@ -79,6 +79,17 @@ check(
 );
 
 check('Chart is stacked on the value axis', /x: \{\s*stacked: true,/.test(page));
+check(
+  'Tooltip index mode uses the category (y) axis, not x',
+  /interaction: \{ mode: 'index', intersect: false, axis: 'y' \}/.test(page) &&
+    /tooltip: \{[\s\S]*mode: 'index',[\s\S]*axis: 'y',/.test(page)
+);
+check(
+  'Hover plugin maps cursor Y to the category index',
+  /id: 'utilisationHoverCategory'/.test(page) &&
+    /yScale\.getValueForPixel\(event\.y\)/.test(page) &&
+    /tooltip\.setActiveElements\(els/.test(page)
+);
 check('Operating and Idle share the same stack id', (page.match(/stack: 'switchedOn'/g) || []).length === 2);
 check('Target line annotation still present', /annotations\.targetLine/.test(page) && /xMin: targetPercent/.test(page));
 check('HTML legend labels Operating and Idle', /legend-dot" style="background:#0EA57A;"><\/div> Operating/.test(page) && /legend-dot" style="background:#EF9F27;"><\/div> Idle/.test(page));

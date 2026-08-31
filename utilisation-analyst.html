@@ -727,9 +727,60 @@
       };
     }
 
+    // Horizontal bars: Chart.js index mode defaults to axis 'x', which ignores
+    // which row the cursor is on. Map cursor Y through the category scale so
+    // the tooltip always follows the bar under the pointer.
+    var hoverCategoryPlugin = {
+      id: 'utilisationHoverCategory',
+      afterEvent: function(chart, args) {
+        var event = args.event;
+        if (!event) return;
+        var yScale = chart.scales.y;
+        var n = chart.data.labels ? chart.data.labels.length : 0;
+        if (!yScale || !n) return;
+
+        function clearActive() {
+          if (!chart.getActiveElements().length) return;
+          chart.setActiveElements([]);
+          chart.tooltip.setActiveElements([], { x: event.x, y: event.y });
+          args.changed = true;
+        }
+
+        if (event.type === 'mouseout' || !args.inChartArea) {
+          clearActive();
+          return;
+        }
+        if (event.type !== 'mousemove' && event.type !== 'click') return;
+
+        var idx = yScale.getValueForPixel(event.y);
+        if (typeof idx !== 'number' || isNaN(idx)) {
+          clearActive();
+          return;
+        }
+        idx = Math.round(idx);
+        if (idx < 0 || idx >= n) {
+          clearActive();
+          return;
+        }
+
+        var current = chart.getActiveElements();
+        var already = current.length === chart.data.datasets.length &&
+          current.every(function(el) { return el.index === idx; });
+        if (already) return;
+
+        var els = chart.data.datasets.map(function(_, di) {
+          return { datasetIndex: di, index: idx };
+        });
+        chart.setActiveElements(els);
+        chart.tooltip.setActiveElements(els, { x: event.x, y: event.y });
+        args.changed = true;
+      }
+    };
+
     if (utilisationChart) utilisationChart.destroy();
     utilisationChart = new Chart(ctx, {
       type: 'bar',
+      plugins: [hoverCategoryPlugin],
       data: {
         labels: labels,
         datasets: [
@@ -755,7 +806,7 @@
         indexAxis: 'y',
         responsive: true,
         maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
+        interaction: { mode: 'index', intersect: false, axis: 'y' },
         scales: {
           x: {
             stacked: true,
@@ -777,15 +828,25 @@
           legend: { display: false },
           annotation: { annotations: annotations },
           tooltip: {
+            mode: 'index',
+            intersect: false,
+            axis: 'y',
             callbacks: {
+              title: function(items) {
+                if (!items.length) return '';
+                var row = rows[items[0].dataIndex];
+                return row ? formatDateShort(row.date) : items[0].label;
+              },
               label: function(ctx) {
                 var row = rows[ctx.dataIndex];
+                if (!row) return ctx.dataset.label;
                 var hours = ctx.datasetIndex === 0 ? row.actual : row.idle;
                 return ctx.dataset.label + ': ' + ctx.parsed.x.toFixed(1) + '% (' + hours.toFixed(1) + ' hr)';
               },
               footer: function(items) {
                 if (!items.length) return '';
                 var row = rows[items[0].dataIndex];
+                if (!row) return '';
                 var combined = (row.rate || 0) + (row.idleRate || 0);
                 return 'Switched on: ' + (Math.round(combined * 10) / 10).toFixed(1) + '%';
               }
