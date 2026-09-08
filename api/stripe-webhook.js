@@ -76,21 +76,12 @@ module.exports = async function handler(req, res) {
   }
 
   var event;
-  var signature = req.headers['stripe-signature'];
 
   try {
     var rawBody = await getRawBody(req);
+    var signature = req.headers['stripe-signature'];
     event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
   } catch (err) {
-    // TEMP DEBUG — remove after capturing Production logs for the invalid-signature failure.
-    var secretStr = typeof webhookSecret === 'string' ? webhookSecret : '';
-    var sigStr = typeof signature === 'string' ? signature : '';
-    console.error(
-      'stripe-webhook: TEMP DEBUG signature mismatch',
-      'secret_prefix=' + secretStr.slice(0, 8),
-      'secret_length=' + secretStr.length,
-      'sig_prefix=' + sigStr.slice(0, 20)
-    );
     console.error('stripe-webhook: signature verification failed', err.message);
     return res.status(400).json({ error: 'Invalid signature' });
   }
