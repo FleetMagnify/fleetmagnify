@@ -67,6 +67,15 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // TEMP DEBUG — remove after confirming STRIPE_SECRET_KEY format in Production logs.
+  var secretKeyStr = typeof process.env.STRIPE_SECRET_KEY === 'string' ? process.env.STRIPE_SECRET_KEY : '';
+  console.error(
+    'stripe-webhook: TEMP DEBUG secret key format',
+    'set=' + (secretKeyStr.length > 0 ? 'yes' : 'no'),
+    'prefix=' + secretKeyStr.slice(0, 8),
+    'length=' + secretKeyStr.length
+  );
+
   var stripe = createStripeClient();
   var webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
