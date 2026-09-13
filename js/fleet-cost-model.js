@@ -388,13 +388,27 @@
     return { litres: litres, cost: cost };
   }
 
-  // Single source of truth for Overview / modules:
-  // machinery = VisionLink litres_consumed × bulk $/L (Fuel Analyst construction path)
-  // trucks    = fuel_purchases invoices (not concatenated with daily fuel_records)
+  // Single source of truth for Overview / modules.
+  //
+  // Trucks (isOnRoad): fuel_purchases (BP/Mobil/Navman/eROAD invoices, cost_nzd)
+  // PLUS fuel_records (manual bulk-tank entries, total_cost). Additive — a truck
+  // can have both in the same period. The previous comment said trucks = invoices
+  // only and must not be concatenated with fuel_records; that was wrong against
+  // real ILS data and the product owner. Do not revert to invoices-only.
+  //
+  // Machinery (!isOnRoad): telematics_records.litres_consumed × bulk $/L only.
+  // Old fuel_records rows against machinery are ignored on purpose — manual
+  // fuel_records entry is retained for trucks with bulk tanks, not as a
+  // machinery fallback. Machinery without telematics fuel reporting is out of scope.
   function assetFuelTotals(asset, opts) {
     opts = opts || {};
     if (isOnRoad(asset)) {
-      return truckFuelFromInvoices(opts.purchaseRows || []);
+      var fromPurchases = truckFuelFromInvoices(opts.purchaseRows || []);
+      var fromRecords = truckFuelFromInvoices(opts.fuelRecordRows || []);
+      return {
+        litres: fromPurchases.litres + fromRecords.litres,
+        cost: fromPurchases.cost + fromRecords.cost
+      };
     }
     return machineryFuelFromTelematics(opts.telRows || [], opts.machineryCpl);
   }
