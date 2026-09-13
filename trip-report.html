@@ -586,6 +586,23 @@
 
   document.getElementById('generate-btn').addEventListener('click', generateReport);
 
+  function mergeTruckFuelFills(purchases, records) {
+    var rows = (purchases || []).map(function(r) {
+      return { purchase_date: r.purchase_date, litres: r.litres, cost_nzd: r.cost_nzd };
+    });
+    (records || []).forEach(function(r) {
+      rows.push({
+        purchase_date: r.record_date,
+        litres: r.litres,
+        cost_nzd: r.total_cost
+      });
+    });
+    rows.sort(function(a, b) {
+      return String(a.purchase_date).localeCompare(String(b.purchase_date));
+    });
+    return rows;
+  }
+
   async function fetchFuelPurchases(vehicleId, throughDate) {
     var result = await supabase
       .from('fuel_purchases')
@@ -594,7 +611,14 @@
       .eq('user_id', effectiveAccountId)
       .lte('purchase_date', throughDate)
       .order('purchase_date');
-    return result.data || [];
+    var recordsResult = await supabase
+      .from('fuel_records')
+      .select('record_date, litres, total_cost')
+      .eq('asset_id', Number(vehicleId))
+      .eq('user_id', effectiveAccountId)
+      .lte('record_date', throughDate)
+      .order('record_date');
+    return mergeTruckFuelFills(result.data, recordsResult.data);
   }
 
   async function fetchMileage(vehicleId, fromDate, toDate) {

@@ -355,10 +355,7 @@
   var defaultMachineryFuelCostPerLitre = null;
   var FCM = window.FleetCostModel;
 
-  var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer', 'Truck & Trailer'];
-  var NO_ODOMETER_MSG = 'No odometer data available yet — this will populate automatically once your eRoad integration is connected';
   var NO_DATA_TITLE = 'No data available for this period';
-  var FILL_TO_FILL_TITLE = 'Fuel cost is calculated per fill-to-fill period, not per day — see the explanation banner above';
 
   function hideNoFuelBanner() {
     document.getElementById('no-fuel-banner').hidden = true;
@@ -385,10 +382,6 @@
       return;
     }
     banner.hidden = false;
-  }
-
-  function isOnRoadAsset(asset) {
-    return asset && ON_ROAD_TYPES.indexOf(asset.asset_type) !== -1;
   }
 
   function setViewMode(onRoad) {
@@ -445,43 +438,6 @@
     }
   }
 
-  function showNoOdometerKpis() {
-    document.getElementById('kpi-total-km').textContent = '';
-    document.getElementById('kpi-total-km').className = 'kpi-value message-text';
-    document.getElementById('kpi-total-km-sub').textContent = NO_ODOMETER_MSG;
-    document.getElementById('kpi-total-km-sub').className = 'kpi-sub message';
-    document.getElementById('kpi-cost-per-km').textContent = '—';
-    document.getElementById('kpi-cost-per-km').className = 'kpi-value teal';
-    document.getElementById('kpi-cost-per-km-sub').textContent = 'requires odometer data';
-    document.getElementById('kpi-cost-per-km-sub').className = 'kpi-sub';
-  }
-
-  function computeOdometerKmByDate(telRows) {
-    var odoByDate = {};
-    telRows.forEach(function(r) {
-      var odo = parseFloat(r.odometer_km);
-      if (isNaN(odo) || odo <= 0) return;
-      if (!odoByDate[r.record_date] || odo > odoByDate[r.record_date]) {
-        odoByDate[r.record_date] = odo;
-      }
-    });
-    var odoDates = Object.keys(odoByDate).sort();
-    var dailyKm = {};
-    var totalKm = 0;
-    var prevOdo = null;
-    odoDates.forEach(function(date) {
-      var odo = odoByDate[date];
-      var km = 0;
-      if (prevOdo !== null && odo >= prevOdo) {
-        km = odo - prevOdo;
-        totalKm += km;
-      }
-      dailyKm[date] = km;
-      prevOdo = odo;
-    });
-    return { dailyKm: dailyKm, totalKm: totalKm, hasOdometerData: odoDates.length > 0 };
-  }
-
   function buildMachineryDailyRows(telRows, idleRate, costPerLitre) {
     var dailyRows = [];
     telRows.forEach(function(r) {
@@ -511,127 +467,8 @@
     return dailyRows;
   }
 
-  function parseDateStr(str) {
-    var parts = String(str).split('-').map(Number);
-    return new Date(parts[0], parts[1] - 1, parts[2]);
-  }
-
-  function dateToStr(dt) {
-    return dt.getFullYear() + '-' +
-      String(dt.getMonth() + 1).padStart(2, '0') + '-' +
-      String(dt.getDate()).padStart(2, '0');
-  }
-
-  function snapshotWindowStart(snapshotDate) {
-    var dt = parseDateStr(snapshotDate);
-    dt.setDate(dt.getDate() - 7);
-    return dateToStr(dt);
-  }
-
-  function fuelDateInSnapshotWindow(fuelDate, snapshotDate) {
-    var windowStart = snapshotWindowStart(snapshotDate);
-    return fuelDate > windowStart && fuelDate <= snapshotDate;
-  }
-
-  function findNearestSnapshotForFuelDate(fuelDate, telRows) {
-    var best = null;
-    var bestGap = Infinity;
-    telRows.forEach(function(r) {
-      var snapshotDate = String(r.record_date);
-      if (!fuelDateInSnapshotWindow(fuelDate, snapshotDate)) return;
-      var gap = parseDateStr(snapshotDate).getTime() - parseDateStr(fuelDate).getTime();
-      if (gap < bestGap) {
-        bestGap = gap;
-        best = r;
-      }
-    });
-    return best;
-  }
-
-  function mergeFuelAndTelematics(fuelRows, telRows) {
-    var byDate = {};
-    fuelRows.forEach(function(r) {
-      var fuelDate = String(r.record_date);
-      byDate[fuelDate] = byDate[fuelDate] || {};
-      byDate[fuelDate].hasFuel = true;
-      byDate[fuelDate].litres = (byDate[fuelDate].litres || 0) + (parseFloat(r.litres) || 0);
-      byDate[fuelDate].cost = (byDate[fuelDate].cost || 0) + (parseFloat(r.total_cost) || 0);
-    });
-
-    var snapshotGroups = {};
-    fuelRows.forEach(function(fuelRow) {
-      var fuelDate = String(fuelRow.record_date);
-      var snap = findNearestSnapshotForFuelDate(fuelDate, telRows);
-      if (!snap) return;
-      var snapKey = String(snap.record_date);
-      if (!snapshotGroups[snapKey]) {
-        snapshotGroups[snapKey] = { snap: snap, fuelRecords: [] };
-      }
-      snapshotGroups[snapKey].fuelRecords.push(fuelRow);
-    });
-
-    Object.keys(snapshotGroups).forEach(function(snapKey) {
-      var group = snapshotGroups[snapKey];
-      var count = group.fuelRecords.length;
-      if (count === 0) return;
-      var idleShare = (parseFloat(group.snap.idle_hours) || 0) / count;
-      var opShare = (parseFloat(group.snap.operating_hours) || 0) / count;
-      group.fuelRecords.forEach(function(fuelRow) {
-        var fd = String(fuelRow.record_date);
-        byDate[fd] = byDate[fd] || {};
-        byDate[fd].hasTel = true;
-        byDate[fd].operating_hours = (byDate[fd].operating_hours || 0) + opShare;
-        byDate[fd].idle_hours = (byDate[fd].idle_hours || 0) + idleShare;
-      });
-    });
-
-    return byDate;
-  }
-
-  function buildConstructionDailyRows(byDate, idleRate, avgCostPerLitre, useEstimatedPricing) {
-    var dates = Object.keys(byDate).sort();
-    var dailyRows = [];
-    dates.forEach(function(date) {
-      var d = byDate[date];
-      var hasFuel = !!d.hasFuel;
-      var hasTel = !!d.hasTel;
-      var litres = d.litres || 0;
-      var cost = d.cost || 0;
-      var opHours = hasTel ? (d.operating_hours || 0) : 0;
-      var idleHours = hasTel ? (d.idle_hours || 0) : 0;
-      var idleFuel = hasTel ? idleHours * idleRate : 0;
-      var operatingFuel;
-      if (litres > 0) {
-        if (idleFuel > litres) idleFuel = litres;
-        operatingFuel = litres - idleFuel;
-      } else if (useEstimatedPricing && hasTel) {
-        operatingFuel = 0;
-      } else {
-        idleFuel = 0;
-        operatingFuel = 0;
-      }
-      if (cost === 0 && useEstimatedPricing && avgCostPerLitre > 0 && hasTel) {
-        cost = (idleFuel + operatingFuel) * avgCostPerLitre;
-      }
-      dailyRows.push({
-        date: date, litres: litres, cost: cost, opHours: opHours, idleHours: idleHours,
-        operatingFuel: operatingFuel, idleFuel: idleFuel,
-        hasFuel: hasFuel, hasTel: hasTel
-      });
-    });
-    return dailyRows;
-  }
-
-  function isFillToFillSplitRow(r) {
-    return r.hasTel && r.opHours > 0 && (!r.hasFuel || r.litres === 0);
-  }
-
   function naSpan() {
     return '<span class="cell-na" title="' + esc(NO_DATA_TITLE) + '">—</span>';
-  }
-
-  function fillToFillIcon() {
-    return '<span class="row-info-icon" title="' + esc(FILL_TO_FILL_TITLE) + '">i</span>';
   }
 
   function chartRowsWithData(rows) {
@@ -804,68 +641,24 @@
       return;
     }
 
-    var telSelect = 'record_date, operating_hours, idle_hours, total_engine_hours, odometer_km';
-    if (!isOnRoad) telSelect += ', litres_consumed';
-
     var telResult = await supabase
       .from('telematics_records')
-      .select(telSelect)
+      .select('record_date, operating_hours, idle_hours, total_engine_hours, odometer_km, litres_consumed')
       .eq('asset_id', selectedAsset.id)
       .eq('user_id', effectiveAccountId)
       .gte('record_date', dateFrom)
       .lte('record_date', dateTo)
       .order('record_date');
 
-    var fuelRows = [];
-    if (isOnRoad) {
-      var fuelResult = await supabase
-        .from('fuel_records')
-        .select('record_date, litres, total_cost')
-        .eq('asset_id', selectedAsset.id)
-        .eq('user_id', effectiveAccountId)
-        .gte('record_date', dateFrom)
-        .lte('record_date', dateTo)
-        .order('record_date');
-      var fuelPurchasesResult = await supabase
-        .from('fuel_purchases')
-        .select('vehicle_id, litres, cost_nzd, purchase_date')
-        .eq('vehicle_id', selectedAsset.id)
-        .eq('user_id', effectiveAccountId)
-        .gte('purchase_date', dateFrom)
-        .lte('purchase_date', dateTo);
-      var normalizedPurchases = (fuelPurchasesResult.data || []).map(function(r) {
-        return {
-          record_date: r.purchase_date,
-          litres: r.litres,
-          total_cost: r.cost_nzd
-        };
-      });
-      fuelRows = (fuelResult.data || []).concat(normalizedPurchases);
-      fuelRows.sort(function(a, b) {
-        return String(a.record_date).localeCompare(String(b.record_date));
-      });
-    }
-
     btn.disabled = false; btn.textContent = 'Apply Filters';
 
     var telRows = telResult.data || [];
-
-    if (isOnRoad) {
-      if (fuelRows.length === 0 && telRows.length === 0) {
-        hideNoFuelBanner();
-        showEmpty(true);
-        return;
-      }
+    if (telRows.length === 0) {
       hideNoFuelBanner();
-      runOnRoadAnalysis(fuelRows, telRows, idleRate);
-    } else {
-      if (telRows.length === 0) {
-        hideNoFuelBanner();
-        showEmpty(false);
-        return;
-      }
-      runConstructionAnalysis(telRows, idleRate);
+      showEmpty(false);
+      return;
     }
+    runConstructionAnalysis(telRows, idleRate);
   }
 
   function runConstructionAnalysis(telRows, idleRate) {
@@ -911,54 +704,6 @@
 
     renderConstructionChart(dailyRows);
     renderConstructionTable(dailyRows);
-  }
-
-  function runOnRoadAnalysis(fuelRows, telRows, idleRate) {
-    setViewMode(true);
-    var byDate = mergeFuelAndTelematics(fuelRows, telRows);
-    var odo = computeOdometerKmByDate(telRows);
-    var dailyRows = buildConstructionDailyRows(byDate, idleRate, 0, false);
-
-    var totalLitres = 0, totalCost = 0, totalIdleFuel = 0;
-    dailyRows.forEach(function(r) {
-      totalLitres += r.litres;
-      totalCost += r.cost;
-      totalIdleFuel += r.idleFuel;
-      r.kmTravelled = odo.dailyKm[r.date] || 0;
-      r.idleFuelCost = r.litres > 0 ? (r.cost * (r.idleFuel / r.litres)) : 0;
-      r.costPerKm = r.kmTravelled > 0 ? (r.cost / r.kmTravelled) : null;
-    });
-
-    var idleCost = totalLitres > 0 ? (totalCost * (totalIdleFuel / totalLitres)) : 0;
-    var idlePct = totalCost > 0 ? (idleCost / totalCost * 100) : 0;
-
-    document.getElementById('kpi-onroad-total-cost').textContent = fmtMoney(totalCost);
-    document.getElementById('kpi-onroad-total-litres-sub').textContent = totalLitres.toLocaleString(undefined, {maximumFractionDigits:0}) + ' litres total';
-    document.getElementById('kpi-onroad-idle-cost').textContent = fmtMoney(idleCost);
-    document.getElementById('kpi-onroad-idle-pct-sub').textContent = idlePct.toFixed(1) + '% of total fuel cost';
-
-    if (!odo.hasOdometerData) {
-      showNoOdometerKpis();
-      renderOnRoadChartNoOdometer();
-    } else {
-      document.getElementById('kpi-total-km').textContent = odo.totalKm.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' km';
-      document.getElementById('kpi-total-km').className = 'kpi-value teal';
-      document.getElementById('kpi-total-km-sub').textContent = 'for selected period';
-      document.getElementById('kpi-total-km-sub').className = 'kpi-sub';
-      if (odo.totalKm > 0) {
-        setKpiValue('kpi-cost-per-km', '$' + (totalCost / odo.totalKm).toFixed(2));
-        document.getElementById('kpi-cost-per-km').className = 'kpi-value teal';
-        document.getElementById('kpi-cost-per-km-sub').textContent = 'fuel cost per kilometre';
-      } else {
-        setKpiValue('kpi-cost-per-km', '—', NO_DATA_TITLE);
-        document.getElementById('kpi-cost-per-km').className = 'kpi-value teal';
-        document.getElementById('kpi-cost-per-km-sub').textContent = 'no kilometres recorded in period';
-      }
-      document.getElementById('kpi-cost-per-km-sub').className = 'kpi-sub';
-      renderOnRoadChart(dailyRows);
-    }
-
-    renderOnRoadTable(dailyRows, !odo.hasOdometerData);
   }
 
   function renderConstructionChart(rows) {
@@ -1007,49 +752,6 @@
     });
   }
 
-  function renderOnRoadChart(rows) {
-    document.getElementById('chart-empty').style.display = 'none';
-    var chartRows = rows.filter(function(r) { return r.costPerKm != null; });
-    if (chartRows.length === 0) {
-      document.getElementById('chart-empty').style.display = 'block';
-      document.getElementById('chart-empty').innerHTML = '<span class="icon">📊</span>No daily cost per km data for days with recorded travel in this period.';
-      if (fuelChart) { fuelChart.destroy(); fuelChart = null; }
-      return;
-    }
-
-    var ctx = document.getElementById('fuel-chart').getContext('2d');
-    if (fuelChart) fuelChart.destroy();
-    fuelChart = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        datasets: [{
-          label: 'Cost per KM ($)',
-          data: chartRows.map(function(r) { return { x: r.date, y: Math.round(r.costPerKm * 100) / 100 }; }),
-          backgroundColor: '#0EA57A',
-          borderRadius: 4
-        }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        datasets: { bar: chartBarLayout() },
-        scales: {
-          x: chartTimeScale(lastDateFrom, lastDateTo),
-          y: {
-            grid: { color: 'rgba(255,255,255,0.04)' },
-            ticks: { color: '#CBD5E1', font: { size: 12 }, callback: function(v) { return '$' + v; } }
-          }
-        },
-        plugins: { legend: { display: false } }
-      }
-    });
-  }
-
-  function renderOnRoadChartNoOdometer() {
-    document.getElementById('chart-empty').style.display = 'block';
-    document.getElementById('chart-empty').innerHTML = '<span class="icon">📊</span>' + NO_ODOMETER_MSG;
-    if (fuelChart) { fuelChart.destroy(); fuelChart = null; }
-  }
-
   function renderConstructionTable(rows) {
     var tbody = document.getElementById('data-tbody');
     if (rows.length === 0) {
@@ -1057,13 +759,7 @@
       return;
     }
     tbody.innerHTML = rows.map(function(r) {
-      var litresCell;
-      if (!r.hasFuel) {
-        litresCell = '<span class="cell-with-hint">' + naSpan() + (isFillToFillSplitRow(r) ? fillToFillIcon() : '') + '</span>';
-      } else {
-        litresCell = '<span class="cell-with-hint">' + r.litres.toFixed(1) + ' L' +
-          (isFillToFillSplitRow(r) ? fillToFillIcon() : '') + '</span>';
-      }
+      var litresCell = r.hasFuel ? (r.litres.toFixed(1) + ' L') : naSpan();
 
       var opHoursCell = r.hasTel ? r.opHours.toFixed(1) + ' hr' : naSpan();
       var idleHoursCell;
@@ -1096,40 +792,6 @@
         '<td>' + idleHoursCell + '</td>' +
         '<td>' + opRateCell + '</td>' +
         '<td style="color:#EF9F27; font-weight:600;">' + idleRateCell + '</td>' +
-      '</tr>';
-    }).join('');
-  }
-
-  function renderOnRoadTable(rows, noOdometer) {
-    var tbody = document.getElementById('data-tbody');
-    if (rows.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><span class="icon">⛽</span>No data found for this asset and date range.</div></td></tr>';
-      return;
-    }
-    tbody.innerHTML = rows.map(function(r) {
-      var kmCell;
-      if (noOdometer) {
-        kmCell = naSpan();
-      } else if (!r.hasTel) {
-        kmCell = naSpan();
-      } else if (r.kmTravelled > 0) {
-        kmCell = r.kmTravelled.toFixed(1) + ' km';
-      } else {
-        kmCell = '0 km';
-      }
-
-      var costCell = r.hasFuel ? fmtMoney(r.cost) : naSpan();
-      var costPerKmCell = (!noOdometer && r.costPerKm != null) ? '<span class="cell-teal">$' + r.costPerKm.toFixed(2) + '</span>' : naSpan();
-      var idleHoursCell = r.hasTel ? r.idleHours.toFixed(1) + ' hr' : naSpan();
-      var idleCostCell = r.hasFuel && r.litres > 0 ? fmtMoney(r.idleFuelCost) : naSpan();
-
-      return '<tr>' +
-        '<td class="cell-strong">' + formatDateShort(r.date) + '</td>' +
-        '<td>' + kmCell + '</td>' +
-        '<td>' + costCell + '</td>' +
-        '<td>' + costPerKmCell + '</td>' +
-        '<td>' + idleHoursCell + '</td>' +
-        '<td style="color:#EF9F27; font-weight:600;">' + idleCostCell + '</td>' +
       '</tr>';
     }).join('');
   }

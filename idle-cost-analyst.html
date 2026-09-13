@@ -602,18 +602,9 @@
     var idle = FCM.resolvedIdleRate(selectedAsset);
     var idleRate = idle.rate;
 
-    var fuelResult = await supabase
-      .from('fuel_records')
-      .select('record_date, litres, total_cost')
-      .eq('asset_id', selectedAsset.id)
-      .eq('user_id', effectiveAccountId)
-      .gte('record_date', dateFrom)
-      .lte('record_date', dateTo)
-      .order('record_date');
-
     var telResult = await supabase
       .from('telematics_records')
-      .select('record_date, idle_hours, total_engine_hours, asset_id')
+      .select('record_date, idle_hours, total_engine_hours, litres_consumed, asset_id')
       .eq('asset_id', selectedAsset.id)
       .eq('user_id', effectiveAccountId)
       .gte('record_date', dateFrom)
@@ -630,7 +621,6 @@
 
     btn.disabled = false; btn.textContent = 'Apply Filters';
 
-    var fuelRows = (fuelResult.data || []);
     var telRows = (telResult.data || []);
     var totalEngineHours = latestTel.data && latestTel.data.length
       ? FCM.num(latestTel.data[0].total_engine_hours) : FCM.getLatestEngineHours(telRows, selectedAsset.id);
@@ -640,13 +630,11 @@
       return;
     }
 
-    var totalLitres = 0, totalFuelCost = 0;
-    fuelRows.forEach(function(r) {
-      totalLitres += parseFloat(r.litres) || 0;
-      totalFuelCost += parseFloat(r.total_cost) || 0;
-    });
-    var avgCostPerLitre = totalLitres > 0 ? (totalFuelCost / totalLitres) : (defaultMachineryFuelCostPerLitre || 0);
-    var fuelPricingAvailable = (fuelRows.length > 0 && totalLitres > 0) || (defaultMachineryFuelCostPerLitre > 0);
+    var machineryFuel = FCM.machineryFuelFromTelematics(telRows, defaultMachineryFuelCostPerLitre);
+    var avgCostPerLitre = machineryFuel.litres > 0
+      ? machineryFuel.cost / machineryFuel.litres
+      : (defaultMachineryFuelCostPerLitre || 0);
+    var fuelPricingAvailable = defaultMachineryFuelCostPerLitre > 0;
 
     var byDate = {};
     telRows.forEach(function(r) {

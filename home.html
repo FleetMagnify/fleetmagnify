@@ -421,7 +421,7 @@
     el.removeAttribute('title');
   }
 
-  function computeAssetMetrics(assets, purchaseRows, telRows, latestTelRows, dateFrom, dateTo) {
+  function computeAssetMetrics(assets, purchaseRows, fuelRecordRows, telRows, latestTelRows, dateFrom, dateTo) {
     var weeks = daysInRange(dateFrom, dateTo) / 7;
     var engineHoursMap = {};
     (latestTelRows || []).forEach(function(r) {
@@ -438,10 +438,12 @@
     var results = assets.map(function(asset) {
       var assetTel = telRows.filter(function(r) { return Number(r.asset_id) === Number(asset.id); });
       var assetPurchases = purchaseRows.filter(function(r) { return Number(r.vehicle_id) === Number(asset.id); });
+      var assetFuelRecords = (fuelRecordRows || []).filter(function(r) { return Number(r.asset_id) === Number(asset.id); });
 
       var fuel = FCM.assetFuelTotals(asset, {
         telRows: assetTel,
         purchaseRows: assetPurchases,
+        fuelRecordRows: assetFuelRecords,
         machineryCpl: defaultMachineryFuelCostPerLitre
       });
       var fuelCost = fuel.cost;
@@ -518,10 +520,12 @@
     // chart on this page.
     var assetsResult = await supabase.from('assets').select('*').eq('user_id', effectiveAccountId).eq('is_ignored', false).order('asset_name');
     var assets = assetsResult.data || [];
-    if (assets.length === 0) return { assets: [], purchases: [], tel: [], latestTel: [] };
+    if (assets.length === 0) return { assets: [], purchases: [], fuelRecords: [], tel: [], latestTel: [] };
 
     var fuelPurchasesResult = await supabase.from('fuel_purchases').select('vehicle_id, litres, cost_nzd, purchase_date')
       .eq('user_id', effectiveAccountId).gte('purchase_date', dateFrom).lte('purchase_date', dateTo);
+    var fuelRecordsResult = await supabase.from('fuel_records').select('asset_id, record_date, litres, total_cost')
+      .eq('user_id', effectiveAccountId).gte('record_date', dateFrom).lte('record_date', dateTo);
     var telResult = await supabase.from('telematics_records').select('asset_id, idle_hours, operating_hours, total_engine_hours, litres_consumed, record_date')
       .eq('user_id', effectiveAccountId).gte('record_date', dateFrom).lte('record_date', dateTo);
     var latestTelResult = await supabase.from('telematics_records').select('asset_id, total_engine_hours, record_date')
@@ -530,6 +534,7 @@
     return {
       assets: assets,
       purchases: fuelPurchasesResult.data || [],
+      fuelRecords: fuelRecordsResult.data || [],
       tel: telResult.data || [],
       latestTel: latestTelResult.data || []
     };
@@ -565,9 +570,9 @@
     document.getElementById('empty-state').hidden = true;
     document.getElementById('dashboard-content').hidden = false;
 
-    var curMetrics = computeAssetMetrics(current.assets, current.purchases, current.tel, current.latestTel, mtd.from, mtd.to);
+    var curMetrics = computeAssetMetrics(current.assets, current.purchases, current.fuelRecords, current.tel, current.latestTel, mtd.from, mtd.to);
     var prevData = await fetchData(prev.from, prev.to);
-    var prevMetrics = computeAssetMetrics(prevData.assets, prevData.purchases, prevData.tel, prevData.latestTel, prev.from, prev.to);
+    var prevMetrics = computeAssetMetrics(prevData.assets, prevData.purchases, prevData.fuelRecords, prevData.tel, prevData.latestTel, prev.from, prev.to);
 
     var partialFleet = fleetHasPartial(curMetrics.fleetUnavailable);
     var partialTooltip = fleetPartialTooltip(curMetrics.fleetUnavailable);
