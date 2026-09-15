@@ -23,8 +23,11 @@
  *   - Every write is scoped to DEMO_USER_ID or asset_ids confirmed to belong
  *     to that user
  *   - Probes live table columns before inserting (does not assume schema)
- *   - Idempotent: deletes this user's previously generated history in the
- *     75-day window, then re-inserts
+ *   - Idempotent: deletes this user's previously generated history for the
+ *     matched demo assets, then re-inserts the current 75-day window ending
+ *     todayNz(). Deletes are not bounded to the new window start — a shifted
+ *     re-run would otherwise leave a tail whose cumulative hour meters do not
+ *     join the new series.
  */
 
 var { createClient } = require('@supabase/supabase-js');
@@ -48,7 +51,7 @@ var ON_ROAD_TYPES = {
   'Truck and Trailer / B-Train': true
 };
 
-// Matariki 2026 falls inside the 75-day window from 27 Aug 2026.
+// Matariki 2026 falls inside a July–September 75-day window.
 var NZ_HOLIDAYS = {
   '2026-07-10': true
 };
@@ -78,6 +81,13 @@ var PROFILES = [
     key: 'grader',
     match: /komatsu.*gd655|gd655.*grader/i,
     kind: 'machinery',
+    // ~8100 at window-start so the GD655 sits ~70% through a typical life
+    // by window-end. Reports read telematics total_engine_hours, not
+    // assets.current_hours (the Assets UI does not even edit that field).
+    // A live current_hours of 700 is the original fleet-import seed — do
+    // not rebase this constant onto 700 or Idle/Job Cost hour meters jump
+    // down from ~8.5k. reconcileStartHours() will only rebase if telematics
+    // themselves also show a low meter.
     startHours: 8100,
     weekdayRuntime: [8.2, 10.4],
     saturdayRuntime: [0, 4.5],
@@ -530,6 +540,115 @@ function matchProfile(asset) {
     if (PROFILES[i].match.test(name)) return PROFILES[i];
   }
   return null;
+}
+
+function cloneProfile(profile) {
+  var out = {};
+  Object.keys(profile).forEach(function(k) { out[k] = profile[k]; });
+  return out;
+}
+
+function minMaxDates(rows, col) {
+  if (!rows || !rows.length) return 'n/a';
+  var lo = rows[0][col];
+  var hi = rows[0][col];
+  rows.forEach(function(r) {
+    var d = r[col];
+    if (!d) return;
+    if (!lo || d < lo) lo = d;
+    if (!hi || d > hi) hi = d;
+  });
+  return (lo || 'n/a') + ' → ' + (hi || 'n/a');
+}
+
+async function fetchDateExtent(supabase, table, dateCol, idCol, ids) {
+  var empty = { n: 0, lo: null, hi: null, before: 0 };
+  if (!ids.length) return empty;
+  var countRes = await supabase.from(table).select('id', { count: 'exact', head: true })
+    .eq('user_id', DEMO_USER_ID).in(idCol, ids);
+  if (countRes.error) {
+    console.log('  WARN ' + table + ' count: ' + countRes.error.message);
+    return empty;
+  }
+  var n = countRes.count || 0;
+  if (!n) return empty;
+  var minRes = await supabase.from(table).select(dateCol)
+    .eq('user_id', DEMO_USER_ID).in(idCol, ids)
+    .order(dateCol, { ascending: true }).limit(1);
+  var maxRes = await supabase.from(table).select(dateCol)
+    .eq('user_id', DEMO_USER_ID).in(idCol, ids)
+    .order(dateCol, { ascending: false }).limit(1);
+  var lo = minRes.data && minRes.data[0] && minRes.data[0][dateCol];
+  var hi = maxRes.data && maxRes.data[0] && maxRes.data[0][dateCol];
+  return { n: n, lo: lo || null, hi: hi || null };
+}
+
+async function countBefore(supabase, table, dateCol, idCol, ids, startDate) {
+  if (!ids.length) return 0;
+  var res = await supabase.from(table).select('id', { count: 'exact', head: true })
+    .eq('user_id', DEMO_USER_ID).in(idCol, ids).lt(dateCol, startDate);
+  if (res.error) {
+    console.log('  WARN ' + table + ' leftover count: ' + res.error.message);
+    return 0;
+  }
+  return res.count || 0;
+}
+
+async function loadTelExtent(supabase, assetId) {
+  var latest = await supabase.from('telematics_records')
+    .select('record_date, total_engine_hours, odometer_km, operating_hours, idle_hours')
+    .eq('user_id', DEMO_USER_ID)
+    .eq('asset_id', assetId)
+    .order('record_date', { ascending: false })
+    .limit(1);
+  var earliest = await supabase.from('telematics_records')
+    .select('record_date, total_engine_hours, odometer_km')
+    .eq('user_id', DEMO_USER_ID)
+    .eq('asset_id', assetId)
+    .order('record_date', { ascending: true })
+    .limit(1);
+  if (latest.error) throw new Error('telematics latest failed: ' + latest.error.message);
+  if (earliest.error) throw new Error('telematics earliest failed: ' + earliest.error.message);
+  return {
+    latest: (latest.data && latest.data[0]) || null,
+    earliest: (earliest.data && earliest.data[0]) || null
+  };
+}
+
+// startHours is the hour-meter at the BEGINNING of the generated window.
+// Reports read telematics total_engine_hours; assets.current_hours is only
+// written by this script / VisionLink / Excel import. Rebase onto the live
+// assets row only when telematics agree the machine is a low-hour unit —
+// otherwise a stale 700 seed would collapse a ~8.5k hour meter in reports.
+function reconcileStartHours(profile, asset, telLatest) {
+  if (profile.kind !== 'machinery') return { profile: profile, note: null };
+  var live = parseFloat(asset.current_hours);
+  var telH = telLatest && telLatest.total_engine_hours != null
+    ? parseFloat(telLatest.total_engine_hours) : NaN;
+  var start = profile.startHours;
+  if (isNaN(live) && isNaN(telH)) return { profile: profile, note: null };
+
+  var telAgreesWithProfile = !isNaN(telH) && telH >= start && telH < start + 2500;
+  var bothLow = !isNaN(live) && live < 2000 && (isNaN(telH) || telH < 2000);
+
+  if (telAgreesWithProfile) {
+    var note = profile.key + ': keeping startHours=' + start +
+      ' (telematics hour meter ' + telH + ' on ' + telLatest.record_date +
+      '; assets.current_hours=' + live + ' is a stale seed, not used by reports)';
+    return { profile: profile, note: note };
+  }
+  if (bothLow && Math.abs((isNaN(live) ? 0 : live) - start) > 2000) {
+    var cloned = cloneProfile(profile);
+    cloned.startHours = isNaN(telH) ? live : Math.min(live, telH);
+    var note2 = profile.key + ': REBASING startHours ' + start + ' → ' + cloned.startHours +
+      ' because live current_hours=' + live + ' and telematics hours=' +
+      (isNaN(telH) ? 'n/a' : telH) + ' are both far below the profile constant';
+    return { profile: cloned, note: note2 };
+  }
+  var note3 = profile.key + ': startHours=' + start +
+    ' assets.current_hours=' + (isNaN(live) ? 'n/a' : live) +
+    ' telematics hours=' + (isNaN(telH) ? 'n/a' : telH);
+  return { profile: profile, note: note3 };
 }
 
 function buildTransporterActiveSet(dates, rng) {
@@ -1320,6 +1439,22 @@ function simulateLocally() {
     console.error('\nSimulate failed');
     process.exit(1);
   }
+  var graderProfile = PROFILES.filter(function(p) { return p.key === 'grader'; })[0];
+  var keep8100 = reconcileStartHours(graderProfile, { current_hours: 700 }, {
+    total_engine_hours: 8540, record_date: '2026-08-28'
+  });
+  if (keep8100.profile.startHours !== 8100) {
+    console.error('grader reconcile should keep startHours 8100 when telematics is ~8.5k, got ' + keep8100.profile.startHours);
+    process.exit(1);
+  }
+  var rebase700 = reconcileStartHours(graderProfile, { current_hours: 700 }, {
+    total_engine_hours: 690, record_date: '2026-08-28'
+  });
+  if (rebase700.profile.startHours !== 690) {
+    console.error('grader reconcile should rebase onto live telematics when both meters are low, got ' + rebase700.profile.startHours);
+    process.exit(1);
+  }
+  console.log('Grader meter reconcile: keep 8100 when tel~8.5k; rebase when tel~700. ok');
   console.log('\nSimulate passed');
 }
 
@@ -1428,7 +1563,7 @@ async function main() {
     if (profile.kind === 'machinery' && onRoad) {
       console.log('  WARN: ' + asset.asset_name + ' matched a machinery profile but asset_type=' + asset.asset_type);
     }
-    byKey[profile.key] = { asset: asset, profile: profile };
+    byKey[profile.key] = { asset: asset, profile: cloneProfile(profile) };
     console.log('  matched ' + profile.key + ' → id=' + asset.id + ' "' + asset.asset_name + '" type=' + asset.asset_type);
   });
 
@@ -1460,6 +1595,52 @@ async function main() {
   var untouchedTruckIds = Object.keys(allMatchedByKey).filter(function(k) {
     return allMatchedByKey[k].profile.kind === 'truck' && !byKey[k];
   }).map(function(k) { return Number(allMatchedByKey[k].asset.id); });
+
+  console.log('');
+  console.log('Existing Demo rows (before this run)…');
+  var existingTel = await fetchDateExtent(supabase, 'telematics_records', 'record_date', 'asset_id', demoAssetIds);
+  var leftoverTel = await countBefore(supabase, 'telematics_records', 'record_date', 'asset_id', demoAssetIds, startDate);
+  var existingFuel = await fetchDateExtent(supabase, 'fuel_purchases', 'purchase_date', 'vehicle_id', demoAssetIds);
+  var leftoverFuel = await countBefore(supabase, 'fuel_purchases', 'purchase_date', 'vehicle_id', demoAssetIds, startDate);
+  console.log('  telematics_records: ' + existingTel.n + ' rows  ' + (existingTel.lo || 'n/a') + ' → ' + (existingTel.hi || 'n/a') +
+    (leftoverTel ? '  (' + leftoverTel + ' before new window start — will be cleared so hour meters stay continuous)' : ''));
+  console.log('  fuel_purchases:     ' + existingFuel.n + ' rows  ' + (existingFuel.lo || 'n/a') + ' → ' + (existingFuel.hi || 'n/a') +
+    (leftoverFuel ? '  (' + leftoverFuel + ' before new window start — will be cleared)' : ''));
+  if (fuelRecordsExist) {
+    var existingFr = await fetchDateExtent(supabase, 'fuel_records', 'record_date', 'asset_id', demoAssetIds);
+    var leftoverFr = await countBefore(supabase, 'fuel_records', 'record_date', 'asset_id', demoAssetIds, startDate);
+    console.log('  fuel_records:       ' + existingFr.n + ' rows  ' + (existingFr.lo || 'n/a') + ' → ' + (existingFr.hi || 'n/a') +
+      (leftoverFr ? '  (' + leftoverFr + ' before new window start — will be cleared)' : ''));
+  }
+  var existingJa = await fetchDateExtent(supabase, 'job_assets', 'work_date', 'asset_id', demoAssetIds);
+  console.log('  job_assets:         ' + existingJa.n + ' rows  ' + (existingJa.lo || 'n/a') + ' → ' + (existingJa.hi || 'n/a'));
+
+  console.log('');
+  console.log('Live hour-meter / odometer vs profile constants…');
+  var meterKeys = Object.keys(byKey);
+  for (var mi = 0; mi < meterKeys.length; mi++) {
+    var mk = meterKeys[mi];
+    var entry = byKey[mk];
+    var telExt = await loadTelExtent(supabase, Number(entry.asset.id));
+    var rec = reconcileStartHours(entry.profile, entry.asset, telExt.latest);
+    byKey[mk].profile = rec.profile;
+    var latest = telExt.latest;
+    var earliest = telExt.earliest;
+    if (entry.profile.kind === 'machinery') {
+      console.log('  ' + mk + ' id=' + entry.asset.id +
+        '  assets.current_hours=' + entry.asset.current_hours +
+        '  profile.startHours=' + rec.profile.startHours);
+    } else {
+      console.log('  ' + mk + ' id=' + entry.asset.id +
+        '  assets.current_odometer=' + entry.asset.current_odometer +
+        '  profile.startOdo=' + rec.profile.startOdo);
+    }
+    console.log('    telematics ' + ((earliest && earliest.record_date) || 'n/a') +
+      ' → ' + ((latest && latest.record_date) || 'n/a') +
+      '  latest hours=' + (latest && latest.total_engine_hours) +
+      ' odo=' + (latest && latest.odometer_km));
+    if (rec.note) console.log('    ' + rec.note);
+  }
 
   var beforeMachinery = await fetchHoursByAsset(supabase, demoAssetIds, startDate, endDate);
   var beforeTruckTel = {};
@@ -1726,7 +1907,17 @@ async function main() {
   if (sanityFailed) throw new Error('Pre-write sanity checks failed — nothing written');
 
   if (dryRun) {
+    var dryJobAssetCount = 0;
+    if (!onlyKeys) {
+      JOB_SPECS.forEach(function(spec) {
+        spec.assetKeys.forEach(function(assetKey) {
+          if (!byKey[assetKey]) return;
+          dryJobAssetCount += workDatesFor(spec, assetKey).length;
+        });
+      });
+    }
     printSummary(summaries, onlyKeys ? [] : jobPayloads, startDate, endDate, pricing);
+    printTablePlan(startDate, endDate, telRows, fuelPurchaseRows, fuelRecordRows, dryJobAssetCount, onlyKeys);
     console.log('\nDRY RUN complete — no database writes.');
     return;
   }
@@ -1736,22 +1927,21 @@ async function main() {
   // -------------------------------------------------------------------------
   console.log('');
   console.log('Clearing previously generated demo history for this user only…');
+  console.log('  (all rows for these demo asset ids, not only the new window — otherwise a');
+  console.log('   shifted re-run leaves a tail whose cumulative hour meters jump backwards)');
 
   await deleteScoped(supabase, 'telematics_records', {
     user_id: DEMO_USER_ID,
-    asset_id: { in: demoAssetIds },
-    record_date: { gte: startDate }
+    asset_id: { in: demoAssetIds }
   });
   await deleteScoped(supabase, 'fuel_purchases', {
     user_id: DEMO_USER_ID,
-    vehicle_id: { in: demoAssetIds },
-    purchase_date: { gte: startDate }
+    vehicle_id: { in: demoAssetIds }
   });
   if (fuelRecordsExist) {
     await deleteScoped(supabase, 'fuel_records', {
       user_id: DEMO_USER_ID,
-      asset_id: { in: demoAssetIds },
-      record_date: { gte: startDate }
+      asset_id: { in: demoAssetIds }
     });
   }
   var calExists = await tableExists(supabase, 'fuel_calibration_intervals');
@@ -1973,6 +2163,26 @@ async function main() {
   }
 
   console.log('\nDone.');
+}
+
+function printTablePlan(startDate, endDate, telRows, fuelPurchaseRows, fuelRecordRows, jobAssetCount, onlyKeys) {
+  console.log('');
+  console.log('========== ROW COUNTS / DATE RANGES ==========');
+  console.log('Generated window: ' + startDate + ' → ' + endDate + ' (' + DAYS + ' days, ending today NZ)');
+  console.log('telematics_records: ' + telRows.length + '  ' + minMaxDates(telRows, 'record_date'));
+  console.log('fuel_purchases:     ' + fuelPurchaseRows.length + '  ' + minMaxDates(fuelPurchaseRows, 'purchase_date'));
+  console.log('fuel_records:       ' + fuelRecordRows.length + '  ' + minMaxDates(fuelRecordRows, 'record_date'));
+  if (onlyKeys) {
+    console.log('job_assets:         (unchanged — --only leaves jobs untouched)');
+    console.log('jobs:               (unchanged)');
+    console.log('user_settings:      (unchanged)');
+  } else {
+    console.log('job_assets:         ' + jobAssetCount + '  (active weekdays on each job)');
+    console.log('jobs:               ' + JOB_SPECS.length + '  (replaced; dates from startOffset/endOffset vs today)');
+    console.log('user_settings:      machinery_fuel_cost_per_litre set only if currently null');
+  }
+  console.log('assets.current_* :  updated for the regenerated asset(s) to window-end meters');
+  console.log('=============================================');
 }
 
 function printSummary(summaries, jobs, startDate, endDate, pricing) {
