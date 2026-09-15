@@ -12,6 +12,9 @@
  *     node scripts/generate-demo-history.js [--dry-run] [--only kenworth]
  *     node scripts/generate-demo-history.js --only excavator,grader,dozer,adt,compactor
  *
+ *   Also reads gitignored .env / .env.local from the repo root (does not
+ *   override variables already in the process environment).
+ *
  *   --only <keys>  Regenerates the named asset(s) (telematics + fuel +
  *     calibration rows for those asset ids). Comma- or space-separated.
  *     Does not touch jobs or user_settings. Known keys: excavator,
@@ -31,6 +34,31 @@
  */
 
 var { createClient } = require('@supabase/supabase-js');
+var fs = require('fs');
+var path = require('path');
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  var text = fs.readFileSync(filePath, 'utf8');
+  text.split(/\r?\n/).forEach(function(line) {
+    var trimmed = line.trim();
+    if (!trimmed || trimmed.charAt(0) === '#') return;
+    if (trimmed.indexOf('export ') === 0) trimmed = trimmed.slice(7).trim();
+    var eq = trimmed.indexOf('=');
+    if (eq < 1) return;
+    var key = trimmed.slice(0, eq).trim();
+    var val = trimmed.slice(eq + 1).trim();
+    if (!key) return;
+    if ((val.charAt(0) === '"' && val.charAt(val.length - 1) === '"') ||
+        (val.charAt(0) === "'" && val.charAt(val.length - 1) === "'")) {
+      val = val.slice(1, -1);
+    }
+    if (process.env[key] == null || process.env[key] === '') process.env[key] = val;
+  });
+}
+
+loadEnvFile(path.join(__dirname, '..', '.env'));
+loadEnvFile(path.join(__dirname, '..', '.env.local'));
 
 var DEMO_USER_ID = '023182a8-1563-46dd-a7c3-1430fbfad5df';
 var DAYS = 75;
