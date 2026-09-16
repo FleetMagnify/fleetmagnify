@@ -329,6 +329,7 @@
     function showError(message) {
       errorEl.innerHTML = message;
       errorEl.classList.add('is-visible');
+      errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
     function hideError() {
@@ -386,6 +387,7 @@
         if (result.ok && result.data && result.data.ok) {
           form.hidden = true;
           successEl.hidden = false;
+          successEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
           return;
         }
         var serverError = result.data && result.data.error;
@@ -394,8 +396,16 @@
       .catch(function(err) {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Send Message';
-        var fallback = ' Could not send your message. Please email us at <a href="' + MAILTO + '">support@fleetmagnify.com</a>.';
-        showError((err && err.message ? err.message : 'Something went wrong.') + fallback);
+        var msg = (err && err.message) ? err.message : 'Could not send your message.';
+        if (msg.indexOf('support@fleetmagnify.com') === -1) {
+          msg += ' Please email us at <a href="' + MAILTO + '">support@fleetmagnify.com</a>.';
+        } else {
+          msg = msg.replace(
+            /support@fleetmagnify\.com/g,
+            '<a href="' + MAILTO + '">support@fleetmagnify.com</a>'
+          );
+        }
+        showError(msg);
       });
     });
   })();
