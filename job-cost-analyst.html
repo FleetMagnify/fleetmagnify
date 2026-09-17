@@ -637,9 +637,11 @@
       .from('jobs')
       .delete()
       .eq('id', jobId)
-      .eq('user_id', effectiveAccountId);
-    if (jobDeleteResult.error) {
-      showToast('Failed to delete job: ' + jobDeleteResult.error.message, 'error');
+      .eq('user_id', effectiveAccountId)
+      .select('id');
+    var deleteErr = window.supabaseWriteError(jobDeleteResult, 'Delete');
+    if (deleteErr) {
+      showToast('Failed to delete job: ' + deleteErr, 'error');
       return false;
     }
     return true;
@@ -700,8 +702,9 @@
       var val = parseFloat(document.getElementById('job-tonnes-input').value);
       if (isNaN(val) || val <= 0) { showToast('Please enter a valid number of tonnes.', 'error'); return; }
       if (!currentJob) return;
-      var result = await supabase.from('jobs').update({ tonnes_moved: val }).eq('id', currentJob.id).eq('user_id', effectiveAccountId);
-      if (result.error) { showToast(result.error.message, 'error'); return; }
+      var result = await supabase.from('jobs').update({ tonnes_moved: val }).eq('id', currentJob.id).eq('user_id', effectiveAccountId).select('id');
+      var writeErr = window.supabaseWriteError(result, 'Update');
+      if (writeErr) { showToast(writeErr, 'error'); return; }
       jobTonnes = val;
       currentJob.tonnes_moved = val;
       await calculateCosts();
@@ -811,8 +814,9 @@
   async function updateJobStatus() {
     if (!currentJob) return;
     var status = document.getElementById('detail-status').value;
-    var result = await supabase.from('jobs').update({ status: status }).eq('id', currentJob.id).eq('user_id', effectiveAccountId);
-    if (result.error) { showToast(result.error.message, 'error'); return; }
+    var result = await supabase.from('jobs').update({ status: status }).eq('id', currentJob.id).eq('user_id', effectiveAccountId).select('id');
+    var writeErr = window.supabaseWriteError(result, 'Update');
+    if (writeErr) { showToast(writeErr, 'error'); return; }
     currentJob.status = status;
     showToast('Job status updated.', 'success');
   }
