@@ -189,7 +189,7 @@
   <div class="signup-card">
     <div class="card-eyebrow"><div class="dash"></div> Get Started</div>
     <h1>Create your account</h1>
-    <p class="card-sub" id="card-sub">Start analysing fleet costs with enterprise-grade intelligence.</p>
+    <p class="card-sub" id="card-sub">Start a 10-day trial. We'll take a card now — you won't be charged until day 11, after you've set up your fleet.</p>
 
     <div id="form-error" class="form-error" role="alert"></div>
 
@@ -226,7 +226,7 @@
           I agree to the <a href="terms-of-service.html">Terms of Service</a> and <a href="privacy-policy.html">Privacy Policy</a>.
         </label>
       </div>
-      <button type="submit" class="btn-submit" id="submit-btn">Create Account</button>
+      <button type="submit" class="btn-submit" id="submit-btn">Create Account &amp; Continue to Checkout</button>
     </form>
 
     <div id="signup-success" hidden>
@@ -274,6 +274,10 @@
     function hideError() {
       errorEl.textContent = '';
       errorEl.classList.remove('is-visible');
+    }
+
+    if (/[?&]checkout=cancelled/.test(window.location.search)) {
+      showError('Checkout was cancelled. Sign in and finish adding a card to start your 10-day trial.');
     }
 
     function friendlyError(error) {
@@ -362,25 +366,44 @@
           email: email,
           fleet_size: fleetSize,
           plan: 'free',
-          terms_accepted_at: new Date().toISOString(),
-          trial_ends_at: window.FleetMagnifySubscriptionGuard.trialEndsAtFrom(new Date())
+          terms_accepted_at: new Date().toISOString()
         });
 
         if (profileResult.error) {
           throw profileResult.error;
         }
 
-        var uploadPrefix = await window.FleetMagnifyUploadEmail.trySaveUploadEmailAfterSignup(
+        await window.FleetMagnifyUploadEmail.trySaveUploadEmailAfterSignup(
           supabase,
           user.id,
           companyName,
           signUpResult.data.session
         );
-        showSuccess(window.FleetMagnifyUploadEmail.formatFullEmail(uploadPrefix));
+
+        submitBtn.textContent = 'Redirecting to checkout…';
+
+        var checkoutResponse = await fetch('/api/create-checkout-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            email: email,
+            trialPeriodDays: 10,
+            successUrl: window.location.origin + '/home.html?trial=1',
+            cancelUrl: window.location.origin + '/signup.html?checkout=cancelled'
+          })
+        });
+
+        var checkoutData = await checkoutResponse.json();
+        if (!checkoutResponse.ok || !checkoutData.url) {
+          throw new Error(checkoutData.error || 'Account created, but checkout could not start. Please sign in to finish adding a card.');
+        }
+
+        window.location.href = checkoutData.url;
       } catch (err) {
         showError(friendlyError(err));
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Create Account';
+        submitBtn.textContent = 'Create Account & Continue to Checkout';
       }
     });
   })();

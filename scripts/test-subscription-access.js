@@ -1,5 +1,5 @@
 /**
- * Subscription guard fail-closed + checkout webhook customer_id capture.
+ * Subscription guard, webhook status transitions, and quantity-sync helpers.
  *
  *   node scripts/test-subscription-access.js
  */
@@ -9,6 +9,7 @@ var path = require('path');
 
 var guard = require('../js/subscription-guard');
 var webhook = require('../api/stripe-webhook');
+var sync = require('../lib/sync-subscription-quantity');
 
 var now = Date.parse('2026-09-18T00:00:00.000Z');
 var day = 24 * 60 * 60 * 1000;
@@ -16,6 +17,43 @@ var day = 24 * 60 * 60 * 1000;
 function check(label, condition, detail) {
   assert.ok(condition, label + (detail ? ' — ' + detail : ''));
   console.log('[PASS] ' + label + (detail ? ' — ' + detail : ''));
+}
+
+function fakeSupabase(options) {
+  options = options || {};
+  var recorded = options.recorded || [];
+  return {
+    recorded: recorded,
+    from: function (table) {
+      return {
+        select: function () {
+          return {
+            eq: function (col, val) {
+              return {
+                maybeSingle: function () {
+                  var row = null;
+                  if (col === 'stripe_customer_id' && options.customers) {
+                    row = options.customers[val] || null;
+                  } else if (col === 'stripe_subscription_id' && options.subscriptions) {
+                    row = options.subscriptions[val] || null;
+                  }
+                  return Promise.resolve({ data: row || null, error: null });
+                }
+              };
+            }
+          };
+        },
+        update: function (payload) {
+          return {
+            eq: function (column, value) {
+              recorded.push({ table: table, payload: payload, column: column, value: value });
+              return Promise.resolve({ error: null });
+            }
+          };
+        }
+      };
+    }
+  };
 }
 
 console.log('\n=== Guard: fail closed ===');
@@ -77,7 +115,42 @@ check(
   guard.hasAccess({ subscription_status: 'active', trial_ends_at: trialEnds }, now) === true
 );
 
-console.log('\n=== signup.html writes a real trial ===');
+console.log('\n=== Guard: Stripe-native trialing + dunning past_due ===');
+
+check(
+  'trialing grants access (Stripe-native 10-day trial)',
+  guard.hasAccess({ subscription_status: 'trialing', trial_ends_at: null }, now) === true
+);
+check(
+  'past_due grants access (Stripe is still retrying the card)',
+  guard.hasAccess({ subscription_status: 'past_due', trial_ends_at: null }, now) === true
+);
+check(
+  'cancelled (British, existing DB spelling) blocks access',
+  guard.hasAccess({ subscription_status: 'cancelled', trial_ends_at: null }, now) === false
+);
+check(
+  'canceled (Stripe spelling) blocks access',
+  guard.hasAccess({ subscription_status: 'canceled', trial_ends_at: null }, now) === false
+);
+check(
+  'unpaid (dunning exhausted) blocks access',
+  guard.hasAccess({ subscription_status: 'unpaid', trial_ends_at: null }, now) === false
+);
+check(
+  'incomplete_expired blocks access',
+  guard.hasAccess({ subscription_status: 'incomplete_expired', trial_ends_at: null }, now) === false
+);
+check(
+  'terminal cancelled wins over a still-valid old trial_ends_at',
+  guard.hasAccess({ subscription_status: 'cancelled', trial_ends_at: trialEnds }, now) === false
+);
+check(
+  'old-model null status + valid trial_ends_at still allowed (coexistence)',
+  guard.hasAccess({ subscription_status: null, trial_ends_at: trialEnds }, now) === true
+);
+
+console.log('\n=== signup.html card-upfront Checkout ===');
 
 var signupPage = fs.readFileSync(path.join(__dirname, '..', 'signup.html'), 'utf8');
 check(
@@ -85,8 +158,16 @@ check(
   /<script src="js\/subscription-guard\.js"><\/script>/.test(signupPage)
 );
 check(
-  'signup.html profile insert sets trial_ends_at from the shared helper',
-  /trial_ends_at:\s*window\.FleetMagnifySubscriptionGuard\.trialEndsAtFrom\(new Date\(\)\)/.test(signupPage)
+  'signup.html no longer writes a homegrown trial_ends_at (card-upfront + Stripe trial)',
+  !/trial_ends_at:\s*window\.FleetMagnifySubscriptionGuard\.trialEndsAtFrom/.test(signupPage)
+);
+check(
+  'signup.html starts a real Stripe Checkout session',
+  /\/api\/create-checkout-session/.test(signupPage)
+);
+check(
+  'signup.html requests Stripe-native trial_period_days: 10',
+  /trialPeriodDays:\s*10/.test(signupPage)
 );
 
 console.log('\n=== checkout.session.completed writes both Stripe ids ===');
@@ -106,24 +187,20 @@ check(
   JSON.stringify(extra)
 );
 
-var recorded = [];
-var fakeSupabase = {
-  from: function (table) {
-    return {
-      update: function (payload) {
-        return {
-          eq: function (column, value) {
-            recorded.push({ table: table, payload: payload, column: column, value: value });
-            return Promise.resolve({ error: null });
-          }
-        };
-      }
-    };
-  }
-};
+check(
+  'checkout.session.completed payload has no subscription.status unless expanded',
+  webhook.checkoutSubscriptionStatus({ subscription: 'sub_test_456' }) === null
+);
+check(
+  'expanded trial subscription on the session is read as trialing',
+  webhook.checkoutSubscriptionStatus({ subscription: { id: 'sub_trial', status: 'trialing' } }) === 'trialing'
+);
 
+var recorded = [];
+var fake = fakeSupabase({ recorded: recorded });
 var userId = 'user-abc';
-webhook.processStripeEvent(fakeSupabase, {
+
+webhook.processStripeEvent(fake, {
   type: 'checkout.session.completed',
   data: {
     object: {
@@ -139,7 +216,7 @@ webhook.processStripeEvent(fakeSupabase, {
     recorded[0].column === 'id' && recorded[0].value === userId
   );
   check(
-    'subscription_status is set to active',
+    'unexpanded checkout session defaults to active (upgrade / paid path)',
     recorded[0].payload.subscription_status === 'active'
   );
   check(
@@ -152,6 +229,321 @@ webhook.processStripeEvent(fakeSupabase, {
     recorded[0].payload.stripe_subscription_id === 'sub_live_2',
     JSON.stringify(recorded[0].payload)
   );
+
+  recorded.length = 0;
+  return webhook.processStripeEvent(fake, {
+    type: 'checkout.session.completed',
+    data: {
+      object: {
+        customer: 'cus_trial_1',
+        subscription: { id: 'sub_trial_2', status: 'trialing' },
+        metadata: { supabase_user_id: userId }
+      }
+    }
+  });
+}).then(function () {
+  check(
+    'trialing Checkout writes subscription_status=trialing',
+    recorded.length === 1 && recorded[0].payload.subscription_status === 'trialing',
+    recorded[0] && JSON.stringify(recorded[0].payload)
+  );
+  check(
+    'trialing Checkout still persists the subscription id',
+    recorded[0].payload.stripe_subscription_id === 'sub_trial_2'
+  );
+
+  recorded.length = 0;
+  return webhook.processStripeEvent(fake, {
+    type: 'checkout.session.completed',
+    data: {
+      object: {
+        customer: 'cus_retrieved',
+        subscription: 'sub_retrieved',
+        metadata: { supabase_user_id: userId }
+      }
+    }
+  }, {
+    retrieveSubscription: function (id) {
+      check('retrieveSubscription is used when session.subscription is an id', id === 'sub_retrieved');
+      return Promise.resolve({ id: id, status: 'trialing' });
+    }
+  });
+}).then(function () {
+  check(
+    'retrieved subscription status wins over the active default',
+    recorded[0].payload.subscription_status === 'trialing'
+  );
+
+  console.log('\n=== customer.subscription.updated ===');
+  recorded.length = 0;
+  return webhook.processStripeEvent(fake, {
+    type: 'customer.subscription.updated',
+    data: {
+      object: {
+        id: 'sub_live_2',
+        status: 'active',
+        customer: 'cus_live_1',
+        metadata: { supabase_user_id: userId }
+      }
+    }
+  });
+}).then(function () {
+  check(
+    'subscription.updated trialing→active writes active',
+    recorded[0].payload.subscription_status === 'active',
+    recorded[0] && JSON.stringify(recorded[0].payload)
+  );
+
+  recorded.length = 0;
+  return webhook.processStripeEvent(fake, {
+    type: 'customer.subscription.updated',
+    data: {
+      object: {
+        id: 'sub_live_2',
+        status: 'trialing',
+        customer: 'cus_live_1',
+        metadata: { supabase_user_id: userId }
+      }
+    }
+  });
+}).then(function () {
+  check(
+    'subscription.updated can write trialing',
+    recorded[0].payload.subscription_status === 'trialing'
+  );
+
+  recorded.length = 0;
+  return webhook.processStripeEvent(fake, {
+    type: 'customer.subscription.updated',
+    data: {
+      object: {
+        id: 'sub_live_2',
+        status: 'past_due',
+        customer: 'cus_live_1',
+        metadata: { supabase_user_id: userId }
+      }
+    }
+  });
+}).then(function () {
+  check(
+    'subscription.updated card-failure path writes past_due (access still granted)',
+    recorded[0].payload.subscription_status === 'past_due'
+  );
+
+  recorded.length = 0;
+  return webhook.processStripeEvent(fake, {
+    type: 'customer.subscription.updated',
+    data: {
+      object: {
+        id: 'sub_live_2',
+        status: 'canceled',
+        customer: 'cus_live_1',
+        metadata: { supabase_user_id: userId }
+      }
+    }
+  });
+}).then(function () {
+  check(
+    'subscription.updated terminal canceled maps to cancelled and clears sub id',
+    recorded[0].payload.subscription_status === 'cancelled' &&
+      recorded[0].payload.stripe_subscription_id === null
+  );
+
+  console.log('\n=== invoice.payment_succeeded $0 trial invoice ===');
+  recorded.length = 0;
+  var paidFake = fakeSupabase({
+    recorded: recorded,
+    customers: { cus_live_1: { id: userId } }
+  });
+  return webhook.processStripeEvent(paidFake, {
+    type: 'invoice.payment_succeeded',
+    data: {
+      object: {
+        customer: 'cus_live_1',
+        amount_paid: 0,
+        billing_reason: 'subscription_create'
+      }
+    }
+  });
+}).then(function () {
+  check(
+    '$0 trial invoice.payment_succeeded does not flip the profile to active',
+    recorded.length === 0,
+    'writes=' + recorded.length
+  );
+
+  recorded.length = 0;
+  var paidFake = fakeSupabase({
+    recorded: recorded,
+    customers: { cus_live_1: { id: userId } }
+  });
+  return webhook.processStripeEvent(paidFake, {
+    type: 'invoice.payment_succeeded',
+    data: {
+      object: {
+        customer: 'cus_live_1',
+        amount_paid: 4900,
+        billing_reason: 'subscription_cycle'
+      }
+    }
+  });
+}).then(function () {
+  check(
+    'real invoice.payment_succeeded still writes active',
+    recorded.length === 1 && recorded[0].payload.subscription_status === 'active'
+  );
+
+  console.log('\n=== invoice.upcoming triggers quantity sync ===');
+  var synced = [];
+  var upcomingFake = fakeSupabase({
+    customers: { cus_live_1: { id: userId } }
+  });
+  return webhook.processStripeEvent(upcomingFake, {
+    type: 'invoice.upcoming',
+    data: {
+      object: {
+        customer: 'cus_live_1',
+        subscription: 'sub_live_2'
+      }
+    }
+  }, {
+    syncQuantityForUser: function (uid, subId) {
+      synced.push({ uid: uid, subId: subId });
+      return Promise.resolve({ changed: true });
+    }
+  }).then(function () {
+    check('invoice.upcoming syncs the matching user', synced.length === 1 && synced[0].uid === userId);
+    check('invoice.upcoming syncs that subscription id', synced[0].subId === 'sub_live_2');
+  });
+}).then(function () {
+  console.log('\n=== Quantity sync from a simulated asset list ===');
+
+  var assets = [
+    { id: 1, is_ignored: false },
+    { id: 2, is_ignored: false },
+    { id: 3, is_ignored: true },
+    { id: 4, is_ignored: false }
+  ];
+  check(
+    'countBillableAssets ignores ignored rows',
+    sync.countBillableAssets(assets) === 3
+  );
+  check(
+    'countBillableAssets treats missing is_ignored as billable',
+    sync.countBillableAssets([{ id: 1 }, { id: 2, is_ignored: false }]) === 2
+  );
+  check(
+    'target quantity for 3 assets is 3',
+    sync.targetSubscriptionQuantity(3) === 3
+  );
+  check(
+    'target quantity floors at 1 (Stripe rejects quantity 0)',
+    sync.targetSubscriptionQuantity(0) === 1
+  );
+  check(
+    'empty asset list floors at 1',
+    sync.targetSubscriptionQuantity(sync.countBillableAssets([])) === 1
+  );
+
+  return sync.syncUserSubscription({
+    userId: 'user-fleet',
+    subscriptionId: 'sub_fleet',
+    supabase: {
+      from: function () {
+        return {
+          select: function () {
+            return {
+              eq: function () {
+                return Promise.resolve({
+                  data: [
+                    { id: 1, is_ignored: false },
+                    { id: 2, is_ignored: false },
+                    { id: 3, is_ignored: true },
+                    { id: 4, is_ignored: false },
+                    { id: 5, is_ignored: false }
+                  ],
+                  error: null
+                });
+              }
+            };
+          }
+        };
+      }
+    },
+    stripe: {
+      subscriptions: {
+        retrieve: function () {
+          return Promise.resolve({
+            id: 'sub_fleet',
+            items: { data: [{ id: 'si_1', quantity: 1 }] }
+          });
+        },
+        update: function (id, params) {
+          this.lastUpdate = { id: id, params: params };
+          return Promise.resolve({ id: id });
+        },
+        lastUpdate: null
+      }
+    }
+  }).then(function (outcome) {
+    check('sync reports a change when quantity differs', outcome.changed === true);
+    check('sync computes 4 billable assets', outcome.billableAssets === 4);
+    check('sync target quantity is 4', outcome.to === 4);
+    check('sync previous quantity was 1', outcome.from === 1);
+  });
+}).then(function () {
+  return sync.syncUserSubscription({
+    userId: 'user-same',
+    subscriptionId: 'sub_same',
+    supabase: {
+      from: function () {
+        return {
+          select: function () {
+            return {
+              eq: function () {
+                return Promise.resolve({
+                  data: [{ id: 1, is_ignored: false }],
+                  error: null
+                });
+              }
+            };
+          }
+        };
+      }
+    },
+    stripe: {
+      subscriptions: {
+        retrieve: function () {
+          return Promise.resolve({
+            id: 'sub_same',
+            items: { data: [{ id: 'si_1', quantity: 1 }] }
+          });
+        },
+        update: function () {
+          throw new Error('should not update when quantity already matches');
+        }
+      }
+    }
+  }).then(function (outcome) {
+    check('sync is a no-op when Stripe quantity already matches', outcome.changed === false);
+    check('unchanged sync still reports the matching quantity', outcome.quantity === 1);
+  });
+}).then(function () {
+  var vercel = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'vercel.json'), 'utf8'));
+  check(
+    'vercel.json has a daily cron for quantity reconciliation',
+    vercel.crons &&
+      vercel.crons.some(function (job) {
+        return job.path === '/api/sync-subscription-quantities';
+      })
+  );
+
+  var adminPage = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
+  check(
+    'admin.html can trigger invoice billing with the asset-count bypass',
+    /bypassAssetMinimum:\s*true/.test(adminPage)
+  );
+
   console.log('\nAll subscription access tests passed.');
 }).catch(function (err) {
   console.error('\nFAILED:', err && err.message ? err.message : err);

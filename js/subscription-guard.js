@@ -1,9 +1,15 @@
 /**
  * Access gate for signed-in app pages.
  *
- * Allow only when:
- *   - subscription_status === 'active' (paid or permanently-free accounts), or
- *   - trial_ends_at is a real timestamp still in the future.
+ * Allow when any of these is true:
+ *   - subscription_status is a Stripe-live status: active, trialing, past_due
+ *     (past_due stays open while Stripe is still dunning — do not lock out
+ *     on a single failed charge)
+ *   - trial_ends_at is a real timestamp still in the future (old homegrown
+ *     trial, kept so existing null-status trial accounts are not blocked)
+ *
+ * Terminal Stripe statuses (canceled / cancelled / unpaid / incomplete_expired)
+ * always block, even if an old trial_ends_at is still in the future.
  *
  * A missing trial_ends_at is "no trial", not "trial has not expired".
  * Trial length is 10 days, matching terms-of-service.html §3.
@@ -11,6 +17,19 @@
 (function(global) {
   var TRIAL_DAYS = 10;
   var MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+  var LIVE_STATUSES = {
+    active: true,
+    trialing: true,
+    past_due: true
+  };
+
+  var TERMINAL_STATUSES = {
+    canceled: true,
+    cancelled: true,
+    unpaid: true,
+    incomplete_expired: true
+  };
 
   function trialEndsAtFrom(fromDate) {
     var start = fromDate ? new Date(fromDate.getTime()) : new Date();
@@ -20,7 +39,11 @@
   function hasAccess(profile, nowMs) {
     if (nowMs == null) nowMs = Date.now();
     if (!profile) return false;
-    if (profile.subscription_status === 'active') return true;
+
+    var status = profile.subscription_status;
+    if (TERMINAL_STATUSES[status]) return false;
+    if (LIVE_STATUSES[status]) return true;
+
     if (!profile.trial_ends_at) return false;
     var trialEndsAt = new Date(profile.trial_ends_at);
     if (isNaN(trialEndsAt.getTime())) return false;

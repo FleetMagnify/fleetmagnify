@@ -191,19 +191,20 @@
     }
     currentUser = sessionResult.data.session.user;
 
-    // If already active, don't show the paywall — send them back to the app.
+    // If already live on Stripe (or still in a Stripe trial), don't show the paywall.
     var profileResult = await supabase
       .from('profiles')
-      .select('subscription_status')
+      .select('subscription_status, trial_ends_at, stripe_subscription_id')
       .eq('id', currentUser.id)
       .maybeSingle();
 
-    if (profileResult.data && profileResult.data.subscription_status === 'active') {
+    var profile = profileResult.data || {};
+    if (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') {
       window.location.href = 'home.html';
       return;
     }
 
-    if (profileResult.data && profileResult.data.subscription_status === 'past_due') {
+    if (profile.subscription_status === 'past_due') {
       document.getElementById('status-eyebrow').textContent = 'Payment Issue';
       document.getElementById('status-heading').textContent = 'There was a problem with your payment';
       document.getElementById('status-sub').textContent = 'Update your payment details to keep your fleet data flowing.';
@@ -220,15 +221,22 @@
       btn.textContent = 'Redirecting to checkout…';
 
       try {
+        // Abandoned signup checkout: never started either trial model.
+        // Old expired trial_ends_at accounts do NOT get a second Stripe trial.
+        var checkoutBody = {
+          userId: currentUser.id,
+          email: currentUser.email,
+          successUrl: window.location.origin + '/home.html?upgraded=1',
+          cancelUrl: window.location.origin + '/upgrade.html'
+        };
+        if (!profile.trial_ends_at && !profile.stripe_subscription_id && !profile.subscription_status) {
+          checkoutBody.trialPeriodDays = 10;
+        }
+
         var response = await fetch('/api/create-checkout-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: currentUser.id,
-            email: currentUser.email,
-            successUrl: window.location.origin + '/home.html?upgraded=1',
-            cancelUrl: window.location.origin + '/upgrade.html'
-          })
+          body: JSON.stringify(checkoutBody)
         });
 
         var data = await response.json();

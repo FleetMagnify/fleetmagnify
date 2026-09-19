@@ -99,6 +99,27 @@ window.FleetMagnifySidebar = (function() {
     }
   }
 
+  function showPastDueBanner() {
+    if (document.getElementById('billing-notice-banner')) return;
+    var main = document.querySelector('.main');
+    if (!main) return;
+
+    var banner = document.createElement('div');
+    banner.id = 'billing-notice-banner';
+    banner.className = 'billing-notice-banner';
+    banner.setAttribute('role', 'status');
+    banner.innerHTML =
+      '<p>There was a problem charging your card. Update your payment method to keep access — Stripe is still retrying the charge.</p>' +
+      '<a href="settings.html">Update payment method →</a>';
+
+    var pageContent = main.querySelector('.page-content');
+    if (pageContent) {
+      main.insertBefore(banner, pageContent);
+    } else {
+      main.insertBefore(banner, main.firstChild);
+    }
+  }
+
   function mount(activePage) {
     var html = render(activePage);
     var placeholder = document.getElementById('sidebar-placeholder');
@@ -124,10 +145,13 @@ window.FleetMagnifySidebar = (function() {
     try {
       var flagResult = await supabase
         .from('profiles')
-        .select('has_work_order_report')
+        .select('has_work_order_report, subscription_status')
         .eq('id', effectiveAccountId)
         .maybeSingle();
       hasWorkOrderReport = !!(flagResult.data && flagResult.data.has_work_order_report);
+      if (flagResult.data && flagResult.data.subscription_status === 'past_due') {
+        showPastDueBanner();
+      }
     } catch (err) {
       console.warn('FleetMagnifySidebar: failed to read has_work_order_report', err);
     }

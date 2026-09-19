@@ -11,6 +11,25 @@
 .nav-item.active { background: rgba(14,165,122,0.10); color: #0EA57A; }
 .nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
 .sidebar-footer { padding: 16px 12px; border-top: 1px solid #2D3748; }
+
+.billing-notice-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  background: rgba(239,159,39,0.08);
+  border-bottom: 1px solid rgba(239,159,39,0.28);
+  padding: 12px 36px;
+  font-size: 13px;
+  color: #C8A060;
+  line-height: 1.55;
+}
+.billing-notice-banner p { margin: 0; flex: 1; }
+.billing-notice-banner a { color: #EF9F27; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.billing-notice-banner a:hover { text-decoration: underline; }
+@media (max-width: 700px) {
+  .billing-notice-banner { flex-direction: column; align-items: stretch; padding: 12px 16px; }
+}
 .btn-signout { width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 8px; border: none; background: none; font-size: 13px; font-weight: 500; color: #4A5568; cursor: pointer; transition: all 0.2s; font-family: inherit; }
 .btn-signout:hover { background: rgba(226,75,74,0.08); color: #F0A8A7; }
 
