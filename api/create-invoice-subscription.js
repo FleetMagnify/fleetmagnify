@@ -39,6 +39,9 @@ module.exports = async function handler(req, res) {
     var userId = req.body && req.body.userId;
     var email = req.body && req.body.email;
     var poNumber = req.body && req.body.poNumber ? String(req.body.poNumber).trim() : '';
+    var adminSecret = req.headers['x-admin-secret'];
+    var isAdmin = !!(adminSecret && process.env.ADMIN_SECRET && adminSecret === process.env.ADMIN_SECRET);
+    var bypassAssetMinimum = !!(isAdmin && req.body && req.body.bypassAssetMinimum);
 
     if (!userId || !email) {
       return res.status(400).json({ error: 'userId and email are required' });
@@ -47,25 +50,29 @@ module.exports = async function handler(req, res) {
     var supabase = createSupabaseClient();
     var stripe = createStripeClient();
 
-    var countResult = await supabase
-      .from('assets')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('is_ignored', false);
+    if (!bypassAssetMinimum) {
+      var countResult = await supabase
+        .from('assets')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('is_ignored', false);
 
-    if (countResult.error) {
-      console.error('create-invoice-subscription: asset count failed', countResult.error.message);
-      return res.status(500).json({ error: 'Could not verify fleet size' });
-    }
+      if (countResult.error) {
+        console.error('create-invoice-subscription: asset count failed', countResult.error.message);
+        return res.status(500).json({ error: 'Could not verify fleet size' });
+      }
 
-    var assetCount = countResult.count || 0;
+      var assetCount = countResult.count || 0;
 
-    if (assetCount < MIN_ASSETS_FOR_INVOICING) {
-      return res.status(403).json({
-        error: 'Invoice billing is available for fleets of ' + MIN_ASSETS_FOR_INVOICING +
-          '+ assets. Your account currently has ' + assetCount +
-          '. Please use card payment, or contact support@fleetmagnify.com to discuss your account.'
-      });
+      if (assetCount < MIN_ASSETS_FOR_INVOICING) {
+        return res.status(403).json({
+          error: 'Invoice billing is available for fleets of ' + MIN_ASSETS_FOR_INVOICING +
+            '+ assets. Your account currently has ' + assetCount +
+            '. Please use card payment, or contact support@fleetmagnify.com to discuss your account.'
+        });
+      }
+    } else {
+      console.log('create-invoice-subscription: admin bypass of asset-count gate for', userId);
     }
 
     var profileResult = await supabase
@@ -107,6 +114,7 @@ module.exports = async function handler(req, res) {
         supabase_user_id: userId,
         billing_method: 'invoice',
         po_number: poNumber || '',
+        admin_setup: bypassAssetMinimum ? 'true' : '',
       },
     });
 

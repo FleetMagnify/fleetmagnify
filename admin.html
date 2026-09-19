@@ -57,6 +57,10 @@
     <button type="button" class="btn" id="login-as-btn" disabled>Login As This User →</button>
     <div class="success" id="link-result"></div>
     <hr class="divider">
+    <p class="sub" style="margin-bottom:12px;">Enterprise exception: set up invoice billing for a brand-new account that does not yet have 10+ assets. Not a self-serve path.</p>
+    <button type="button" class="btn btn-secondary" id="invoice-billing-btn" disabled>Set Up Invoice Billing</button>
+    <div class="success" id="invoice-result"></div>
+    <hr class="divider">
     <button type="button" class="btn btn-secondary" id="signout-admin-btn">← Lock Admin</button>
   </div>
 </div>
@@ -133,14 +137,16 @@
     sel.innerHTML = '<option value="">Select a user...</option>' +
       users.map(function(u) {
         var label = u.company_name ? u.company_name + ' (' + u.email + ')' : u.email;
-        return '<option value="' + u.email + '">' + label + '</option>';
+        return '<option value="' + u.email + '" data-user-id="' + u.id + '">' + label + '</option>';
       }).join('');
     document.getElementById('user-count').textContent = users.length + ' registered users';
     document.getElementById('login-as-btn').disabled = false;
+    document.getElementById('invoice-billing-btn').disabled = false;
   }
 
   document.getElementById('user-select').addEventListener('change', function() {
     document.getElementById('link-result').classList.remove('visible');
+    document.getElementById('invoice-result').classList.remove('visible');
     document.getElementById('admin-error').classList.remove('visible');
   });
 
@@ -166,11 +172,55 @@
     this.textContent = 'Login As This User →';
   });
 
+  document.getElementById('invoice-billing-btn').addEventListener('click', async function() {
+    var sel = document.getElementById('user-select');
+    var email = sel.value;
+    var userId = sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].getAttribute('data-user-id');
+    var errEl = document.getElementById('admin-error');
+    var resultEl = document.getElementById('invoice-result');
+    errEl.classList.remove('visible');
+    resultEl.classList.remove('visible');
+    if (!email || !userId) {
+      errEl.textContent = 'Please select a user.';
+      errEl.classList.add('visible');
+      return;
+    }
+    if (!window.confirm('Set up invoice billing for ' + email + '? This bypasses the 10-asset minimum and emails invoices via Stripe.')) {
+      return;
+    }
+    this.disabled = true;
+    this.textContent = 'Setting up invoicing...';
+    try {
+      var res = await fetch('/api/create-invoice-subscription', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-secret': adminSecret
+        },
+        body: JSON.stringify({
+          userId: userId,
+          email: email,
+          bypassAssetMinimum: true
+        })
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to set up invoice billing');
+      resultEl.textContent = 'Invoice billing created. Subscription: ' + data.subscriptionId;
+      resultEl.classList.add('visible');
+    } catch (e) {
+      errEl.textContent = e.message;
+      errEl.classList.add('visible');
+    }
+    this.disabled = false;
+    this.textContent = 'Set Up Invoice Billing';
+  });
+
   document.getElementById('signout-admin-btn').addEventListener('click', function() {
     adminSecret = null;
     sessionStorage.removeItem('fm_admin_secret');
     document.getElementById('gate-password').value = '';
     document.getElementById('link-result').classList.remove('visible');
+    document.getElementById('invoice-result').classList.remove('visible');
     document.getElementById('admin-error').classList.remove('visible');
     showGate();
   });

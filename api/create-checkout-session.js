@@ -1,8 +1,8 @@
 /**
  * Creates a Stripe Checkout session for a customer to subscribe to the
  * FleetMagnify platform fee. Truck/machine fee quantities are added to
- * the subscription later via api/sync-subscription-quantities.js once
- * the customer's asset count is known.
+ * the subscription later via api/sync-subscription-quantities.js (daily
+ * reconciliation) and the invoice.upcoming webhook (charge-time sync).
  */
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
@@ -38,6 +38,9 @@ module.exports = async function handler(req, res) {
     var email = req.body && req.body.email;
     var successUrl = req.body && req.body.successUrl;
     var cancelUrl = req.body && req.body.cancelUrl;
+    var trialPeriodDays = req.body && req.body.trialPeriodDays
+      ? parseInt(req.body.trialPeriodDays, 10)
+      : 0;
 
     if (!userId || !email) {
       return res.status(400).json({ error: 'userId and email are required' });
@@ -94,9 +97,10 @@ module.exports = async function handler(req, res) {
       cancel_url: cancelUrl || 'https://fleetmagnify.com/upgrade.html',
       allow_promotion_codes: true,
       metadata: { supabase_user_id: userId },
-      subscription_data: {
-        metadata: { supabase_user_id: userId },
-      },
+      subscription_data: Object.assign(
+        { metadata: { supabase_user_id: userId } },
+        trialPeriodDays > 0 ? { trial_period_days: trialPeriodDays } : {}
+      ),
     });
 
     return res.status(200).json({ url: session.url });
