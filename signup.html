@@ -245,6 +245,7 @@
 
 <script src="js/supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/subscription-guard.js"></script>
 <script src="js/upload-email.js"></script>
 <script>
   (function() {
@@ -361,7 +362,8 @@
           email: email,
           fleet_size: fleetSize,
           plan: 'free',
-          terms_accepted_at: new Date().toISOString()
+          terms_accepted_at: new Date().toISOString(),
+          trial_ends_at: window.FleetMagnifySubscriptionGuard.trialEndsAtFrom(new Date())
         });
 
         if (profileResult.error) {

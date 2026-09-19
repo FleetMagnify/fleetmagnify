@@ -40,6 +40,20 @@ function getRawBody(req) {
   });
 }
 
+function stripeId(value) {
+  if (!value) return null;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && value.id) return value.id;
+  return null;
+}
+
+function extraFieldsForCheckoutSession(session) {
+  return {
+    stripe_subscription_id: stripeId(session && session.subscription),
+    stripe_customer_id: stripeId(session && session.customer),
+  };
+}
+
 async function setSubscriptionStatus(supabase, userId, status, extra) {
   var payload = Object.assign({ subscription_status: status }, extra || {});
   var result = await supabase.from('profiles').update(payload).eq('id', userId);
@@ -48,6 +62,7 @@ async function setSubscriptionStatus(supabase, userId, status, extra) {
   } else {
     console.log('stripe-webhook: set subscription_status =', status, 'for user', userId);
   }
+  return result;
 }
 
 async function findUserIdForCustomer(supabase, stripeCustomerId) {
@@ -60,6 +75,56 @@ async function findUserIdForCustomer(supabase, stripeCustomerId) {
     return null;
   }
   return result.data.id;
+}
+
+async function processStripeEvent(supabase, event) {
+  switch (event.type) {
+    case 'checkout.session.completed': {
+      var session = event.data.object;
+      var userId = session.metadata && session.metadata.supabase_user_id;
+      if (userId) {
+        await setSubscriptionStatus(supabase, userId, 'active', extraFieldsForCheckoutSession(session));
+      } else {
+        console.warn('stripe-webhook: checkout.session.completed with no supabase_user_id metadata');
+      }
+      break;
+    }
+
+    case 'invoice.payment_succeeded': {
+      var invoice = event.data.object;
+      var custId = stripeId(invoice.customer);
+      var uid = await findUserIdForCustomer(supabase, custId);
+      if (uid) {
+        await setSubscriptionStatus(supabase, uid, 'active');
+      }
+      break;
+    }
+
+    case 'invoice.payment_failed': {
+      var failedInvoice = event.data.object;
+      var failedCustId = stripeId(failedInvoice.customer);
+      var failedUid = await findUserIdForCustomer(supabase, failedCustId);
+      if (failedUid) {
+        await setSubscriptionStatus(supabase, failedUid, 'past_due');
+      }
+      break;
+    }
+
+    case 'customer.subscription.deleted': {
+      var subscription = event.data.object;
+      var subUserId = subscription.metadata && subscription.metadata.supabase_user_id;
+      var deletedUid = subUserId || await findUserIdForCustomer(supabase, stripeId(subscription.customer));
+      if (deletedUid) {
+        await setSubscriptionStatus(supabase, deletedUid, 'cancelled', {
+          stripe_subscription_id: null,
+        });
+      }
+      break;
+    }
+
+    default:
+      console.log('stripe-webhook: unhandled event type', event.type);
+  }
 }
 
 module.exports = async function handler(req, res) {
@@ -89,56 +154,7 @@ module.exports = async function handler(req, res) {
   var supabase = createSupabaseClient();
 
   try {
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        var session = event.data.object;
-        var userId = session.metadata && session.metadata.supabase_user_id;
-        if (userId) {
-          await setSubscriptionStatus(supabase, userId, 'active', {
-            stripe_subscription_id: session.subscription || null,
-          });
-        } else {
-          console.warn('stripe-webhook: checkout.session.completed with no supabase_user_id metadata');
-        }
-        break;
-      }
-
-      case 'invoice.payment_succeeded': {
-        var invoice = event.data.object;
-        var custId = invoice.customer;
-        var uid = await findUserIdForCustomer(supabase, custId);
-        if (uid) {
-          await setSubscriptionStatus(supabase, uid, 'active');
-        }
-        break;
-      }
-
-      case 'invoice.payment_failed': {
-        var failedInvoice = event.data.object;
-        var failedCustId = failedInvoice.customer;
-        var failedUid = await findUserIdForCustomer(supabase, failedCustId);
-        if (failedUid) {
-          await setSubscriptionStatus(supabase, failedUid, 'past_due');
-        }
-        break;
-      }
-
-      case 'customer.subscription.deleted': {
-        var subscription = event.data.object;
-        var subUserId = subscription.metadata && subscription.metadata.supabase_user_id;
-        var deletedUid = subUserId || await findUserIdForCustomer(supabase, subscription.customer);
-        if (deletedUid) {
-          await setSubscriptionStatus(supabase, deletedUid, 'cancelled', {
-            stripe_subscription_id: null,
-          });
-        }
-        break;
-      }
-
-      default:
-        console.log('stripe-webhook: unhandled event type', event.type);
-    }
-
+    await processStripeEvent(supabase, event);
     return res.status(200).json({ received: true });
   } catch (err) {
     console.error('stripe-webhook: error processing event', event.type, err.message);
@@ -151,3 +167,6 @@ module.exports.config = {
     bodyParser: false,
   },
 };
+
+module.exports.processStripeEvent = processStripeEvent;
+module.exports.extraFieldsForCheckoutSession = extraFieldsForCheckoutSession;
