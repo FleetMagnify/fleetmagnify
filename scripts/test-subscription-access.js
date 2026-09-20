@@ -529,6 +529,84 @@ webhook.processStripeEvent(fake, {
     check('unchanged sync still reports the matching quantity', outcome.quantity === 1);
   });
 }).then(function () {
+  console.log('\n=== Quantity sync isolates per-user Stripe failures ===');
+
+  var updates = [];
+  var batchProfiles = [
+    { id: 'user-ok-1', stripe_subscription_id: 'sub-ok-1', subscription_status: 'trialing' },
+    { id: 'user-bad', stripe_subscription_id: 'sub-bad', subscription_status: 'active' },
+    { id: 'user-ok-2', stripe_subscription_id: 'sub-ok-2', subscription_status: 'past_due' }
+  ];
+
+  return sync.syncAllBillableSubscriptions({
+    supabase: {
+      from: function (table) {
+        if (table === 'profiles') {
+          return {
+            select: function () {
+              return {
+                in: function () {
+                  return {
+                    not: function () {
+                      return Promise.resolve({ data: batchProfiles, error: null });
+                    }
+                  };
+                }
+              };
+            }
+          };
+        }
+        return {
+          select: function () {
+            return {
+              eq: function () {
+                return Promise.resolve({
+                  data: [{ id: 1, is_ignored: false }, { id: 2, is_ignored: false }],
+                  error: null
+                });
+              }
+            };
+          }
+        };
+      }
+    },
+    stripe: {
+      subscriptions: {
+        retrieve: function (id) {
+          if (id === 'sub-bad') {
+            return Promise.reject(new Error('No such subscription: sub-bad'));
+          }
+          return Promise.resolve({
+            id: id,
+            items: { data: [{ id: 'si-' + id, quantity: 1 }] }
+          });
+        },
+        update: function (id, params) {
+          updates.push({ id: id, quantity: params.items[0].quantity });
+          return Promise.resolve({ id: id });
+        }
+      }
+    }
+  }).then(function (summary) {
+    check('batch sync does not reject when one retrieve throws', !!summary);
+    check('scanned includes the failing profile', summary.scanned === 3);
+    check('two successful quantity updates still ran', updates.length === 2);
+    check(
+      'successful updates are the two good subscriptions',
+      updates[0].id === 'sub-ok-1' && updates[1].id === 'sub-ok-2',
+      JSON.stringify(updates)
+    );
+    check('changed count is 2', summary.changed === 2);
+    check('failed count is 1', summary.failed === 1);
+    var failedRow = summary.results.filter(function (row) { return row.reason === 'sync_threw'; })[0];
+    check('failure is captured on the bad user', !!(failedRow && failedRow.userId === 'user-bad'));
+    check(
+      'failure records the Stripe error message',
+      !!(failedRow && failedRow.error && failedRow.error.indexOf('No such subscription') !== -1)
+    );
+    check('failure is not marked changed', !!(failedRow && failedRow.changed === false));
+  });
+}).then(function () {
   var vercel = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'vercel.json'), 'utf8'));
   check(
     'vercel.json has a daily cron for quantity reconciliation',
