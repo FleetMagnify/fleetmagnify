@@ -21,8 +21,31 @@
  *   --verify      after a live run, re-pull T5 Iveco 5 Aug / T34 1 Aug /
  *                 T9 Bucket 31 Aug for the ILS account and print litres
  */
+var fs = require('fs');
+var path = require('path');
 var { createClient } = require('@supabase/supabase-js');
 var dist = require('../js/telematics-distance');
+
+function loadEnvFile() {
+  ['.env', '.env.local'].forEach(function(name) {
+    var filePath = path.join(__dirname, '..', name);
+    if (!fs.existsSync(filePath)) return;
+    fs.readFileSync(filePath, 'utf8').split(/\r?\n/).forEach(function(line) {
+      var trimmed = String(line || '').trim();
+      if (!trimmed || trimmed.charAt(0) === '#') return;
+      var eq = trimmed.indexOf('=');
+      if (eq < 1) return;
+      var key = trimmed.slice(0, eq).trim();
+      var val = trimmed.slice(eq + 1).trim();
+      if ((val.charAt(0) === '"' && val.charAt(val.length - 1) === '"') ||
+          (val.charAt(0) === "'" && val.charAt(val.length - 1) === "'")) {
+        val = val.slice(1, -1);
+      }
+      if (key && process.env[key] == null) process.env[key] = val;
+    });
+  });
+}
+loadEnvFile();
 
 var ILS_USER_ID = 'd2ed89c3-dcaf-48b3-826a-f73802e4cf74';
 var PAGE_SIZE = 1000;
@@ -97,7 +120,9 @@ async function scanGaps(supabase) {
       .from('telematics_records')
       .select('user_id, asset_id, record_date')
       .is('daily_distance_km', null)
-      .not('odometer_km', 'is', null);
+      .not('odometer_km', 'is', null)
+      .order('user_id', { ascending: true })
+      .order('record_date', { ascending: true });
   });
 
   var byUser = {};
@@ -153,7 +178,8 @@ async function loadRowsForUser(supabase, userId) {
       .select('asset_id')
       .eq('user_id', userId)
       .is('daily_distance_km', null)
-      .not('odometer_km', 'is', null);
+      .not('odometer_km', 'is', null)
+      .order('asset_id', { ascending: true });
   });
   var assetIds = Array.from(new Set(needy.map(function(r) { return r.asset_id; })));
   if (!assetIds.length) return [];
@@ -166,7 +192,9 @@ async function loadRowsForUser(supabase, userId) {
         .from('telematics_records')
         .select('id, user_id, asset_id, record_date, daily_distance_km, odometer_km, idle_hours')
         .eq('user_id', userId)
-        .in('asset_id', chunk);
+        .in('asset_id', chunk)
+        .order('record_date', { ascending: true })
+        .order('id', { ascending: true });
     });
     rows = rows.concat(batch);
   }
