@@ -82,6 +82,7 @@
   tr.grand-total td { background: rgba(14,165,122,0.08); font-weight: 800; color: #0EA57A; font-size: 13.5px; border-top: 2px solid rgba(14,165,122,0.3); }
   .cell-missing { color: #EF9F27; font-style: italic; }
   .badge-alloc { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 100px; background: rgba(74,158,255,0.12); border: 1px solid rgba(74,158,255,0.3); color: #4A9EFF; margin-left: 6px; }
+  .badge-derived { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 100px; background: rgba(239,159,39,0.12); border: 1px solid rgba(239,159,39,0.35); color: #EF9F27; margin-left: 6px; }
 
   .empty-state { text-align: center; padding: 60px 20px; color: #3A4A5C; }
   .empty-state-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
@@ -118,8 +119,8 @@
     <div class="method-note">
       <div class="method-note-icon">ℹ️</div>
       <div>
-        <p><strong>Method:</strong> for every (asset, date) in the Orion file, litres = actual km driven that day (from telematics odometer readings) × the asset's calibrated travel rate, plus that day's actual idle hours × the asset's calibrated idle rate. This is real, calibrated fuel data — not a flat assumed rate — so totals will move month to month as driving and idle patterns change.</p>
-        <p><strong>Same-day, multiple work orders:</strong> if a truck shows on more than one Orion work order on the same date, that day's litres are split between them by Vehicle Hours share. <span class="badge-alloc" style="margin-left:0">flagged in the table</span></p>
+        <p><strong>Method:</strong> for every (asset, date) in the Orion file, litres = actual km driven that day × the asset's calibrated travel rate, plus that day's actual idle hours × the asset's calibrated idle rate. Km comes from Navman's mileage report when present, otherwise from the delta between that day's odometer and the asset's previous odometer reading. Idle hours alone are not treated as a complete day's fuel — if km cannot be resolved either way, the row is flagged as no data rather than reported as an idle-only figure.</p>
+        <p><strong>Same-day, multiple work orders:</strong> if a truck shows on more than one Orion work order on the same date, that day's litres are split between them by Vehicle Hours share. <span class="badge-alloc" style="margin-left:0">flagged in the table</span> Days whose km was derived from odometer (mileage report missing) are marked <span class="badge-derived" style="margin-left:0">derived km</span> here for operators; the Orion PDF/CSV submission is unmarked — the litres are the same physical quantity.</p>
       </div>
     </div>
 
@@ -176,7 +177,7 @@
           <div class="kpi-card">
             <div class="kpi-label">Rows Missing Data</div>
             <div class="kpi-value" id="kpi-missing-count" style="color:#EF9F27;">—</div>
-            <div class="kpi-sub warn">no telematics for that day — excluded from total</div>
+            <div class="kpi-sub warn" id="kpi-missing-sub">no telematics for that day — excluded from total</div>
           </div>
         </div>
 
@@ -218,13 +219,16 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <script src="js/report-theme.js"></script>
+<script src="js/telematics-distance.js"></script>
 <script src="js/sidebar-nav.js"></script>
 <script>
 (function() {
   'use strict';
 
-  var DEFAULT_TRAVEL_RATE_LPK = 0.35;
-  var DEFAULT_IDLE_RATE_LPH = 3.0;
+  var Dist = window.FleetMagnifyTelematicsDistance;
+  var DEFAULT_TRAVEL_RATE_LPK = Dist.DEFAULT_TRAVEL_RATE_LPK;
+  var DEFAULT_IDLE_RATE_LPH = Dist.DEFAULT_IDLE_RATE_LPH;
+  var LOOKBACK_DAYS = Dist.LOOKBACK_DAYS;
 
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var effectiveAccountId = null;
@@ -426,9 +430,11 @@
 
   async function loadTelematics(assetIds, minDate, maxDate) {
     if (assetIds.length === 0) return {};
-    var bufferedStart = minDate;
+    // Look back so 1st-of-month Orion days (e.g. T34 1 Aug) can still
+    // derive km from the previous day's odometer.
+    var bufferedStart = Dist.addDaysIso(minDate, -LOOKBACK_DAYS) || minDate;
     var result = await supabase.from('telematics_records')
-      .select('asset_id, record_date, daily_distance_km, idle_hours')
+      .select('asset_id, record_date, daily_distance_km, idle_hours, odometer_km')
       .eq('user_id', effectiveAccountId)
       .in('asset_id', assetIds)
       .gte('record_date', bufferedStart)
@@ -447,24 +453,11 @@
   // ---------------------------------------------------------------------
   // Fuel computation
   // ---------------------------------------------------------------------
-  function effectiveTravelRate(asset) { return (asset && asset.travel_rate_lpk) || DEFAULT_TRAVEL_RATE_LPK; }
-  function effectiveIdleRate(asset) { return (asset && asset.idle_burn_rate_lph) || DEFAULT_IDLE_RATE_LPH; }
-
-  // Returns { litres, hasData } for one asset on one date, using the
-  // buffered telematics history for that asset.
   function dailyLitres(asset, records, dateIso) {
-    if (!records || records.length === 0) return { litres: 0, hasData: false };
-    var todayIdx = -1;
-    for (var i = 0; i < records.length; i++) {
-      if (records[i].record_date === dateIso) { todayIdx = i; break; }
-    }
-    if (todayIdx === -1) return { litres: 0, hasData: false };
-    var today = records[todayIdx];
-    var km = today.daily_distance_km != null ? Math.max(0, today.daily_distance_km) : 0;
-    var idleHours = today.idle_hours != null ? today.idle_hours : 0;
-    var hasData = (today.daily_distance_km != null || today.idle_hours != null);
-    var litres = (km * effectiveTravelRate(asset)) + (idleHours * effectiveIdleRate(asset));
-    return { litres: litres, hasData: hasData };
+    return Dist.dailyLitres(asset, records, dateIso, {
+      defaultTravelRateLpk: DEFAULT_TRAVEL_RATE_LPK,
+      defaultIdleRateLph: DEFAULT_IDLE_RATE_LPH
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -509,6 +502,7 @@
 
     reportRows = [];
     var missingCount = 0;
+    var derivedCount = 0;
 
     Object.keys(byAssetDate).forEach(function(key) {
       var group = byAssetDate[key];
@@ -524,6 +518,7 @@
         var share = totalHoursThatDay > 0 ? (x.row.vehicleHours / totalHoursThatDay) : (1 / group.length);
         var litres = dl.hasData ? dl.litres * share : null;
         if (!dl.hasData) missingCount++;
+        if (dl.distanceSource === 'odometer_delta') derivedCount++;
         reportRows.push({
           woNumber: x.row.woNumber,
           jobNum: x.row.jobNum,
@@ -532,7 +527,8 @@
           assetName: asset ? asset.asset_name : x.row.vehicleRaw,
           vehicleHours: x.row.vehicleHours,
           litres: litres,
-          split: splitAcrossMultipleWOs
+          split: splitAcrossMultipleWOs,
+          distanceSource: dl.distanceSource
         });
       });
     });
@@ -545,7 +541,7 @@
       return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0);
     });
 
-    renderReport(missingCount);
+    renderReport(missingCount, derivedCount);
   }
 
   // ---------------------------------------------------------------------
@@ -648,7 +644,7 @@
   function fmtDateShort(iso) { return new Date(iso + 'T00:00:00').toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: '2-digit' }); }
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-  function renderReport(missingCount) {
+  function renderReport(missingCount, derivedCount) {
     var tbody = document.getElementById('report-body');
     tbody.innerHTML = '';
 
@@ -667,6 +663,9 @@
       rows.forEach(function(r) {
         assetSet.add(r.assetName);
         if (r.litres != null) { woTotal += r.litres; grandTotal += r.litres; }
+        var derivedBadge = r.distanceSource === 'odometer_delta'
+          ? '<span class="badge-derived">derived km</span>'
+          : '';
         var tr = document.createElement('tr');
         tr.innerHTML =
           '<td>' + esc(r.woNumber) + '</td>' +
@@ -674,7 +673,7 @@
           '<td>' + fmtDateShort(r.date) + '</td>' +
           '<td>' + esc(r.assetName) + (r.split ? '<span class="badge-alloc">split</span>' : '') + '</td>' +
           '<td>' + r.vehicleHours.toFixed(2) + '</td>' +
-          '<td>' + (r.litres == null ? '<span class="cell-missing">no data</span>' : fmtLitres(r.litres)) + '</td>';
+          '<td>' + (r.litres == null ? '<span class="cell-missing">no data</span>' : fmtLitres(r.litres) + derivedBadge) + '</td>';
         tbody.appendChild(tr);
       });
       var subtotalTr = document.createElement('tr');
@@ -692,6 +691,12 @@
     document.getElementById('kpi-wo-count').textContent = Object.keys(groupedByWO).length;
     document.getElementById('kpi-asset-count').textContent = assetSet.size;
     document.getElementById('kpi-missing-count').textContent = missingCount;
+    var missingSub = document.getElementById('kpi-missing-sub');
+    if (missingSub) {
+      missingSub.textContent = derivedCount
+        ? 'no telematics for that day — excluded from total · ' + derivedCount + ' day' + (derivedCount === 1 ? '' : 's') + ' used odometer-derived km'
+        : 'no telematics for that day — excluded from total';
+    }
 
     document.getElementById('results').hidden = false;
     document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
