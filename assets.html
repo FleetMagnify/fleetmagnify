@@ -1023,10 +1023,12 @@
       .from('assets')
       .update(patch)
       .eq('id', Number(assetId))
-      .eq('user_id', effectiveAccountId);
+      .eq('user_id', effectiveAccountId)
+      .select('id');
 
     var statusEl = document.getElementById('profile-editor-save-status');
-    if (result.error) {
+    var writeErr = window.supabaseWriteError(result, 'Save');
+    if (writeErr) {
       statusEl.textContent = '✕ Save failed';
       statusEl.style.color = '#F0A8A7';
     } else {
@@ -1242,9 +1244,11 @@
       .from('assets')
       .update({ is_ignored: false })
       .eq('id', Number(id))
-      .eq('user_id', effectiveAccountId);
-    if (result.error) {
-      showToast('Failed to restore asset: ' + result.error.message, 'error');
+      .eq('user_id', effectiveAccountId)
+      .select('id');
+    var writeErr = window.supabaseWriteError(result, 'Restore');
+    if (writeErr) {
+      showToast('Failed to restore asset: ' + writeErr, 'error');
       return;
     }
     showToast('Asset restored', 'success');
@@ -1441,13 +1445,15 @@
       .from('assets')
       .update({ is_ignored: true })
       .eq('id', Number(id))
-      .eq('user_id', effectiveAccountId);
+      .eq('user_id', effectiveAccountId)
+      .select('id');
 
     draggedDiscardId = null;
     draggedCardId = null;
 
-    if (result.error) {
-      showToast('Failed to discard asset: ' + result.error.message, 'error');
+    var writeErr = window.supabaseWriteError(result, 'Update');
+    if (writeErr) {
+      showToast('Failed to discard asset: ' + writeErr, 'error');
       return;
     }
     showToast('Asset marked as not tracked', 'success');
@@ -1569,9 +1575,11 @@
       var moveResult = await supabase
         .from(entry.cfg.table)
         .update(ref)
-        .eq(entry.cfg.column, Number(stub.id));
-      if (moveResult.error) {
-        errors.push(entry.cfg.plural + ' (' + moveResult.error.message + ')');
+        .eq(entry.cfg.column, Number(stub.id))
+        .select('id');
+      var moveErr = window.supabaseWriteError(moveResult, 'Update');
+      if (moveErr) {
+        errors.push(entry.cfg.plural + ' (' + moveErr + ')');
       } else {
         movedParts.push(describeCount(entry.cfg, entry.count));
       }
@@ -1611,7 +1619,8 @@
       .from('assets')
       .update(mergeCardPatch)
       .eq('id', Number(target.id))
-      .eq('user_id', effectiveAccountId);
+      .eq('user_id', effectiveAccountId)
+      .select('id');
 
     btn.disabled = false;
     btn.textContent = 'Yes, Merge';
@@ -1621,9 +1630,10 @@
     if (cardEl && cardEl.parentNode) cardEl.parentNode.removeChild(cardEl);
 
     var summary = movedParts.length ? joinWithAnd(movedParts) + ' moved' : 'no records to move';
-    if (updateResult.error) {
+    var cardWriteErr = window.supabaseWriteError(updateResult, 'Update');
+    if (cardWriteErr) {
       showToast('Merged (' + summary + '), but failed to update the vehicle\'s card number: ' +
-        updateResult.error.message, 'error');
+        cardWriteErr, 'error');
     } else {
       showToast('Merged successfully — ' + summary + '.', 'success');
     }
@@ -1957,10 +1967,12 @@
       .from('assets')
       .update({ is_ignored: true })
       .eq('id', Number(id))
-      .eq('user_id', effectiveAccountId);
+      .eq('user_id', effectiveAccountId)
+      .select('id');
 
-    if (result.error) {
-      showToast('Failed to ignore asset: ' + result.error.message, 'error');
+    var writeErr = window.supabaseWriteError(result, 'Update');
+    if (writeErr) {
+      showToast('Failed to ignore asset: ' + writeErr, 'error');
       return;
     }
     showToast('Asset ignored', 'success');
@@ -2184,15 +2196,22 @@
       .maybeSingle();
 
     if (existing.data) {
-      return supabase.from('company_integrations')
+      var updateResult = await supabase.from('company_integrations')
         .update({ telematics_provider: 'eRoad', eroad_api_key: apiKey })
-        .eq('user_id', effectiveAccountId);
+        .eq('user_id', effectiveAccountId)
+        .select('user_id');
+      var writeErr = window.supabaseWriteError(updateResult, 'Update');
+      if (writeErr) return { error: { message: writeErr } };
+      return updateResult;
     }
-    return supabase.from('company_integrations').insert({
+    var insertResult = await supabase.from('company_integrations').insert({
       user_id: effectiveAccountId,
       telematics_provider: 'eRoad',
       eroad_api_key: apiKey
-    });
+    }).select('user_id');
+    var insertErr = window.supabaseWriteError(insertResult, 'Save');
+    if (insertErr) return { error: { message: insertErr } };
+    return insertResult;
   }
 
   function updateFormForAssetType() {
@@ -2937,7 +2956,12 @@
         skipped.push('Update failed for ' + (u.existing.asset_name || 'ID ' + u.existing.id) + ': ' + result.error.message);
         continue;
       }
-      if (result.data && result.data.length) updated++;
+      var writeErr = window.supabaseWriteError(result, 'Update');
+      if (writeErr) {
+        skipped.push('Update failed for ' + (u.existing.asset_name || 'ID ' + u.existing.id) + ': ' + writeErr);
+        continue;
+      }
+      updated++;
     }
 
     if (plan.inserts.length) {

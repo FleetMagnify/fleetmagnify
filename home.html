@@ -794,7 +794,8 @@
     if (existing.data) {
       await supabase.from('user_settings')
         .update({ tour_completed: true })
-        .eq('user_id', effectiveAccountId);
+        .eq('user_id', effectiveAccountId)
+        .select('user_id');
     } else {
       await supabase.from('user_settings')
         .insert({ user_id: effectiveAccountId, tour_completed: true });

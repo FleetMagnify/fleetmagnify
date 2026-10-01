@@ -591,21 +591,49 @@
 
       var existing = findPayload(currentPayloads, latestPeriod.periodStart, latestPeriod.periodEnd);
       if (existing) {
-        await supabase.from('truck_payloads').update({ payload_tonnes: num }).eq('id', existing.id);
+        var payloadResult = await supabase.from('truck_payloads').update({ payload_tonnes: num }).eq('id', existing.id).select('id');
+        var payloadErr = window.supabaseWriteError(payloadResult, 'Save');
+        if (payloadErr) {
+          var failStatus = document.getElementById('emtonne-save-status');
+          failStatus.textContent = payloadErr;
+          failStatus.style.color = '#F0A8A7';
+          failStatus.classList.add('visible');
+          setTimeout(function() {
+            failStatus.classList.remove('visible');
+            failStatus.textContent = 'Saved ✓';
+            failStatus.style.color = '';
+          }, 2500);
+          return;
+        }
       } else {
-        await supabase.from('truck_payloads').insert({
+        var insertResult = await supabase.from('truck_payloads').insert({
           user_id: effectiveAccountId,
           vehicle_id: Number(selectedVehicle.id),
           period_start: latestPeriod.periodStart,
           period_end: latestPeriod.periodEnd,
           payload_tonnes: num
-        });
+        }).select('id');
+        var insertErr = window.supabaseWriteError(insertResult, 'Save');
+        if (insertErr) {
+          var failStatusIns = document.getElementById('emtonne-save-status');
+          failStatusIns.textContent = insertErr;
+          failStatusIns.style.color = '#F0A8A7';
+          failStatusIns.classList.add('visible');
+          setTimeout(function() {
+            failStatusIns.classList.remove('visible');
+            failStatusIns.textContent = 'Saved ✓';
+            failStatusIns.style.color = '';
+          }, 2500);
+          return;
+        }
       }
 
       currentPayloads = await fetchPayloads(selectedVehicle.id);
       if (displayPeriods.length) showDashboard(displayPeriods);
 
       var status = document.getElementById('emtonne-save-status');
+      status.textContent = 'Saved ✓';
+      status.style.color = '';
       status.classList.add('visible');
       setTimeout(function() { status.classList.remove('visible'); }, 1500);
     });
