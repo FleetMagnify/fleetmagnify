@@ -478,6 +478,23 @@
   // Fetches fuel purchases across the union of: the trailing PRICE_HISTORY_MONTHS
   // window ending at dateTo (for average price per litre), and the selected
   // range itself (for real in-range fuel cost) — in a single query.
+  function mergeTruckFuelFills(purchases, records) {
+    var rows = (purchases || []).map(function(r) {
+      return { purchase_date: r.purchase_date, litres: r.litres, cost_nzd: r.cost_nzd };
+    });
+    (records || []).forEach(function(r) {
+      rows.push({
+        purchase_date: r.record_date,
+        litres: r.litres,
+        cost_nzd: r.total_cost
+      });
+    });
+    rows.sort(function(a, b) {
+      return String(a.purchase_date).localeCompare(String(b.purchase_date));
+    });
+    return rows;
+  }
+
   async function fetchFuelForIdleCost(vehicleId, dateFrom, dateTo) {
     var priceWindowFrom = addMonths(dateTo, -PRICE_HISTORY_MONTHS);
     var queryFrom = priceWindowFrom < dateFrom ? priceWindowFrom : dateFrom;
@@ -490,10 +507,18 @@
       .gte('purchase_date', queryFrom)
       .lte('purchase_date', dateTo)
       .order('purchase_date');
+    var recordsResult = await supabase
+      .from('fuel_records')
+      .select('record_date, litres, total_cost')
+      .eq('asset_id', Number(vehicleId))
+      .eq('user_id', effectiveAccountId)
+      .gte('record_date', queryFrom)
+      .lte('record_date', dateTo)
+      .order('record_date');
 
     return {
-      fuel: result.data || [],
-      fuelError: result.error,
+      fuel: mergeTruckFuelFills(result.data, recordsResult.data),
+      fuelError: result.error || recordsResult.error,
       priceWindowFrom: priceWindowFrom
     };
   }

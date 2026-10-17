@@ -642,6 +642,23 @@
 
   document.getElementById('apply-filters-btn').addEventListener('click', runAnalysis);
 
+  function mergeTruckFuelFills(purchases, records) {
+    var rows = (purchases || []).map(function(r) {
+      return { purchase_date: r.purchase_date, litres: r.litres, cost_nzd: r.cost_nzd };
+    });
+    (records || []).forEach(function(r) {
+      rows.push({
+        purchase_date: r.record_date,
+        litres: r.litres,
+        cost_nzd: r.total_cost
+      });
+    });
+    rows.sort(function(a, b) {
+      return String(a.purchase_date).localeCompare(String(b.purchase_date));
+    });
+    return rows;
+  }
+
   async function fetchVehicleData(vehicleId, dateFrom, dateTo) {
     var bufferFrom = addDays(dateFrom, -DATE_BUFFER_DAYS);
     var bufferTo = addDays(dateTo, DATE_BUFFER_DAYS);
@@ -654,6 +671,14 @@
       .gte('purchase_date', bufferFrom)
       .lte('purchase_date', bufferTo)
       .order('purchase_date');
+    var fuelRecordsResult = await supabase
+      .from('fuel_records')
+      .select('record_date, litres, total_cost')
+      .eq('asset_id', Number(vehicleId))
+      .eq('user_id', effectiveAccountId)
+      .gte('record_date', bufferFrom)
+      .lte('record_date', bufferTo)
+      .order('record_date');
 
     var mileageResult = await supabase
       .from('telematics_records')
@@ -678,10 +703,10 @@
       .order('record_date');
 
     return {
-      fuel: fuelResult.data || [],
+      fuel: mergeTruckFuelFills(fuelResult.data, fuelRecordsResult.data),
       mileage: mileageResult.data || [],
       telematicsPresence: presenceResult.data || [],
-      fuelError: fuelResult.error,
+      fuelError: fuelResult.error || fuelRecordsResult.error,
       mileageError: mileageResult.error,
       presenceError: presenceResult.error
     };

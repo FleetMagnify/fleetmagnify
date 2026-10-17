@@ -176,7 +176,7 @@
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this is calculated:</strong> Total litres come from your fuel records. Idle fuel is estimated using each asset's idle burn rate multiplied by idle hours from telematics — the same method as Fuel Analyst. Operating fuel is the remainder. CO₂ is converted using NZ MfE combustion factors (Diesel 2.68 kg CO₂-e/L, Petrol 2.31). A litre of diesel emits the same regardless of drivetrain. Set fuel type and idle burn rate on the <a href="assets.html">Assets page</a>.</p>
+      <p><strong>How this is calculated:</strong> Total litres come from fuel purchases plus any manual bulk-tank entries for trucks, and from telematics litres consumed for machinery. Idle fuel is estimated using each asset's idle burn rate multiplied by idle hours from telematics — the same method as Fuel Analyst. Operating fuel is the remainder. CO₂ is converted using NZ MfE combustion factors (Diesel 2.68 kg CO₂-e/L, Petrol 2.31). A litre of diesel emits the same regardless of drivetrain. Set fuel type and idle burn rate on the <a href="assets.html">Assets page</a>.</p>
     </div>
 
     <div class="filter-bar">
@@ -342,7 +342,7 @@
   async function loadAssets() {
     var result = await supabase
       .from('assets')
-      .select('id, asset_name, asset_type, fuel_type, idle_burn_rate_lph')
+      .select('id, asset_name, asset_type, fuel_type, idle_burn_rate_lph, is_on_road')
       .eq('user_id', effectiveAccountId)
       .eq('is_ignored', false)
       .order('asset_name');
@@ -409,44 +409,73 @@
     var idleRate = FCM.resolvedIdleRate(selectedAsset).rate;
     var factor = getEmissionFactor(selectedAsset.fuel_type);
 
-    var fuelResult = await supabase
-      .from('fuel_records')
-      .select('record_date, litres')
+    var telResult = await supabase
+      .from('telematics_records')
+      .select('record_date, operating_hours, idle_hours, litres_consumed')
       .eq('asset_id', selectedAsset.id)
       .eq('user_id', effectiveAccountId)
       .gte('record_date', dateFrom)
       .lte('record_date', dateTo)
       .order('record_date');
 
-    var telResult = await supabase
-      .from('telematics_records')
-      .select('record_date, operating_hours, idle_hours')
-      .eq('asset_id', selectedAsset.id)
-      .eq('user_id', effectiveAccountId)
-      .gte('record_date', dateFrom)
-      .lte('record_date', dateTo)
-      .order('record_date');
+    var onRoad = FCM.isOnRoad(selectedAsset);
+    var purchaseResult = { data: [] };
+    var fuelRecordResult = { data: [] };
+    if (onRoad) {
+      purchaseResult = await supabase
+        .from('fuel_purchases')
+        .select('purchase_date, litres')
+        .eq('vehicle_id', selectedAsset.id)
+        .eq('user_id', effectiveAccountId)
+        .gte('purchase_date', dateFrom)
+        .lte('purchase_date', dateTo);
+      fuelRecordResult = await supabase
+        .from('fuel_records')
+        .select('record_date, litres')
+        .eq('asset_id', selectedAsset.id)
+        .eq('user_id', effectiveAccountId)
+        .gte('record_date', dateFrom)
+        .lte('record_date', dateTo);
+    }
 
     btn.disabled = false;
     btn.textContent = 'Apply Filters';
 
-    var fuelRows = fuelResult.data || [];
     var telRows = telResult.data || [];
+    var purchaseRows = purchaseResult.data || [];
+    var fuelRecordRows = fuelRecordResult.data || [];
 
-    if (fuelRows.length === 0 && telRows.length === 0) {
+    if (onRoad) {
+      if (purchaseRows.length === 0 && fuelRecordRows.length === 0 && telRows.length === 0) {
+        showEmpty();
+        return;
+      }
+    } else if (telRows.length === 0) {
       showEmpty();
       return;
     }
 
     var byDate = {};
-    fuelRows.forEach(function(r) {
-      byDate[r.record_date] = byDate[r.record_date] || {};
-      byDate[r.record_date].litres = (byDate[r.record_date].litres || 0) + (parseFloat(r.litres) || 0);
-    });
+    if (onRoad) {
+      purchaseRows.forEach(function(r) {
+        var date = String(r.purchase_date).slice(0, 10);
+        byDate[date] = byDate[date] || {};
+        byDate[date].litres = (byDate[date].litres || 0) + (parseFloat(r.litres) || 0);
+      });
+      fuelRecordRows.forEach(function(r) {
+        var date = String(r.record_date).slice(0, 10);
+        byDate[date] = byDate[date] || {};
+        byDate[date].litres = (byDate[date].litres || 0) + (parseFloat(r.litres) || 0);
+      });
+    }
     telRows.forEach(function(r) {
-      byDate[r.record_date] = byDate[r.record_date] || {};
-      byDate[r.record_date].operating_hours = (byDate[r.record_date].operating_hours || 0) + (parseFloat(r.operating_hours) || 0);
-      byDate[r.record_date].idle_hours = (byDate[r.record_date].idle_hours || 0) + (parseFloat(r.idle_hours) || 0);
+      var date = String(r.record_date).slice(0, 10);
+      byDate[date] = byDate[date] || {};
+      byDate[date].operating_hours = (byDate[date].operating_hours || 0) + (parseFloat(r.operating_hours) || 0);
+      byDate[date].idle_hours = (byDate[date].idle_hours || 0) + (parseFloat(r.idle_hours) || 0);
+      if (!onRoad) {
+        byDate[date].litres = (byDate[date].litres || 0) + (parseFloat(r.litres_consumed) || 0);
+      }
     });
 
     var dates = Object.keys(byDate).sort();

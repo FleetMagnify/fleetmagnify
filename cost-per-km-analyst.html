@@ -392,6 +392,23 @@
     };
   }
 
+  function mergeTruckFuelFills(purchases, records) {
+    var rows = (purchases || []).map(function(r) {
+      return { purchase_date: r.purchase_date, litres: r.litres, cost_nzd: r.cost_nzd };
+    });
+    (records || []).forEach(function(r) {
+      rows.push({
+        purchase_date: r.record_date,
+        litres: r.litres,
+        cost_nzd: r.total_cost
+      });
+    });
+    rows.sort(function(a, b) {
+      return String(a.purchase_date).localeCompare(String(b.purchase_date));
+    });
+    return rows;
+  }
+
   // Average price/litre over the trailing PRICE_HISTORY_MONTHS window ending at dateTo
   // (or all-time if less) — same pattern as truck-idle-monitor.html / truck-fuel-analyst.html.
   async function fetchAvgPricePerLitre(vehicleId, dateTo) {
@@ -404,13 +421,20 @@
       .gte('purchase_date', priceWindowFrom)
       .lte('purchase_date', dateTo)
       .order('purchase_date');
+    var recordsResult = await supabase
+      .from('fuel_records')
+      .select('litres, total_cost')
+      .eq('asset_id', Number(vehicleId))
+      .eq('user_id', effectiveAccountId)
+      .gte('record_date', priceWindowFrom)
+      .lte('record_date', dateTo);
 
-    var rows = result.data || [];
+    var rows = mergeTruckFuelFills(result.data, recordsResult.data);
     var totalCost = rows.reduce(function(sum, r) { return sum + (parseFloat(r.cost_nzd) || 0); }, 0);
     var totalLitres = rows.reduce(function(sum, r) { return sum + (parseFloat(r.litres) || 0); }, 0);
     return {
       avgPricePerLitre: totalLitres > 0 ? totalCost / totalLitres : 0,
-      error: result.error
+      error: result.error || recordsResult.error
     };
   }
 
@@ -975,6 +999,14 @@
       .gte('purchase_date', bufferFrom)
       .lte('purchase_date', bufferTo)
       .order('purchase_date');
+    var fuelRecordsResult = await supabase
+      .from('fuel_records')
+      .select('record_date, litres, total_cost')
+      .eq('asset_id', Number(vehicleId))
+      .eq('user_id', effectiveAccountId)
+      .gte('record_date', bufferFrom)
+      .lte('record_date', bufferTo)
+      .order('record_date');
 
     var mileageResult = await supabase
       .from('telematics_records')
@@ -999,10 +1031,10 @@
       .order('record_date');
 
     return {
-      fuel: fuelResult.data || [],
+      fuel: mergeTruckFuelFills(fuelResult.data, fuelRecordsResult.data),
       mileage: mileageResult.data || [],
       telematicsPresence: presenceResult.data || [],
-      fuelError: fuelResult.error,
+      fuelError: fuelResult.error || fuelRecordsResult.error,
       mileageError: mileageResult.error,
       presenceError: presenceResult.error
     };
