@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS email_imports (
   raw_csv text NOT NULL,
   status text NOT NULL DEFAULT 'pending',
   error_message text,
+  detected_category text,
+  detected_headers text,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -48,9 +50,17 @@ CREATE POLICY "Users can read own email imports"
   TO authenticated
   USING (auth.uid() = user_id);
 
--- Parser status / deduplication support
+-- Parser status / deduplication support.
+-- ADD COLUMN keeps databases created from an older copy of this script
+-- aligned with the table definition above.
 ALTER TABLE email_imports
   ADD COLUMN IF NOT EXISTS error_message text;
+
+ALTER TABLE email_imports
+  ADD COLUMN IF NOT EXISTS detected_category text;
+
+ALTER TABLE email_imports
+  ADD COLUMN IF NOT EXISTS detected_headers text;
 
 CREATE UNIQUE INDEX IF NOT EXISTS telematics_records_asset_date_key
   ON telematics_records (asset_id, record_date);
