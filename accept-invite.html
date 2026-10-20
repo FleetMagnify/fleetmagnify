@@ -134,6 +134,18 @@
     border-color: rgba(14,165,122,0.45);
     background: rgba(14,165,122,0.04);
   }
+
+  .password-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 7px;
+  }
+  .password-header label { margin-bottom: 0; }
+  .show-password {
+    background: none; border: none; padding: 0; cursor: pointer;
+    font-size: 12px; font-weight: 500; color: #0EA57A;
+    font-family: inherit; transition: color 0.2s;
+  }
+  .show-password:hover { color: #0BC48E; }
   .form-hint {
     font-size: 12px; color: #5A6474; margin-top: 6px;
   }
@@ -227,7 +239,10 @@
 
       <form id="set-password-form" novalidate>
         <div class="form-group">
-          <label for="new-password">New Password</label>
+          <div class="password-header">
+            <label for="new-password">New Password</label>
+            <button type="button" class="show-password" id="show-password" aria-pressed="false">Show password</button>
+          </div>
           <input type="password" id="new-password" name="newPassword" placeholder="At least 8 characters" required autocomplete="new-password" minlength="8">
         </div>
         <div class="form-group">
@@ -254,6 +269,7 @@
     var submitBtn = document.getElementById('submit-btn');
     var newPasswordInput = document.getElementById('new-password');
     var confirmPasswordInput = document.getElementById('confirm-password');
+    var showPasswordBtn = document.getElementById('show-password');
 
     function showView(view) {
       loadingView.hidden = (view !== loadingView);
@@ -275,6 +291,22 @@
       formErrorEl.textContent = '';
       formErrorEl.classList.remove('is-visible');
     }
+
+    function clearMismatchError() {
+      if (formErrorEl.textContent === "Passwords don't match") hideFormError();
+    }
+
+    newPasswordInput.addEventListener('input', clearMismatchError);
+    confirmPasswordInput.addEventListener('input', clearMismatchError);
+
+    showPasswordBtn.addEventListener('click', function() {
+      var reveal = newPasswordInput.type === 'password';
+      var nextType = reveal ? 'text' : 'password';
+      newPasswordInput.type = nextType;
+      confirmPasswordInput.type = nextType;
+      showPasswordBtn.textContent = reveal ? 'Hide password' : 'Show password';
+      showPasswordBtn.setAttribute('aria-pressed', reveal ? 'true' : 'false');
+    });
 
     if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY ||
         window.SUPABASE_URL === 'YOUR_SUPABASE_URL') {
@@ -314,7 +346,8 @@
       }
 
       if (newPassword !== confirmPassword) {
-        showFormError('Passwords do not match.');
+        showFormError("Passwords don't match");
+        confirmPasswordInput.focus();
         return;
       }
 
