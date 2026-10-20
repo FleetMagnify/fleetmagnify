@@ -788,7 +788,7 @@
       <div id="telematics-eroad-fields" class="telematics-provider-fields">
         <div class="form-group">
           <label for="eroad-api-key">eRoad Integration Key</label>
-          <input type="password" id="eroad-api-key" placeholder="Paste your eRoad integration key" autocomplete="off">
+          <input type="password" id="eroad-api-key" placeholder="eRoad reports arrive by email" autocomplete="off">
         </div>
         <div class="form-group" style="margin-bottom:0;">
           <label for="eroad-machine-id">eRoad Machine ID</label>
@@ -796,7 +796,7 @@
           <div class="form-hint">Generate an integration key in MyEROAD under Administration &gt; My Organization &gt; Partner Gateway, and find the Machine ID under the vehicle's details in MyEROAD.</div>
         </div>
       </div>
-      <div id="telematics-visionlink-msg" class="telematics-coming-soon">VisionLink connection coming soon</div>
+      <div id="telematics-visionlink-msg" class="telematics-coming-soon">VisionLink reports arrive by email to your upload address</div>
     </div>
     <div class="modal-actions">
       <button type="button" id="delete-asset-modal-btn" hidden>Delete Asset</button>
@@ -2136,7 +2136,7 @@
     document.getElementById('eroad-api-key').value = '';
     document.getElementById('eroad-api-key').placeholder = storedHasEroadKey
       ? '••••••••  (leave blank to keep current key)'
-      : 'Paste your eRoad API key';
+      : 'eRoad reports arrive by email';
     document.getElementById('eroad-machine-id').value = '';
     updateTelematicsProviderFields();
   }
@@ -2147,7 +2147,7 @@
     document.getElementById('eroad-api-key').value = '';
     document.getElementById('eroad-api-key').placeholder = storedHasEroadKey
       ? '••••••••  (leave blank to keep current key)'
-      : 'Paste your eRoad API key';
+      : 'eRoad reports arrive by email';
     document.getElementById('eroad-machine-id').value = asset.eroad_machine_id || '';
     updateTelematicsProviderFields();
   }

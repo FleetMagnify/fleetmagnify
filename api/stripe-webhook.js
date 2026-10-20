@@ -60,7 +60,7 @@ function extraFieldsForCheckoutSession(session) {
 
 /**
  * checkout.session.completed does not carry subscription.status unless the
- * subscription is expanded. A 10-day trial Checkout starts the subscription
+ * subscription is expanded. A 30-day trial Checkout starts the subscription
  * as `trialing`, not `active` — never assume active from the session alone.
  */
 function checkoutSubscriptionStatus(session) {

@@ -115,7 +115,7 @@
   <div class="page-content">
     <div class="page-eyebrow"><div class="dash"></div> Truck Fleet</div>
     <h1 class="page-title">Trip Cost Report</h1>
-    <p class="page-sub">Generate a full cost and emissions summary for a trip date range using daily eROAD or Navman distance, rolling fuel rates, and asset cost data.</p>
+    <p class="page-sub">Generate a full cost and emissions summary for a trip date range using daily eRoad or Navman distance, rolling fuel rates, and asset cost data.</p>
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
@@ -457,7 +457,7 @@
     }
     var computed = computePeriods(eligible, mileageRows, presenceRows);
     if (computed.error === 'no_mileage') {
-      return { error: 'No eROAD telematics data to calculate fill-to-fill fuel rates' };
+      return { error: 'No eRoad or Navman mileage report has been received to calculate fill-to-fill fuel rates' };
     }
     if (computed.error) {
       return { error: 'Could not calculate a fill-to-fill fuel period from available purchases' };
@@ -669,7 +669,7 @@
       return;
     }
     if (!mileageRows.length) {
-      showError('No eROAD or Navman telematics data covering the selected dates.');
+      showError('No eRoad or Navman mileage report covering the selected dates has been received.');
       return;
     }
 

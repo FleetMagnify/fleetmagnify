@@ -172,6 +172,7 @@
 
 <script src="js/supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/subscription-guard.js"></script>
 <script>
 (function() {
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
@@ -230,7 +231,7 @@
           cancelUrl: window.location.origin + '/upgrade.html'
         };
         if (!profile.trial_ends_at && !profile.stripe_subscription_id && !profile.subscription_status) {
-          checkoutBody.trialPeriodDays = 10;
+          checkoutBody.trialPeriodDays = window.FleetMagnifySubscriptionGuard.TRIAL_DAYS;
         }
 
         var response = await fetch('/api/create-checkout-session', {
