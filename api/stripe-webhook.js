@@ -74,6 +74,29 @@ function profileStatusFromStripe(status) {
   return status;
 }
 
+function unixSecondsToIso(seconds) {
+  var n = Number(seconds);
+  if (!n) return null;
+  var date = new Date(n * 1000);
+  if (isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+// cancel_at is unix seconds. On API version 2026-06-24.dahlia the period end
+// may live on the subscription or only on items.data[0].
+function cancelAtFromSubscription(sub) {
+  if (!sub) return null;
+  if (sub.cancel_at) return unixSecondsToIso(sub.cancel_at);
+  if (sub.cancel_at_period_end) {
+    var periodEnd = sub.current_period_end;
+    if (!periodEnd && sub.items && sub.items.data && sub.items.data[0]) {
+      periodEnd = sub.items.data[0].current_period_end;
+    }
+    return unixSecondsToIso(periodEnd);
+  }
+  return null;
+}
+
 async function setSubscriptionStatus(supabase, userId, status, extra) {
   var payload = Object.assign({ subscription_status: status }, extra || {});
   var result = await supabase.from('profiles').update(payload).eq('id', userId);
@@ -159,6 +182,9 @@ async function processStripeEvent(supabase, event, deps) {
       var extra = { stripe_subscription_id: stripeId(updatedSub) };
       if (mapped === 'cancelled') {
         extra.stripe_subscription_id = null;
+        extra.cancel_at = null;
+      } else {
+        extra.cancel_at = cancelAtFromSubscription(updatedSub);
       }
       await setSubscriptionStatus(supabase, updatedUid, mapped, extra);
       break;
@@ -213,6 +239,7 @@ async function processStripeEvent(supabase, event, deps) {
       if (deletedUid) {
         await setSubscriptionStatus(supabase, deletedUid, 'cancelled', {
           stripe_subscription_id: null,
+          cancel_at: null,
         });
       }
       break;
