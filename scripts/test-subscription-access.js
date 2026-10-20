@@ -13,6 +13,9 @@ var sync = require('../lib/sync-subscription-quantity');
 
 var now = Date.parse('2026-09-18T00:00:00.000Z');
 var day = 24 * 60 * 60 * 1000;
+var scheduledAt = 1790000000;
+var periodEnd = 1791000000;
+var itemPeriodEnd = 1792000000;
 
 function check(label, condition, detail) {
   assert.ok(condition, label + (detail ? ' — ' + detail : ''));
@@ -354,7 +357,118 @@ webhook.processStripeEvent(fake, {
   check(
     'subscription.updated terminal canceled maps to cancelled and clears sub id',
     recorded[0].payload.subscription_status === 'cancelled' &&
-      recorded[0].payload.stripe_subscription_id === null
+      recorded[0].payload.stripe_subscription_id === null &&
+      recorded[0].payload.cancel_at === null
+  );
+
+  console.log('\n=== scheduled cancellation ===');
+  recorded.length = 0;
+  return webhook.processStripeEvent(fake, {
+    type: 'customer.subscription.updated',
+    data: {
+      object: {
+        id: 'sub_live_2',
+        status: 'active',
+        customer: 'cus_live_1',
+        cancel_at: scheduledAt,
+        cancel_at_period_end: true,
+        metadata: { supabase_user_id: userId }
+      }
+    }
+  });
+}).then(function () {
+  check(
+    'subscription.updated with cancel_at records that end time',
+    recorded[0].payload.subscription_status === 'active' &&
+      recorded[0].payload.stripe_subscription_id === 'sub_live_2' &&
+      recorded[0].payload.cancel_at === new Date(scheduledAt * 1000).toISOString(),
+    recorded[0] && JSON.stringify(recorded[0].payload)
+  );
+
+  recorded.length = 0;
+  return webhook.processStripeEvent(fake, {
+    type: 'customer.subscription.updated',
+    data: {
+      object: {
+        id: 'sub_live_2',
+        status: 'active',
+        customer: 'cus_live_1',
+        cancel_at: null,
+        cancel_at_period_end: true,
+        current_period_end: periodEnd,
+        metadata: { supabase_user_id: userId }
+      }
+    }
+  });
+}).then(function () {
+  check(
+    'subscription.updated derives cancel_at from current_period_end',
+    recorded[0].payload.cancel_at === new Date(periodEnd * 1000).toISOString()
+  );
+
+  recorded.length = 0;
+  return webhook.processStripeEvent(fake, {
+    type: 'customer.subscription.updated',
+    data: {
+      object: {
+        id: 'sub_live_2',
+        status: 'active',
+        customer: 'cus_live_1',
+        cancel_at: null,
+        cancel_at_period_end: true,
+        items: { data: [{ current_period_end: itemPeriodEnd }] },
+        metadata: { supabase_user_id: userId }
+      }
+    }
+  });
+}).then(function () {
+  check(
+    'subscription.updated derives cancel_at from items.data[0].current_period_end',
+    recorded[0].payload.cancel_at === new Date(itemPeriodEnd * 1000).toISOString()
+  );
+
+  recorded.length = 0;
+  return webhook.processStripeEvent(fake, {
+    type: 'customer.subscription.updated',
+    data: {
+      object: {
+        id: 'sub_live_2',
+        status: 'active',
+        customer: 'cus_live_1',
+        cancel_at: null,
+        cancel_at_period_end: false,
+        metadata: { supabase_user_id: userId }
+      }
+    }
+  });
+}).then(function () {
+  check(
+    'subscription.updated clears cancel_at when the cancellation is reversed',
+    recorded[0].payload.subscription_status === 'active' &&
+      recorded[0].payload.stripe_subscription_id === 'sub_live_2' &&
+      recorded[0].payload.cancel_at === null
+  );
+
+  recorded.length = 0;
+  return webhook.processStripeEvent(fake, {
+    type: 'customer.subscription.deleted',
+    data: {
+      object: {
+        id: 'sub_live_2',
+        status: 'canceled',
+        customer: 'cus_live_1',
+        cancel_at: scheduledAt,
+        metadata: { supabase_user_id: userId }
+      }
+    }
+  });
+}).then(function () {
+  check(
+    'subscription.deleted sets cancelled and clears cancel_at',
+    recorded[0].payload.subscription_status === 'cancelled' &&
+      recorded[0].payload.stripe_subscription_id === null &&
+      recorded[0].payload.cancel_at === null,
+    recorded[0] && JSON.stringify(recorded[0].payload)
   );
 
   console.log('\n=== invoice.payment_succeeded $0 trial invoice ===');

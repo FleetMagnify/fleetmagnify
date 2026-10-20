@@ -141,12 +141,16 @@
           customer portal.</div>
       </div>
       <div class="section-body">
-        <button type="button" class="btn-save" id="manage-billing-btn">
-          Manage Billing →
-        </button>
-        <p class="form-hint" style="margin-top:10px;">
-          Opens Stripe's secure billing portal in a new tab.
-        </p>
+        <div id="billing-owner" hidden>
+          <button type="button" class="btn-save" id="manage-billing-btn">
+            Manage Billing →
+          </button>
+          <p class="form-hint" id="billing-cancel-note" hidden style="margin-top:10px;"></p>
+          <p class="form-hint" style="margin-top:10px;">
+            Opens Stripe's secure billing portal in a new tab.
+          </p>
+        </div>
+        <p class="form-hint" id="billing-member-note" hidden>Billing is managed by your account owner.</p>
       </div>
     </div>
 
@@ -241,6 +245,29 @@
     clearTimeout(toastTimer);
     setTimeout(function() { toast.classList.add('show'); }, 10);
     toastTimer = setTimeout(function() { toast.classList.remove('show'); }, 3500);
+  }
+
+  async function showScheduledCancellation() {
+    var result = await supabase
+      .from('profiles')
+      .select('cancel_at')
+      .eq('id', currentUser.id)
+      .maybeSingle();
+
+    if (result.error || !result.data || !result.data.cancel_at) return;
+
+    var end = new Date(result.data.cancel_at);
+    if (isNaN(end.getTime())) return;
+
+    var formatted = end.toLocaleDateString('en-NZ', {
+      timeZone: 'Pacific/Auckland',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+    var note = document.getElementById('billing-cancel-note');
+    note.textContent = 'Your subscription is set to end on ' + formatted + '. You keep access until then.';
+    note.hidden = false;
   }
 
   async function loadSettings() {
@@ -536,9 +563,13 @@
     // as the actual authorization boundary.
     var isAccountOwner = (effectiveAccountId === currentUser.id);
     if (isAccountOwner) {
+      document.getElementById('billing-owner').hidden = false;
       document.getElementById('manage-users-section').hidden = false;
       applyRoleDefaults();
       await loadMembers();
+      await showScheduledCancellation();
+    } else {
+      document.getElementById('billing-member-note').hidden = false;
     }
 
     document.getElementById('signout-btn').addEventListener('click', async function() {
