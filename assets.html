@@ -865,6 +865,7 @@
 
 <script src="js/supabase-config.js"></script>
 <script src="js/subscription-guard.js"></script>
+<script src="js/account-context.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
@@ -1063,24 +1064,11 @@
     'Rigid Truck': 2.5, 'Semi Trailer': 3.0, 'Truck & Trailer': 3.0, 'Water Truck': 3.5, 'Other': 3.0
   };
 
-  async function resolveAccountId(supabase, authUserId) {
-    var memberResult = await supabase
-      .from('account_members')
-      .select('account_owner_user_id')
-      .eq('member_auth_user_id', authUserId)
-      .maybeSingle();
-
-    if (memberResult.data && memberResult.data.account_owner_user_id) {
-      return memberResult.data.account_owner_user_id;
-    }
-    return authUserId;
-  }
-
   async function init() {
     var { data: { session } } = await supabase.auth.getSession();
     if (!session) { window.location.href = 'login.html'; return; }
     currentUser = session.user;
-    effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
+    effectiveAccountId = (await window.FleetMagnifyAccountContext.load(supabase, currentUser.id)).effectiveAccountId;
     window.FleetMagnifySidebar.inject('assets.html', supabase, effectiveAccountId);
     document.getElementById('signout-btn').addEventListener('click', async function() {
       await supabase.auth.signOut();

@@ -294,6 +294,7 @@
 
 <script src="js/supabase-config.js"></script>
 <script src="js/subscription-guard.js"></script>
+<script src="js/account-context.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
@@ -315,19 +316,6 @@
     Chart.register(annotationPlugin.default || annotationPlugin);
   }
 
-  async function resolveAccountId(supabase, authUserId) {
-    var memberResult = await supabase
-      .from('account_members')
-      .select('account_owner_user_id')
-      .eq('member_auth_user_id', authUserId)
-      .maybeSingle();
-
-    if (memberResult.data && memberResult.data.account_owner_user_id) {
-      return memberResult.data.account_owner_user_id;
-    }
-    return authUserId;
-  }
-
   async function init() {
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) {
@@ -335,7 +323,7 @@
       return;
     }
     currentUser = sessionResult.data.session.user;
-    effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
+    effectiveAccountId = (await window.FleetMagnifyAccountContext.load(supabase, currentUser.id)).effectiveAccountId;
     window.FleetMagnifySidebar.inject('utilisation-analyst.html', supabase, effectiveAccountId);
     document.getElementById('signout-btn').addEventListener('click', async function() {
       await supabase.auth.signOut();
