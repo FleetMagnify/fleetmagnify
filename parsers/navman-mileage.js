@@ -118,7 +118,18 @@ async function parseNavmanMileageReport(supabase, options) {
 
   try {
     var rows = parseNavmanMileageRows(rawCsv);
-    if (rows.length === 0) throw new Error('No mileage data rows found');
+    // A mileage export with the right headers and no data rows is a valid
+    // empty report. Record it as processed and write nothing. Rows that
+    // exist but are all dropped (unknown vehicle, bad date, and so on)
+    // still fail below.
+    if (rows.length === 0) {
+      await updateImportStatus(supabase, importId, 'processed', null, 'navman-mileage');
+      return {
+        ok: true,
+        recordsUpserted: 0,
+        pendingAdded: 0,
+      };
+    }
 
     var assetResult = await ensureAssets(supabase, userId, rows);
     var assetMap = assetResult.assetMap;

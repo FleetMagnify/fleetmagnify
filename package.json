@@ -2,6 +2,7 @@
   "name": "fleetmagnify",
   "private": true,
   "scripts": {
+    "test": "node scripts/test-navman-parsers.js",
     "fuel-regression": "node lib/fuel-regression.js"
   },
   "dependencies": {

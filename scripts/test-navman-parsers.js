@@ -349,11 +349,82 @@ function testEmptyIdleReports() {
   });
 }
 
+var MILEAGE_HEADER = 'Vehicle,Registration,VehicleGroup,ActivityDate,ActualDistance,Units';
+
+var HEADER_ONLY_MILEAGE_CSV = MILEAGE_HEADER + '\n';
+
+function testEmptyMileageReports() {
+  return Promise.resolve().then(async function() {
+    var mileage = require('../parsers/navman-mileage');
+
+    assert.strictEqual(mileage.isNavmanMileageCsv(HEADER_ONLY_MILEAGE_CSV), true, 'header-only is still a mileage CSV');
+    assert.strictEqual(mileage.parseNavmanMileageRows(HEADER_ONLY_MILEAGE_CSV).length, 0);
+
+    var headerMock = mockIdleSupabase(idleAssets());
+    var headerResult = await mileage.parseNavmanMileageReport(headerMock.supabase, {
+      userId: 'user-1',
+      importId: 'imp-m-empty',
+      rawCsv: HEADER_ONLY_MILEAGE_CSV,
+    });
+    assert.strictEqual(headerResult.ok, true);
+    assert.strictEqual(headerResult.recordsUpserted, 0);
+    assert.strictEqual(headerResult.pendingAdded, 0);
+    assert.deepStrictEqual(headerMock.writes, []);
+    assert.deepStrictEqual(headerMock.tables, ['email_imports']);
+    assert.strictEqual(headerMock.statuses.length, 1);
+    assert.strictEqual(headerMock.statuses[0].status, 'processed');
+    assert.strictEqual(headerMock.statuses[0].error_message, null);
+
+    var unknownCsv = [
+      MILEAGE_HEADER,
+      'Not In Fleet,ABC123,Group,8-25-2026,42.0,km',
+    ].join('\n');
+    var unknownMock = mockIdleSupabase(idleAssets());
+    var unknownThrew = false;
+    try {
+      await mileage.parseNavmanMileageReport(unknownMock.supabase, {
+        userId: 'user-1',
+        importId: 'imp-m-unknown',
+        rawCsv: unknownCsv,
+      });
+    } catch (err) {
+      unknownThrew = true;
+      assert.strictEqual(err.message, 'No valid mileage records to import');
+    }
+    assert.strictEqual(unknownThrew, true, 'unknown vehicle stays failed');
+    assert.strictEqual(unknownMock.statuses[unknownMock.statuses.length - 1].status, 'failed');
+
+    var badDateCsv = [
+      MILEAGE_HEADER,
+      'LV1 Hire Bucket,LJU519,Group,not-a-date,42.0,km',
+    ].join('\n');
+    var badDateMock = mockIdleSupabase(idleAssets());
+    var badDateThrew = false;
+    try {
+      await mileage.parseNavmanMileageReport(badDateMock.supabase, {
+        userId: 'user-1',
+        importId: 'imp-m-date',
+        rawCsv: badDateCsv,
+      });
+    } catch (err) {
+      badDateThrew = true;
+      assert.ok(err.message.indexOf('No valid mileage records to import') === 0);
+      assert.ok(err.message.indexOf('unparseable ActivityDate') !== -1);
+    }
+    assert.strictEqual(badDateThrew, true, 'bad ActivityDate stays failed');
+    assert.strictEqual(badDateMock.statuses[badDateMock.statuses.length - 1].status, 'failed');
+
+    console.log('✓ header-only mileage import processes with nothing written; dropped rows still fail');
+  });
+}
+
 testDateParsing();
 testMileageDetectionAndRows();
 testIdleDetectionAndRows();
 testEndToEndWithMockSupabase().then(function() {
   return testEmptyIdleReports();
+}).then(function() {
+  return testEmptyMileageReports();
 }).then(function() {
   console.log('\nAll Navman parser tests passed.');
 }).catch(function(err) {
