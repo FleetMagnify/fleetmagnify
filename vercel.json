@@ -9,5 +9,12 @@
       "path": "/api/sync-subscription-quantities",
       "schedule": "0 16 * * *"
     }
+  ],
+  "redirects": [
+    {
+      "source": "/data-partners.html",
+      "destination": "/supported-platforms.html",
+      "statusCode": 301
+    }
   ]
 }
