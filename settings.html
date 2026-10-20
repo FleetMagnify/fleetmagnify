@@ -220,6 +220,7 @@
 
 <script src="js/supabase-config.js"></script>
 <script src="js/subscription-guard.js"></script>
+<script src="js/account-context.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/sidebar-nav.js"></script>
 <script>
@@ -531,24 +532,11 @@
     }
   });
 
-  async function resolveAccountId(supabase, authUserId) {
-    var memberResult = await supabase
-      .from('account_members')
-      .select('account_owner_user_id')
-      .eq('member_auth_user_id', authUserId)
-      .maybeSingle();
-
-    if (memberResult.data && memberResult.data.account_owner_user_id) {
-      return memberResult.data.account_owner_user_id;
-    }
-    return authUserId;
-  }
-
   async function init() {
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
-    effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
+    effectiveAccountId = (await window.FleetMagnifyAccountContext.load(supabase, currentUser.id)).effectiveAccountId;
     window.FleetMagnifySidebar.inject('settings.html', supabase, effectiveAccountId);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
@@ -557,7 +545,7 @@
     await loadSettings();
 
     // A caller is the account owner (not a delegated member) exactly when
-    // resolveAccountId returned their own ID rather than someone else's —
+    // the resolved account id is their own id rather than someone else's —
     // this mirrors the same check api/invite-account-member.js performs
     // server-side, so the section is hidden client-side but never trusted
     // as the actual authorization boundary.
