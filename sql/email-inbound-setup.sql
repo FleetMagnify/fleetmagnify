@@ -29,6 +29,19 @@ CREATE INDEX IF NOT EXISTS email_imports_received_at_idx ON email_imports (recei
 
 ALTER TABLE email_imports ENABLE ROW LEVEL SECURITY;
 
+-- Data API exposure is opt-in for new public tables from 30 Oct 2026.
+-- Grants are the gate; RLS policies below decide which rows are visible.
+-- anon: none. This is not a logged-out surface.
+-- authenticated: SELECT only. The browser does not write import rows.
+-- service_role: inbound webhook, bulk import, and parsers insert and update.
+-- REVOKE first so a pre-cutoff auto-grant cannot leave anon or write access behind.
+REVOKE ALL ON TABLE email_imports FROM PUBLIC;
+REVOKE ALL ON TABLE email_imports FROM anon;
+REVOKE ALL ON TABLE email_imports FROM authenticated;
+GRANT SELECT ON TABLE email_imports TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE email_imports TO service_role;
+
+DROP POLICY IF EXISTS "Users can read own email imports" ON email_imports;
 CREATE POLICY "Users can read own email imports"
   ON email_imports
   FOR SELECT

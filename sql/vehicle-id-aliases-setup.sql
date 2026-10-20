@@ -26,18 +26,33 @@ CREATE INDEX IF NOT EXISTS vehicle_id_aliases_user_id_idx ON vehicle_id_aliases 
 
 ALTER TABLE vehicle_id_aliases ENABLE ROW LEVEL SECURITY;
 
+-- Data API exposure is opt-in for new public tables from 30 Oct 2026.
+-- The Orion report reads and upserts aliases as the signed-in user.
+-- anon: none. Logged-out clients must not see or write mappings.
+-- authenticated: SELECT, INSERT, UPDATE, DELETE, each limited to own rows.
+-- service_role: same DML for server scripts. service_role bypasses RLS.
+-- REVOKE first so a pre-cutoff auto-grant cannot leave anon access behind.
+REVOKE ALL ON TABLE vehicle_id_aliases FROM PUBLIC;
+REVOKE ALL ON TABLE vehicle_id_aliases FROM anon;
+REVOKE ALL ON TABLE vehicle_id_aliases FROM authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE vehicle_id_aliases TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE vehicle_id_aliases TO service_role;
+
+DROP POLICY IF EXISTS "Users can read own vehicle aliases" ON vehicle_id_aliases;
 CREATE POLICY "Users can read own vehicle aliases"
   ON vehicle_id_aliases
   FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own vehicle aliases" ON vehicle_id_aliases;
 CREATE POLICY "Users can insert own vehicle aliases"
   ON vehicle_id_aliases
   FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own vehicle aliases" ON vehicle_id_aliases;
 CREATE POLICY "Users can update own vehicle aliases"
   ON vehicle_id_aliases
   FOR UPDATE
@@ -45,6 +60,7 @@ CREATE POLICY "Users can update own vehicle aliases"
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own vehicle aliases" ON vehicle_id_aliases;
 CREATE POLICY "Users can delete own vehicle aliases"
   ON vehicle_id_aliases
   FOR DELETE
