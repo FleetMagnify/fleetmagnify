@@ -16,5 +16,14 @@
       "destination": "/supported-platforms.html",
       "statusCode": 301
     }
+  ],
+  "rewrites": [
+    { "source": "/api/invite-account-member", "destination": "/api/team?action=invite" },
+    { "source": "/api/remove-account-member", "destination": "/api/team?action=remove" },
+    { "source": "/api/list-account-members", "destination": "/api/team?action=list" },
+    { "source": "/api/create-division", "destination": "/api/team?action=create-division" },
+    { "source": "/api/rename-division", "destination": "/api/team?action=rename-division" },
+    { "source": "/api/delete-division", "destination": "/api/team?action=delete-division" },
+    { "source": "/api/set-division-managers", "destination": "/api/team?action=set-division-managers" }
   ]
 }

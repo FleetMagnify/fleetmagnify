@@ -5,10 +5,10 @@
  *   node scripts/test-divisions-api.js
  */
 var assert = require('assert');
+var fs = require('fs');
+var path = require('path');
 var billing = require('../lib/division-billing');
-var routes = require('../lib/division-routes');
-var invite = require('../api/invite-account-member');
-var listMembers = require('../api/list-account-members');
+var teamHandler = require('../api/team');
 var sync = require('../lib/sync-subscription-quantity');
 
 var DIVISION_PRICE = 'price_division_test';
@@ -189,9 +189,40 @@ function depsFor(admin, stripe, userId) {
   };
 }
 
+function act(action, req, res, deps) {
+  req.query = { action: action };
+  return teamHandler(req, res, deps);
+}
+
 async function run() {
   process.env.STRIPE_DIVISION_PRICE_ID = DIVISION_PRICE;
   process.env.STRIPE_PRICE_PLATFORM = PLATFORM_PRICE;
+
+  console.log('\n=== Action dispatch ===');
+  var touched = 0;
+  function sniffingDeps() {
+    return {
+      supabase: { auth: { getUser: function () { touched += 1; return Promise.resolve({ data: { user: null }, error: { message: 'no' } }); } } },
+      supabaseUser: { auth: { getUser: function () { touched += 1; return Promise.resolve({ data: { user: null }, error: { message: 'no' } }); } } },
+      supabaseAdmin: { from: function () { touched += 1; throw new Error('database was touched'); } },
+      stripe: { subscriptions: { retrieve: function () { touched += 1; throw new Error('stripe was touched'); } } }
+    };
+  }
+  var missing = mockRes();
+  await teamHandler(
+    { method: 'POST', headers: { authorization: 'Bearer token' }, body: { action: 'invite', name: 'North' } },
+    missing,
+    sniffingDeps()
+  );
+  check('A missing action is 400', missing.statusCode === 400 && missing.body.error === 'action is required');
+  var unknown = mockRes();
+  await teamHandler(
+    { method: 'POST', query: { action: 'drop-table' }, headers: { authorization: 'Bearer token' }, body: { name: 'North' } },
+    unknown,
+    sniffingDeps()
+  );
+  check('An unknown action is 400', unknown.statusCode === 400 && unknown.body.error === 'Unknown action');
+  check('Action is rejected before auth or database work', touched === 0);
 
   console.log('\n=== Name validation ===');
   check('Blank name is rejected', billing.validateDivisionName('   ').ok === false);
@@ -221,7 +252,7 @@ async function run() {
     profiles: [ownerProfile('active')]
   });
   var memberRes = mockRes();
-  await routes.createDivision(
+  await act('create-division', 
     { method: 'POST', headers: { authorization: 'Bearer token' }, body: { name: 'North' } },
     memberRes,
     depsFor(memberAdmin, stripeStub(), 'member-1')
@@ -231,7 +262,7 @@ async function run() {
 
   var pastDue = memoryAdmin({ profiles: [ownerProfile('past_due')] });
   var pastDueRes = mockRes();
-  await routes.createDivision(
+  await act('create-division', 
     { method: 'POST', headers: { authorization: 'Bearer token' }, body: { name: 'North' } },
     pastDueRes,
     depsFor(pastDue, stripeStub())
@@ -241,7 +272,7 @@ async function run() {
   var trialing = memoryAdmin({ profiles: [ownerProfile('trialing')] });
   var trialStripe = stripeStub();
   var trialRes = mockRes();
-  await routes.createDivision(
+  await act('create-division', 
     { method: 'POST', headers: { authorization: 'Bearer token' }, body: { name: 'North' } },
     trialRes,
     depsFor(trialing, trialStripe)
@@ -252,7 +283,7 @@ async function run() {
   delete process.env.STRIPE_DIVISION_PRICE_ID;
   var unconfigured = memoryAdmin({ profiles: [ownerProfile('active')] });
   var missingRes = mockRes();
-  await routes.createDivision(
+  await act('create-division', 
     { method: 'POST', headers: { authorization: 'Bearer token' }, body: { name: 'North' } },
     missingRes,
     depsFor(unconfigured, stripeStub())
@@ -269,14 +300,14 @@ async function run() {
   var admin = memoryAdmin({ profiles: [ownerProfile('active')] });
   var stripe = stripeStub();
   var created = mockRes();
-  await routes.createDivision(
+  await act('create-division', 
     { method: 'POST', headers: { authorization: 'Bearer token' }, body: { name: '  North ' } },
     created,
     depsFor(admin, stripe)
   );
   check('Create stores the trimmed name', admin.tables.divisions[0].name === 'North');
   var duplicate = mockRes();
-  await routes.createDivision(
+  await act('create-division', 
     { method: 'POST', headers: { authorization: 'Bearer token' }, body: { name: 'north' } },
     duplicate,
     depsFor(admin, stripeStub())
@@ -286,7 +317,7 @@ async function run() {
   var failedStripe = stripeStub({ fail: true });
   var beforeFail = admin.tables.divisions.length;
   var failed = mockRes();
-  await routes.createDivision(
+  await act('create-division', 
     { method: 'POST', headers: { authorization: 'Bearer token' }, body: { name: 'South' } },
     failed,
     depsFor(admin, failedStripe)
@@ -298,7 +329,7 @@ async function run() {
     divisions: [{ id: 7, name: 'Theirs', account_owner_user_id: 'other-owner' }]
   });
   var foreign = mockRes();
-  await routes.renameDivision(
+  await act('rename-division', 
     { method: 'POST', headers: { authorization: 'Bearer token' }, body: { division_id: 7, name: 'Mine' } },
     foreign,
     depsFor(other, stripeStub())
@@ -306,7 +337,7 @@ async function run() {
   check('Another account\'s division cannot be renamed', foreign.statusCode === 404 && other.tables.divisions[0].name === 'Theirs');
 
   var renamed = mockRes();
-  await routes.renameDivision(
+  await act('rename-division', 
     { method: 'POST', headers: { authorization: 'Bearer token' }, body: { division_id: admin.tables.divisions[0].id, name: 'Northern' } },
     renamed,
     depsFor(admin, stripeStub())
@@ -318,7 +349,7 @@ async function run() {
     member_auth_user_id: 'manager-1'
   });
   var blocked = mockRes();
-  await routes.deleteDivision(
+  await act('delete-division', 
     { method: 'POST', headers: { authorization: 'Bearer token' }, body: { division_id: admin.tables.divisions[0].id } },
     blocked,
     depsFor(admin, stripeStub())
@@ -330,7 +361,7 @@ async function run() {
     items: [{ id: 'si_div', quantity: 1, price: { id: DIVISION_PRICE } }]
   });
   var removed = mockRes();
-  await routes.deleteDivision(
+  await act('delete-division', 
     { method: 'POST', headers: { authorization: 'Bearer token' }, body: { division_id: admin.tables.divisions[0].id } },
     removed,
     depsFor(admin, removeStripe)
@@ -348,7 +379,7 @@ async function run() {
     ]
   });
   var badManager = mockRes();
-  await routes.setDivisionManagers(
+  await act('set-division-managers', 
     { method: 'POST', headers: { authorization: 'Bearer token' }, body: { division_id: 4, member_auth_user_ids: ['viewer-1'] } },
     badManager,
     depsFor(team, stripeStub())
@@ -356,7 +387,7 @@ async function run() {
   check('A full-access member cannot be assigned as a division manager', badManager.statusCode === 400 && team.tables.division_managers.length === 0);
 
   var assigned = mockRes();
-  await routes.setDivisionManagers(
+  await act('set-division-managers', 
     { method: 'POST', headers: { authorization: 'Bearer token' }, body: { division_id: 4, member_auth_user_ids: ['manager-1'] } },
     assigned,
     depsFor(team, stripeStub())
@@ -364,7 +395,7 @@ async function run() {
   check('A divisional manager can be assigned', assigned.statusCode === 200 && team.tables.division_managers.length === 1);
 
   var cleared = mockRes();
-  await routes.setDivisionManagers(
+  await act('set-division-managers', 
     { method: 'POST', headers: { authorization: 'Bearer token' }, body: { division_id: 4, member_auth_user_ids: [] } },
     cleared,
     depsFor(team, stripeStub())
@@ -393,7 +424,7 @@ async function run() {
     can_view_change_log: true
   };
   var classic = mockRes();
-  await invite(
+  await act('invite', 
     { method: 'POST', headers: { authorization: 'Bearer token' }, body: inviteBody },
     classic,
     { supabase: userClient('owner-1'), supabaseAdmin: team, supabaseLegacyAdmin: legacy }
@@ -404,7 +435,7 @@ async function run() {
   check('An invite with no scope does not write division_managers', team.tables.division_managers.length === 0);
 
   var divisionInvite = mockRes();
-  await invite(
+  await act('invite', 
     {
       method: 'POST',
       headers: { authorization: 'Bearer token' },
@@ -423,7 +454,7 @@ async function run() {
   var invitesBefore = invites;
   var membersBefore = team.tables.account_members.length;
   var rolled = mockRes();
-  await invite(
+  await act('invite', 
     {
       method: 'POST',
       headers: { authorization: 'Bearer token' },
@@ -436,7 +467,7 @@ async function run() {
   check('The invite email was still attempted before the assignment failed', invites === invitesBefore + 1);
 
   var listed = mockRes();
-  await listMembers(
+  await act('list', 
     { method: 'GET', headers: { authorization: 'Bearer token' } },
     listed,
     { supabase: userClient('owner-1'), supabaseAdmin: team, supabaseLegacyAdmin: legacy }
@@ -445,6 +476,39 @@ async function run() {
     return member.role === 'Divisional Manager' && member.division_ids && member.division_ids.indexOf(4) !== -1;
   })[0];
   check('Team list includes scope and division_ids', listed.statusCode === 200 && listedManager.scope === 'division');
+
+  var listedByUrl = mockRes();
+  await teamHandler(
+    { method: 'GET', url: '/api/team?action=list', headers: { authorization: 'Bearer token' } },
+    listedByUrl,
+    { supabase: userClient('owner-1'), supabaseAdmin: team, supabaseLegacyAdmin: legacy }
+  );
+  check('The list action is read from the query string', listedByUrl.statusCode === 200 && listedByUrl.body.members.length === listed.body.members.length);
+
+  var memberRemove = mockRes();
+  await act(
+    'remove',
+    { method: 'POST', headers: { authorization: 'Bearer token' }, body: { member_id: 12 } },
+    memberRemove,
+    { supabase: userClient('manager-1'), supabaseAdmin: team, supabaseLegacyAdmin: legacy }
+  );
+  check('A team member cannot remove someone', memberRemove.statusCode === 403 && team.tables.account_members.length === membersBefore);
+
+  legacy.auth.admin.deleteUser = function (id) {
+    return Promise.resolve({ data: { user: { id: id } }, error: null });
+  };
+  var removedMember = mockRes();
+  await act(
+    'remove',
+    { method: 'POST', headers: { authorization: 'Bearer token' }, body: { member_id: 11 } },
+    removedMember,
+    { supabase: userClient('owner-1'), supabaseAdmin: team, supabaseLegacyAdmin: legacy }
+  );
+  check(
+    'The owner can remove a team member',
+    removedMember.statusCode === 200 &&
+      team.tables.account_members.every(function (row) { return row.id !== 11; })
+  );
 
   console.log('\n=== Asset quantity ignores a divisions line item ===');
   var assetUpdates = [];
@@ -561,6 +625,61 @@ async function run() {
   check('Two divisions set the line quantity to 2', raised.params.items[0].quantity === 2 && raised.params.proration_behavior === 'create_prorations');
   var clearedItem = cronUpdates.filter(function (update) { return update.id === 'sub_clear'; })[0];
   check('A leftover division item is removed when the count is zero', clearedItem.params.items[0].deleted === true);
+
+  console.log('\n=== Old URLs and function count ===');
+  var vercel = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'vercel.json'), 'utf8'));
+  var expectedRewrites = {
+    '/api/invite-account-member': 'invite',
+    '/api/remove-account-member': 'remove',
+    '/api/list-account-members': 'list',
+    '/api/create-division': 'create-division',
+    '/api/rename-division': 'rename-division',
+    '/api/delete-division': 'delete-division',
+    '/api/set-division-managers': 'set-division-managers'
+  };
+  var rewriteBySource = {};
+  (vercel.rewrites || []).forEach(function (rule) { rewriteBySource[rule.source] = rule.destination; });
+  Object.keys(expectedRewrites).forEach(function (source) {
+    check(
+      source + ' rewrites to ' + expectedRewrites[source],
+      rewriteBySource[source] === '/api/team?action=' + expectedRewrites[source]
+    );
+  });
+  check('Every rewrite is one of those old URLs', (vercel.rewrites || []).length === Object.keys(expectedRewrites).length);
+  check(
+    'The function duration entry is unchanged',
+    vercel.functions && vercel.functions['api/*.js'] && vercel.functions['api/*.js'].maxDuration === 60
+  );
+  check(
+    'The daily cron entry is unchanged',
+    vercel.crons && vercel.crons.length === 1 &&
+      vercel.crons[0].path === '/api/sync-subscription-quantities' &&
+      vercel.crons[0].schedule === '0 16 * * *'
+  );
+  check(
+    'The data partners redirect is unchanged',
+    vercel.redirects && vercel.redirects.length === 1 &&
+      vercel.redirects[0].source === '/data-partners.html' &&
+      vercel.redirects[0].destination === '/supported-platforms.html' &&
+      vercel.redirects[0].statusCode === 301
+  );
+
+  var apiFiles = fs.readdirSync(path.join(__dirname, '..', 'api')).filter(function (name) {
+    return name.slice(-3) === '.js';
+  }).sort();
+  var expectedApi = [
+    'admin-users.js',
+    'bulk-import.js',
+    'contact-form.js',
+    'create-checkout-session.js',
+    'create-invoice-subscription.js',
+    'create-portal-session.js',
+    'email-inbound.js',
+    'stripe-webhook.js',
+    'sync-subscription-quantities.js',
+    'team.js'
+  ];
+  check('api contains 10 JavaScript files', apiFiles.length === 10 && apiFiles.join() === expectedApi.join(), apiFiles.join(', '));
 
   console.log('\nAll division API tests passed.');
 }
