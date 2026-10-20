@@ -362,6 +362,10 @@
   .fab-download { display: none; position: fixed; bottom: 32px; right: 32px; z-index: 90; background: #EF9F27; border: none; color: #080C12; font-size: 13px; font-weight: 700; padding: 14px 22px; border-radius: 100px; cursor: pointer; font-family: inherit; box-shadow: 0 4px 24px rgba(239,159,39,0.35); transition: all 0.2s; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
   .fab-download:hover { background: #F5B042; transform: translateY(-1px); box-shadow: 0 6px 28px rgba(239,159,39,0.45); }
   .fab-download.visible { display: flex; }
+  .unassigned-badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 100px; color: #8AA0B8; background: rgba(255,255,255,0.04); }
+  .division-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .division-toolbar select, .division-toolbar button { font-family: inherit; font-size: 13px; }
+  .division-toolbar select { background: #0D1117; color: #E8EEF4; border: 1px solid #2D3748; border-radius: 8px; padding: 8px 10px; }
   .profile-incomplete-badge {
     display: inline-flex;
     align-items: center;
@@ -569,9 +573,18 @@
             <div class="table-title">Fleet Assets</div>
             <div class="table-count" id="table-count">Loading...</div>
           </div>
-          <div class="search-box">
-            <span style="color:#2E3A4A; font-size:13px;">🔍</span>
-            <input type="text" id="search-input" placeholder="Search assets...">
+          <div class="division-toolbar">
+            <div class="division-toolbar" id="division-filter-wrap" hidden>
+              <select id="division-filter" aria-label="Filter by division">
+                <option value="">All divisions</option>
+              </select>
+              <select id="division-assign-target" aria-label="Division to assign"></select>
+              <button type="button" class="btn-teal" id="division-assign-btn">Assign to division</button>
+            </div>
+            <div class="search-box">
+              <span style="color:#2E3A4A; font-size:13px;">🔍</span>
+              <input type="text" id="search-input" placeholder="Search assets...">
+            </div>
           </div>
         </div>
         <div class="assets-table-wrap">
@@ -878,6 +891,8 @@
   var FCM = window.FleetCostModel;
   var currentUser = null;
   var effectiveAccountId = null;
+  var accountContext = null;
+  var divisionToolsEnabled = false;
   var allAssets = [];
   var latestTelByAsset = {};
   var pendingRemoveId = null;
@@ -1068,7 +1083,10 @@
     var { data: { session } } = await supabase.auth.getSession();
     if (!session) { window.location.href = 'login.html'; return; }
     currentUser = session.user;
-    effectiveAccountId = (await window.FleetMagnifyAccountContext.load(supabase, currentUser.id)).effectiveAccountId;
+    accountContext = await window.FleetMagnifyAccountContext.load(supabase, currentUser.id);
+    effectiveAccountId = accountContext.effectiveAccountId;
+    divisionToolsEnabled = !!(accountContext.hasDivisions && !accountContext.isDivisionManager);
+    setupDivisionTools();
     window.FleetMagnifySidebar.inject('assets.html', supabase, effectiveAccountId);
     document.getElementById('signout-btn').addEventListener('click', async function() {
       await supabase.auth.signOut();
@@ -1628,12 +1646,45 @@
 
   function getFilteredAssets() {
     var q = document.getElementById('search-input').value.toLowerCase();
+    var divisionFilter = divisionToolsEnabled ? document.getElementById('division-filter').value : '';
     return allAssets.filter(function(a) {
       if (incompleteFilterActive && !isStubAsset(a)) return false;
+      if (divisionFilter === 'unassigned' && a.division_id != null) return false;
+      if (divisionFilter && divisionFilter !== 'unassigned' && String(a.division_id) !== divisionFilter) return false;
       if (!q) return true;
       return (a.asset_name || '').toLowerCase().includes(q) || (a.asset_type || '').toLowerCase().includes(q) ||
              (a.make || '').toLowerCase().includes(q) || (a.model || '').toLowerCase().includes(q);
     });
+  }
+
+  function divisionNameFor(asset) {
+    if (!asset || asset.division_id == null) return '';
+    var divisions = accountContext && accountContext.divisions || [];
+    for (var i = 0; i < divisions.length; i++) {
+      if (String(divisions[i].id) === String(asset.division_id)) return divisions[i].name;
+    }
+    return '';
+  }
+
+  function setupDivisionTools() {
+    var wrap = document.getElementById('division-filter-wrap');
+    if (!divisionToolsEnabled) {
+      wrap.hidden = true;
+      return;
+    }
+    wrap.hidden = false;
+    var filter = document.getElementById('division-filter');
+    var assign = document.getElementById('division-assign-target');
+    var divisions = accountContext.divisions || [];
+    var options = '<option value="">All divisions</option>' +
+      divisions.map(function(division) {
+        return '<option value="' + esc(String(division.id)) + '">' + esc(division.name) + '</option>';
+      }).join('') +
+      '<option value="unassigned">Unassigned</option>';
+    filter.innerHTML = options;
+    assign.innerHTML = divisions.map(function(division) {
+      return '<option value="' + esc(String(division.id)) + '">' + esc(division.name) + '</option>';
+    }).join('') + '<option value="unassigned">Unassigned</option>';
   }
 
   function applyAssetFilters() {
@@ -1915,7 +1966,16 @@
       return;
     }
     tbody.innerHTML = assets.map(function(a) {
+      var selectCell = divisionToolsEnabled
+        ? '<td class="col-select"><input type="checkbox" class="division-row-check" data-id="' + a.id + '" aria-label="Select asset"></td>'
+        : '';
+      var divisionCell = divisionToolsEnabled
+        ? '<td class="col-division">' + (a.division_id == null
+            ? '<span class="unassigned-badge">Unassigned</span>'
+            : esc(divisionNameFor(a) || 'Division')) + '</td>'
+        : '';
       var row = '<tr>' +
+        selectCell +
         '<td class="asset-name-cell col-name"><div class="asset-name-wrap">' +
           '<div class="asset-name-row">' + esc(a.asset_name || '—') + renderIncompleteProfileBadge(a) + renderTelematicsBadge(a.telematics_provider) + '</div>' +
           renderApproachingLifeBadge(a) +
@@ -1924,6 +1984,7 @@
         '<td class="col-make-model">' + esc(formatMakeModel(a.make, a.model)) + '</td>' +
         '<td class="col-year">' + esc(a.year ? String(a.year) : '—') + '</td>' +
         '<td class="col-life">' + esc(formatExpectedLife(a)) + '</td>' +
+        divisionCell +
         '<td class="col-actions"><div class="actions-cell">' +
           '<button type="button" class="btn-edit" data-id="' + a.id + '">Edit</button>' +
           '<button type="button" class="btn-remove" data-id="' + a.id + '">Remove</button>' +
@@ -1938,6 +1999,12 @@
     tbody.querySelectorAll('.btn-remove').forEach(function(btn) {
       btn.addEventListener('click', function() { openRemoveModal(btn.dataset.id); });
     });
+    var selectAll = document.getElementById('division-select-all');
+    if (selectAll) {
+      selectAll.addEventListener('change', function() {
+        tbody.querySelectorAll('.division-row-check').forEach(function(box) { box.checked = selectAll.checked; });
+      });
+    }
   }
 
   async function ignoreAssetFromTable(id) {
@@ -1963,6 +2030,35 @@
   }
 
   document.getElementById('search-input').addEventListener('input', applyAssetFilters);
+  document.getElementById('division-filter').addEventListener('change', applyAssetFilters);
+  document.getElementById('division-assign-btn').addEventListener('click', async function() {
+    if (!divisionToolsEnabled) return;
+    var ids = [];
+    document.querySelectorAll('.division-row-check:checked').forEach(function(box) {
+      var n = Number(box.getAttribute('data-id'));
+      if (Number.isInteger(n)) ids.push(n);
+    });
+    if (!ids.length) {
+      showToast('Select at least one asset', 'error');
+      return;
+    }
+    var target = document.getElementById('division-assign-target').value;
+    var divisionId = target === 'unassigned' ? null : Number(target);
+    var btn = this;
+    btn.disabled = true;
+    var result = await supabase
+      .from('assets')
+      .update({ division_id: divisionId })
+      .in('id', ids)
+      .eq('user_id', effectiveAccountId);
+    btn.disabled = false;
+    if (result.error) {
+      showToast(result.error.message || 'Could not assign the division', 'error');
+      return;
+    }
+    showToast('Division updated', 'success');
+    await loadAssets();
+  });
   document.getElementById('card-match-cards-search').addEventListener('input', renderCardMatchCards);
   document.getElementById('card-match-vehicles-search').addEventListener('input', renderCardMatchVehicles);
   var discardZone = document.getElementById('card-discard-zone');
@@ -2070,7 +2166,7 @@
   }
 
   function getTableColCount() {
-    return 6;
+    return getColumnLayout().length;
   }
 
   function formatLifeHours(val) {
@@ -2084,14 +2180,19 @@
   }
 
   function getColumnLayout() {
-    return [
+    var cols = [
       { label: 'Asset Name', cls: 'col-name' },
       { label: 'Type', cls: 'col-type', width: '130px' },
       { label: 'Make / Model', cls: 'col-make-model', width: '220px' },
       { label: 'Year', cls: 'col-year', width: '60px' },
-      { label: 'Expected Life', cls: 'col-life', width: '120px' },
-      { label: 'Actions', cls: 'col-actions', width: '160px' }
+      { label: 'Expected Life', cls: 'col-life', width: '120px' }
     ];
+    if (divisionToolsEnabled) {
+      cols.unshift({ label: '', cls: 'col-select', width: '36px' });
+      cols.push({ label: 'Division', cls: 'col-division', width: '140px' });
+    }
+    cols.push({ label: 'Actions', cls: 'col-actions', width: '160px' });
+    return cols;
   }
 
   function renderTableHeader() {
@@ -2101,7 +2202,12 @@
         return '<col class="' + c.cls + '"' + (c.width ? ' style="width:' + c.width + '"' : '') + '>';
       }).join('');
     document.getElementById('assets-thead').innerHTML =
-      '<tr>' + cols.map(function(c) { return '<th class="' + c.cls + '">' + c.label + '</th>'; }).join('') + '</tr>';
+      '<tr>' + cols.map(function(c) {
+        if (c.cls === 'col-select') {
+          return '<th class="col-select"><input type="checkbox" id="division-select-all" aria-label="Select all assets"></th>';
+        }
+        return '<th class="' + c.cls + '">' + c.label + '</th>';
+      }).join('') + '</tr>';
   }
 
   function renderTelematicsBadge(provider) {

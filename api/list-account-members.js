@@ -110,6 +110,7 @@ async function handler(req, res, deps) {
 
       return {
         id: row.id,
+        member_auth_user_id: row.member_auth_user_id,
         email: email,
         role: row.role,
         can_edit_assets: row.can_edit_assets,

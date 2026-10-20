@@ -154,6 +154,40 @@
       </div>
     </div>
 
+    <div class="section-card" id="divisions-section" hidden>
+      <div class="section-header">
+        <div class="section-tag">Divisions</div>
+        <div class="section-title">Divisions</div>
+        <div class="section-desc">Group assets into divisions and invite a manager for each one.</div>
+      </div>
+      <div class="section-body">
+        <div id="divisions-empty">
+          <p class="form-hint">Divisions are $10 per division per month, ex GST, added to your subscription.</p>
+          <button type="button" class="btn-save" id="setup-divisions-btn">Set up divisions</button>
+          <div id="setup-divisions-confirm" hidden style="margin-top:14px;">
+            <div class="form-group">
+              <label for="first-division-name">Division name</label>
+              <input type="text" id="first-division-name" maxlength="60" placeholder="e.g. North Island">
+            </div>
+            <button type="button" class="btn-save" id="confirm-first-division-btn">Confirm and create</button>
+            <button type="button" class="btn-cancel" id="cancel-first-division-btn">Cancel</button>
+          </div>
+        </div>
+        <div id="divisions-existing" hidden>
+          <p class="form-hint" id="divisions-charge"></p>
+          <div id="divisions-list"></div>
+          <div class="subsection-divider">
+            <div class="subsection-title">Add a division</div>
+            <div class="form-group">
+              <label for="new-division-name">Name</label>
+              <input type="text" id="new-division-name" maxlength="60" placeholder="Division name">
+            </div>
+            <button type="button" class="btn-save" id="add-division-btn">Add division</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="section-card" id="manage-users-section" hidden>
       <div class="section-header">
         <div class="section-tag">👥 Team</div>
@@ -181,11 +215,16 @@
               </select>
               <div class="form-hint">Pre-fills sensible permission defaults below — each can still be adjusted independently.</div>
             </div>
+            <div class="form-group" id="invite-divisions-group" hidden>
+              <label>Divisions</label>
+              <div id="invite-divisions"></div>
+              <div class="form-hint">Required. This person will only see assets in the divisions you choose.</div>
+            </div>
             <div class="checkbox-row">
               <input type="checkbox" id="perm-edit-assets">
               <label for="perm-edit-assets">Edit Assets</label>
             </div>
-            <div class="checkbox-row">
+            <div class="checkbox-row" id="perm-edit-jobs-row">
               <input type="checkbox" id="perm-edit-jobs">
               <label for="perm-edit-jobs">Edit Jobs</label>
             </div>
@@ -228,6 +267,7 @@
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
   var effectiveAccountId = null;
+  var accountContext = null;
   var toastTimer;
   var lastLoadedMembers = [];
   var pendingRemoveMemberId = null;
@@ -235,7 +275,8 @@
   var ROLE_DEFAULTS = {
     'Director': { can_edit_assets: true, can_edit_jobs: true, can_view_change_log: true },
     'Fleet Manager': { can_edit_assets: true, can_edit_jobs: true, can_view_change_log: false },
-    'Viewer': { can_edit_assets: false, can_edit_jobs: false, can_view_change_log: false }
+    'Viewer': { can_edit_assets: false, can_edit_jobs: false, can_view_change_log: false },
+    'Divisional Manager': { can_edit_assets: false, can_edit_jobs: false, can_view_change_log: false }
   };
 
   function showToast(msg, type) {
@@ -354,6 +395,161 @@
     document.getElementById('perm-edit-assets').checked = defaults.can_edit_assets;
     document.getElementById('perm-edit-jobs').checked = defaults.can_edit_jobs;
     document.getElementById('perm-view-change-log').checked = defaults.can_view_change_log;
+    syncInviteDivisionFields();
+  }
+
+  function syncInviteDivisionFields() {
+    var isDivisionRole = document.getElementById('invite-role').value === 'Divisional Manager';
+    document.getElementById('invite-divisions-group').hidden = !isDivisionRole;
+    document.getElementById('perm-edit-jobs-row').hidden = isDivisionRole;
+    if (isDivisionRole) document.getElementById('perm-edit-jobs').checked = false;
+  }
+
+  function syncDivisionRoleOption() {
+    var select = document.getElementById('invite-role');
+    var existing = select.querySelector('option[value="Divisional Manager"]');
+    var show = !!(accountContext && accountContext.hasDivisions);
+    if (show && !existing) {
+      var option = document.createElement('option');
+      option.value = 'Divisional Manager';
+      option.textContent = 'Divisional Manager';
+      select.appendChild(option);
+    }
+    if (!show && existing) {
+      if (select.value === 'Divisional Manager') select.value = 'Fleet Manager';
+      existing.remove();
+    }
+    renderInviteDivisionChecks();
+    syncInviteDivisionFields();
+  }
+
+  function renderInviteDivisionChecks() {
+    var box = document.getElementById('invite-divisions');
+    var divisions = accountContext && accountContext.divisions || [];
+    box.innerHTML = divisions.map(function(division) {
+      return '<label class="checkbox-row" style="margin-bottom:6px;">' +
+        '<input type="checkbox" class="invite-division-check" value="' + escapeHtml(String(division.id)) + '"> ' +
+        escapeHtml(division.name) + '</label>';
+    }).join('');
+  }
+
+  function selectedInviteDivisionIds() {
+    var ids = [];
+    document.querySelectorAll('.invite-division-check:checked').forEach(function(input) {
+      var n = Number(input.value);
+      if (Number.isInteger(n) && n > 0) ids.push(n);
+    });
+    return ids;
+  }
+
+  function divisionNamesFor(member) {
+    var ids = member && member.division_ids || [];
+    var divisions = accountContext && accountContext.divisions || [];
+    return ids.map(function(id) {
+      var found = null;
+      for (var i = 0; i < divisions.length; i++) {
+        if (String(divisions[i].id) === String(id)) found = divisions[i];
+      }
+      return found ? found.name : '';
+    }).filter(Boolean);
+  }
+
+  async function accessToken() {
+    var sessionResult = await supabase.auth.getSession();
+    return sessionResult.data.session ? sessionResult.data.session.access_token : null;
+  }
+
+  async function postDivision(path, body) {
+    var token = await accessToken();
+    if (!token) throw new Error('Not signed in');
+    var res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    var data = {};
+    try { data = await res.json(); } catch (err) { data = {}; }
+    if (!res.ok || data.error) throw new Error(data.error || 'Request failed');
+    return data;
+  }
+
+  async function reloadAccountContext() {
+    window.FleetMagnifyAccountContext.clearCache();
+    accountContext = await window.FleetMagnifyAccountContext.load(supabase, currentUser.id);
+  }
+
+  async function divisionAssetCounts() {
+    var result = await supabase.from('assets').select('division_id').eq('user_id', effectiveAccountId);
+    var counts = {};
+    if (result.error) return counts;
+    (result.data || []).forEach(function(row) {
+      if (row.division_id == null) return;
+      var key = String(row.division_id);
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return counts;
+  }
+
+  function divisionManagerMembers() {
+    return (lastLoadedMembers || []).filter(function(member) { return member.scope === 'division'; });
+  }
+
+  async function renderDivisions() {
+    var section = document.getElementById('divisions-section');
+    if (!accountContext || !accountContext.isOwner) {
+      section.hidden = true;
+      return;
+    }
+    section.hidden = false;
+    var divisions = accountContext.divisions || [];
+    var empty = document.getElementById('divisions-empty');
+    var existing = document.getElementById('divisions-existing');
+    syncDivisionRoleOption();
+    if (!divisions.length) {
+      empty.hidden = false;
+      existing.hidden = true;
+      return;
+    }
+    empty.hidden = true;
+    existing.hidden = false;
+    document.getElementById('divisions-charge').textContent =
+      'Current division charge: $' + (divisions.length * 10) + ' per month, ex GST.';
+    var counts = await divisionAssetCounts();
+    var managers = divisionManagerMembers();
+    document.getElementById('divisions-list').innerHTML = divisions.map(function(division) {
+      var count = counts[String(division.id)] || 0;
+      var checks = managers.length
+        ? managers.map(function(manager) {
+            var checked = (manager.division_ids || []).some(function(id) { return String(id) === String(division.id); });
+            return '<label class="checkbox-row" style="margin-bottom:6px;">' +
+              '<input type="checkbox" class="division-manager-check" data-division="' + escapeHtml(String(division.id)) + '" value="' + escapeHtml(manager.member_auth_user_id || '') + '"' + (checked ? ' checked' : '') + '> ' +
+              escapeHtml(manager.email || 'Manager') + '</label>';
+          }).join('')
+        : '<p class="form-hint">Invite a Divisional Manager below, then assign them here.</p>';
+      return '<div class="member-row" style="align-items:flex-start;">' +
+        '<div class="member-info" style="flex:1;">' +
+          '<div class="member-email">' + escapeHtml(division.name) + '</div>' +
+          '<div class="member-meta"><span>' + count + ' asset' + (count === 1 ? '' : 's') + '</span></div>' +
+          '<div class="form-group" style="margin-top:10px;">' +
+            '<input type="text" class="division-rename-input" data-id="' + escapeHtml(String(division.id)) + '" value="' + escapeHtml(division.name) + '" maxlength="60">' +
+          '</div>' +
+          '<div style="margin-top:8px;">' + checks + '</div>' +
+        '</div>' +
+        '<div class="member-row-actions" style="display:flex; flex-direction:column; gap:8px;">' +
+          '<button type="button" class="btn-save division-rename-btn" data-id="' + escapeHtml(String(division.id)) + '">Rename</button>' +
+          '<button type="button" class="btn-save division-managers-btn" data-id="' + escapeHtml(String(division.id)) + '">Save managers</button>' +
+          '<button type="button" class="btn-remove-member division-delete-btn" data-id="' + escapeHtml(String(division.id)) + '">Delete</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  async function createNamedDivision(name) {
+    await postDivision('/api/create-division', { name: name });
+    await reloadAccountContext();
+    await loadMembers();
+    await renderDivisions();
+    showToast('Division created', 'success');
   }
 
   function renderMembers(members) {
@@ -376,6 +572,7 @@
             '<div class="member-email">' + escapeHtml(m.email || 'Unknown') + '</div>' +
             '<div class="member-meta">' +
               '<span class="member-role">' + escapeHtml(m.role || '') + '</span>' +
+              (m.scope === 'division' && divisionNamesFor(m).length ? '<span>' + escapeHtml(divisionNamesFor(m).join(', ')) + '</span>' : '') +
               (joined ? '<span>Joined ' + joined + '</span>' : '') +
             '</div>' +
             (badges ? '<div class="member-badges">' + badges + '</div>' : '') +
@@ -426,6 +623,77 @@
 
   document.getElementById('invite-role').addEventListener('change', applyRoleDefaults);
 
+  document.getElementById('setup-divisions-btn').addEventListener('click', function() {
+    document.getElementById('setup-divisions-confirm').hidden = false;
+    document.getElementById('first-division-name').focus();
+  });
+  document.getElementById('cancel-first-division-btn').addEventListener('click', function() {
+    document.getElementById('setup-divisions-confirm').hidden = true;
+    document.getElementById('first-division-name').value = '';
+  });
+  document.getElementById('confirm-first-division-btn').addEventListener('click', async function() {
+    var name = document.getElementById('first-division-name').value.trim();
+    if (!name) { showToast('Enter a division name', 'error'); return; }
+    var btn = this;
+    btn.disabled = true;
+    try {
+      await createNamedDivision(name);
+      document.getElementById('first-division-name').value = '';
+      document.getElementById('setup-divisions-confirm').hidden = true;
+    } catch (err) {
+      showToast(err.message || 'Could not create the division', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  document.getElementById('add-division-btn').addEventListener('click', async function() {
+    var input = document.getElementById('new-division-name');
+    var name = input.value.trim();
+    if (!name) { showToast('Enter a division name', 'error'); return; }
+    var btn = this;
+    btn.disabled = true;
+    try {
+      await createNamedDivision(name);
+      input.value = '';
+    } catch (err) {
+      showToast(err.message || 'Could not create the division', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  document.getElementById('divisions-list').addEventListener('click', async function(e) {
+    var renameBtn = e.target.closest('.division-rename-btn');
+    var deleteBtn = e.target.closest('.division-delete-btn');
+    var managersBtn = e.target.closest('.division-managers-btn');
+    var button = renameBtn || deleteBtn || managersBtn;
+    if (!button) return;
+    var divisionId = Number(button.getAttribute('data-id'));
+    button.disabled = true;
+    try {
+      if (renameBtn) {
+        var input = document.querySelector('.division-rename-input[data-id="' + divisionId + '"]');
+        await postDivision('/api/rename-division', { division_id: divisionId, name: input ? input.value : '' });
+        showToast('Division renamed', 'success');
+      } else if (deleteBtn) {
+        await postDivision('/api/delete-division', { division_id: divisionId });
+        showToast('Division deleted', 'success');
+      } else {
+        var ids = [];
+        document.querySelectorAll('.division-manager-check[data-division="' + divisionId + '"]:checked').forEach(function(box) {
+          if (box.value) ids.push(box.value);
+        });
+        await postDivision('/api/set-division-managers', { division_id: divisionId, member_auth_user_ids: ids });
+        showToast('Managers saved', 'success');
+      }
+      await reloadAccountContext();
+      await loadMembers();
+      await renderDivisions();
+    } catch (err) {
+      showToast(err.message || 'Could not update the division', 'error');
+      button.disabled = false;
+    }
+  });
+
   document.getElementById('invite-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     var email = document.getElementById('invite-email').value.trim();
@@ -436,6 +704,10 @@
 
     if (!email) {
       showToast('Please enter an email address', 'error');
+      return;
+    }
+    if (role === 'Divisional Manager' && !selectedInviteDivisionIds().length) {
+      showToast('Choose at least one division', 'error');
       return;
     }
 
@@ -457,13 +729,22 @@
           'Authorization': 'Bearer ' + token,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          email: email,
-          role: role,
-          can_edit_assets: canEditAssets,
-          can_edit_jobs: canEditJobs,
-          can_view_change_log: canViewChangeLog
-        })
+        body: JSON.stringify((function() {
+          var payload = {
+            email: email,
+            role: role,
+            can_edit_assets: canEditAssets,
+            can_edit_jobs: canEditJobs,
+            can_view_change_log: canViewChangeLog
+          };
+          if (role === 'Divisional Manager') {
+            payload.scope = 'division';
+            payload.division_ids = selectedInviteDivisionIds();
+            payload.can_edit_jobs = false;
+            payload.can_view_change_log = false;
+          }
+          return payload;
+        })())
       });
       var data = await res.json();
 
@@ -476,6 +757,7 @@
       document.getElementById('invite-form').reset();
       applyRoleDefaults();
       await loadMembers();
+      await renderDivisions();
     } catch (err) {
       showToast('Something went wrong', 'error');
     } finally {
@@ -536,7 +818,8 @@
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
-    effectiveAccountId = (await window.FleetMagnifyAccountContext.load(supabase, currentUser.id)).effectiveAccountId;
+    accountContext = await window.FleetMagnifyAccountContext.load(supabase, currentUser.id);
+    effectiveAccountId = accountContext.effectiveAccountId;
     window.FleetMagnifySidebar.inject('settings.html', supabase, effectiveAccountId);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
@@ -555,6 +838,7 @@
       document.getElementById('manage-users-section').hidden = false;
       applyRoleDefaults();
       await loadMembers();
+      await renderDivisions();
       await showScheduledCancellation();
     } else {
       document.getElementById('billing-member-note').hidden = false;
