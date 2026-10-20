@@ -2,6 +2,7 @@
  * SendGrid Inbound Parse webhook — receives OEM telematics CSV attachments
  * sent to per-user upload addresses (e.g. monro-a3x9@uploads.fleetmagnify.com).
  */
+const crypto = require('crypto');
 const Busboy = require('busboy');
 const { createClient } = require('@supabase/supabase-js');
 const { isNavmanCsv, parseNavmanReport } = require('../parsers/navman');
@@ -204,7 +205,44 @@ async function sendFailureAlert(filename, errorMessage, userId) {
   }
 }
 
+function sha256(value) {
+  return crypto.createHash('sha256').update(value, 'utf8').digest();
+}
+
+function requestPath(req) {
+  var raw = req && req.url ? String(req.url) : '';
+  try {
+    return new URL(raw, 'http://localhost').pathname || '/api/email-inbound';
+  } catch (err) {
+    var q = raw.indexOf('?');
+    return (q === -1 ? raw : raw.slice(0, q)) || '/api/email-inbound';
+  }
+}
+
+// SendGrid Inbound Parse destination:
+//   https://<host>/api/email-inbound?token=<secret>
+// Rotate the secret by changing the Vercel env var INBOUND_WEBHOOK_SECRET
+// and the token query parameter in the SendGrid destination URL together.
+function authorizeInbound(req, res) {
+  var secret = process.env.INBOUND_WEBHOOK_SECRET;
+  if (!secret) {
+    console.warn('INBOUND_WEBHOOK_SECRET not set - webhook is unauthenticated');
+    return true;
+  }
+  var token = req && req.query ? req.query.token : '';
+  // Hash both sides first so timingSafeEqual always sees equal-length buffers.
+  var provided = typeof token === 'string' ? token : '';
+  if (!crypto.timingSafeEqual(sha256(provided), sha256(secret))) {
+    console.warn('email-inbound: rejected unauthenticated request ' + requestPath(req));
+    res.status(401).json({ error: 'Unauthorized' });
+    return false;
+  }
+  return true;
+}
+
 module.exports = async function handler(req, res) {
+  if (!authorizeInbound(req, res)) return;
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
