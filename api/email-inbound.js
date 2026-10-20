@@ -446,6 +446,9 @@ module.exports = async function handler(req, res) {
         }
       } else if (isNavmanIdleCsv(rawCsv)) {
         try {
+          // Header-only exports, and files whose events are all Duration 0,
+          // return processed with recordsUpserted 0 and do not throw.
+          // This catch is only for real failures, so those must not alert.
           var idleResult = await parseNavmanIdleReport(supabase, {
             userId: userResult.data.user_id,
             importId: importId,

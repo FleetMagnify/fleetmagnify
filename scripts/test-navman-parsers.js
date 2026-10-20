@@ -199,10 +199,162 @@ function testEndToEndWithMockSupabase() {
   });
 }
 
+var IDLE_HEADER = 'Vehicle,Registration,VehicleGroup,IdleStart,IdleEnd,Duration,Unit,Location';
+
+var HEADER_ONLY_IDLE_CSV = IDLE_HEADER + '\n';
+
+var ZERO_DURATION_IDLE_CSV = [
+  IDLE_HEADER,
+  'LV1 Hire Bucket,LJU519,Independent Line Services,8-25-2026 5:07 AM,8-25-2026 5:07 AM,0,min,depot',
+  'T34 Civils Truck,PDN185,Independent Line Services,8-25-2026 6:00 AM,8-25-2026 6:00 AM,0,min,depot',
+].join('\n');
+
+function idleAssets() {
+  return [
+    { id: 1, asset_name: 'LV1 Hire Bucket' },
+    { id: 6, asset_name: 'T34 Civils Truck' },
+  ];
+}
+
+function mockIdleSupabase(assets) {
+  var writes = [];
+  var statuses = [];
+  var tables = [];
+  var supabase = {
+    from: function(table) {
+      tables.push(table);
+      return {
+        select: function() {
+          return {
+            eq: function() {
+              return Promise.resolve({
+                data: table === 'assets' ? assets : [],
+                error: null,
+              });
+            },
+          };
+        },
+        upsert: function(rows) {
+          writes.push({ table: table, rows: rows });
+          return Promise.resolve({ error: null });
+        },
+        update: function(payload) {
+          return {
+            eq: function() {
+              statuses.push(payload);
+              return Promise.resolve({ error: null });
+            },
+          };
+        },
+      };
+    },
+  };
+  return { supabase: supabase, writes: writes, statuses: statuses, tables: tables };
+}
+
+function testEmptyIdleReports() {
+  return Promise.resolve().then(async function() {
+    var idle = require('../parsers/navman-idle');
+
+    assert.strictEqual(idle.isNavmanIdleCsv(HEADER_ONLY_IDLE_CSV), true, 'header-only is still an idle CSV');
+    assert.strictEqual(idle.parseNavmanIdleRows(HEADER_ONLY_IDLE_CSV).length, 0);
+
+    var headerMock = mockIdleSupabase(idleAssets());
+    var headerResult = await idle.parseNavmanIdleReport(headerMock.supabase, {
+      userId: 'user-1',
+      importId: 'imp-empty',
+      rawCsv: HEADER_ONLY_IDLE_CSV,
+    });
+    assert.strictEqual(headerResult.ok, true);
+    assert.strictEqual(headerResult.recordsUpserted, 0);
+    assert.strictEqual(headerResult.pendingAdded, 0);
+    assert.deepStrictEqual(headerMock.writes, []);
+    assert.deepStrictEqual(headerMock.tables, ['email_imports']);
+    assert.strictEqual(headerMock.statuses.length, 1);
+    assert.strictEqual(headerMock.statuses[0].status, 'processed');
+    assert.strictEqual(headerMock.statuses[0].error_message, null);
+
+    var zeroMock = mockIdleSupabase(idleAssets());
+    var zeroResult = await idle.parseNavmanIdleReport(zeroMock.supabase, {
+      userId: 'user-1',
+      importId: 'imp-zero',
+      rawCsv: ZERO_DURATION_IDLE_CSV,
+    });
+    assert.strictEqual(zeroResult.ok, true);
+    assert.strictEqual(zeroResult.recordsUpserted, 0);
+    assert.strictEqual(zeroMock.writes.filter(function(w) { return w.table === 'telematics_records'; }).length, 0);
+    assert.strictEqual(zeroMock.writes.filter(function(w) { return w.table === 'pending_assets'; }).length, 0);
+    assert.strictEqual(zeroMock.statuses[0].status, 'processed');
+    assert.strictEqual(zeroMock.statuses[0].error_message, null);
+
+    var unknownCsv = [
+      IDLE_HEADER,
+      'Not In Fleet,ABC123,Group,8-25-2026 5:07 AM,8-25-2026 5:21 AM,14,min,depot',
+    ].join('\n');
+    var unknownMock = mockIdleSupabase(idleAssets());
+    var unknownThrew = false;
+    try {
+      await idle.parseNavmanIdleReport(unknownMock.supabase, {
+        userId: 'user-1',
+        importId: 'imp-unknown',
+        rawCsv: unknownCsv,
+      });
+    } catch (err) {
+      unknownThrew = true;
+      assert.strictEqual(err.message, 'No valid idle records to import');
+    }
+    assert.strictEqual(unknownThrew, true, 'unknown vehicle stays failed');
+    assert.strictEqual(unknownMock.statuses[unknownMock.statuses.length - 1].status, 'failed');
+
+    var badDateCsv = [
+      IDLE_HEADER,
+      'LV1 Hire Bucket,LJU519,Group,not-a-date,,14,min,depot',
+    ].join('\n');
+    var badDateMock = mockIdleSupabase(idleAssets());
+    var badDateThrew = false;
+    try {
+      await idle.parseNavmanIdleReport(badDateMock.supabase, {
+        userId: 'user-1',
+        importId: 'imp-date',
+        rawCsv: badDateCsv,
+      });
+    } catch (err) {
+      badDateThrew = true;
+      assert.ok(err.message.indexOf('No valid idle records to import') === 0);
+      assert.ok(err.message.indexOf('unparseable IdleStart') !== -1);
+    }
+    assert.strictEqual(badDateThrew, true, 'bad IdleStart stays failed');
+    assert.strictEqual(badDateMock.statuses[badDateMock.statuses.length - 1].status, 'failed');
+
+    var badUnitCsv = [
+      IDLE_HEADER,
+      'LV1 Hire Bucket,LJU519,Group,8-25-2026 5:07 AM,8-25-2026 5:21 AM,14,hours,depot',
+    ].join('\n');
+    var badUnitMock = mockIdleSupabase(idleAssets());
+    var badUnitThrew = false;
+    try {
+      await idle.parseNavmanIdleReport(badUnitMock.supabase, {
+        userId: 'user-1',
+        importId: 'imp-unit',
+        rawCsv: badUnitCsv,
+      });
+    } catch (err) {
+      badUnitThrew = true;
+      assert.strictEqual(err.message, 'No valid idle records to import');
+    }
+    assert.strictEqual(badUnitThrew, true, 'non-min unit stays failed');
+    assert.strictEqual(badUnitMock.statuses[badUnitMock.statuses.length - 1].status, 'failed');
+
+    console.log('✓ header-only and duration-0 idle imports process with nothing written; bad rows still fail');
+  });
+}
+
 testDateParsing();
 testMileageDetectionAndRows();
 testIdleDetectionAndRows();
 testEndToEndWithMockSupabase().then(function() {
+  return testEmptyIdleReports();
+}).then(function() {
   console.log('\nAll Navman parser tests passed.');
 }).catch(function(err) {
   console.error('\nFAILED:', err);

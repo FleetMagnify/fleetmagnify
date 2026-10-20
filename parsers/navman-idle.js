@@ -122,7 +122,17 @@ async function parseNavmanIdleReport(supabase, options) {
 
   try {
     var rows = parseNavmanIdleRows(rawCsv);
-    if (rows.length === 0) throw new Error('No idle event rows found');
+    // A real idle export with the right headers and no events means the
+    // fleet did not idle. Record the import as processed and write nothing.
+    // There is no asset or date to attach idle_hours = 0 to.
+    if (rows.length === 0) {
+      await updateImportStatus(supabase, importId, 'processed', null, 'navman-idle');
+      return {
+        ok: true,
+        recordsUpserted: 0,
+        pendingAdded: 0,
+      };
+    }
 
     var assetResult = await ensureAssets(supabase, userId, rows);
     var assetMap = assetResult.assetMap;
@@ -131,6 +141,10 @@ async function parseNavmanIdleReport(supabase, options) {
     // via parseNavmanDate (MM-DD-YYYY local, no UTC+12 day-shift).
     var dailyIdleMap = {};
     var skippedNoDate = 0;
+    var skippedUnknownVehicle = 0;
+    var skippedBadUnit = 0;
+    var skippedOther = 0;
+    var zeroDurationRows = 0;
     rows.forEach(function(row) {
       var vehicleName = String(row.Vehicle || '').trim();
       var startParsed = parseNavmanDatetime(row.IdleStart);
@@ -138,10 +152,40 @@ async function parseNavmanIdleReport(supabase, options) {
       var dateStr = startParsed ? startParsed.dateIso : parseNavmanDate(row.IdleStart);
       var duration = parseNumeric(row.Duration);
       var unit = String(row.Unit || '').trim().toLowerCase();
-      if (!dateStr) skippedNoDate++;
-      if (!vehicleName || !dateStr || duration === null) return;
+      if (!vehicleName) {
+        skippedOther++;
+        return;
+      }
+      if (!dateStr) {
+        skippedNoDate++;
+        return;
+      }
+      if (duration === null) {
+        skippedOther++;
+        return;
+      }
       // Only process minutes — if unit is not min, skip
-      if (unit && unit !== 'min') return;
+      if (unit && unit !== 'min') {
+        skippedBadUnit++;
+        return;
+      }
+
+      var assetEntry = assetMap[vehicleName];
+      if (!assetEntry) {
+        skippedUnknownVehicle++;
+        return;
+      }
+
+      // Duration 0 is a reported event with no idle, not a bad row.
+      // Adding it would not change the daily total.
+      if (duration === 0) {
+        zeroDurationRows++;
+        return;
+      }
+      if (duration < 0) {
+        skippedOther++;
+        return;
+      }
 
       // Sanity-check pre-calculated Duration against IdleStart/IdleEnd delta.
       // Prefer Duration (Navman's own figure) but warn when they disagree by >2 min.
@@ -158,8 +202,6 @@ async function parseNavmanIdleReport(supabase, options) {
         }
       }
 
-      var assetEntry = assetMap[vehicleName];
-      if (!assetEntry) return;
       var key = assetEntry.id + '|' + dateStr;
       if (!dailyIdleMap[key]) {
         dailyIdleMap[key] = { assetId: assetEntry.id, date: dateStr, idleMinutes: 0 };
@@ -219,6 +261,18 @@ async function parseNavmanIdleReport(supabase, options) {
     }
 
     if (records.length === 0) {
+      var hardSkips = skippedNoDate + skippedUnknownVehicle + skippedBadUnit + skippedOther;
+      // Every event row was a known vehicle, a parseable date, unit min,
+      // and Duration 0. Same outcome as a header-only file: processed,
+      // nothing written.
+      if (hardSkips === 0 && zeroDurationRows > 0) {
+        await updateImportStatus(supabase, importId, 'processed', null, 'navman-idle');
+        return {
+          ok: true,
+          recordsUpserted: 0,
+          pendingAdded: assetResult.pendingAdded,
+        };
+      }
       var hint = skippedNoDate > 0
         ? ' (' + skippedNoDate + ' rows had unparseable IdleStart)'
         : '';
