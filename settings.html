@@ -294,16 +294,18 @@
       result = await supabase
         .from('user_settings')
         .update({ machinery_fuel_cost_per_litre: cost })
-        .eq('user_id', effectiveAccountId);
+        .eq('user_id', effectiveAccountId)
+        .select('user_id');
     } else {
-      result = await supabase.from('user_settings').insert(payload);
+      result = await supabase.from('user_settings').insert(payload).select('user_id');
     }
 
     btn.disabled = false;
     btn.textContent = 'Save Settings';
 
-    if (result.error) {
-      showToast('Failed to save: ' + result.error.message, 'error');
+    var writeErr = window.supabaseWriteError(result, 'Save');
+    if (writeErr) {
+      showToast('Failed to save: ' + writeErr, 'error');
       return;
     }
 

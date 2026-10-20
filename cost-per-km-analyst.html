@@ -908,15 +908,41 @@
       var existing = findPayload(currentPayloads, latestPeriod.periodStart, latestPeriod.periodEnd);
 
       if (existing) {
-        await supabase.from('truck_payloads').update({ payload_tonnes: num }).eq('id', existing.id);
+        var payloadResult = await supabase.from('truck_payloads').update({ payload_tonnes: num }).eq('id', existing.id).select('id');
+        var payloadErr = window.supabaseWriteError(payloadResult, 'Save');
+        if (payloadErr) {
+          var failStatus = document.getElementById('tonnekm-save-status');
+          failStatus.textContent = payloadErr;
+          failStatus.style.color = '#F0A8A7';
+          failStatus.classList.add('visible');
+          setTimeout(function() {
+            failStatus.classList.remove('visible');
+            failStatus.textContent = 'Saved ✓';
+            failStatus.style.color = '';
+          }, 2500);
+          return;
+        }
       } else {
-        await supabase.from('truck_payloads').insert({
+        var insertResult = await supabase.from('truck_payloads').insert({
           user_id: effectiveAccountId,
           vehicle_id: Number(selectedVehicle.id),
           period_start: latestPeriod.periodStart,
           period_end: latestPeriod.periodEnd,
           payload_tonnes: num
-        });
+        }).select('id');
+        var insertErr = window.supabaseWriteError(insertResult, 'Save');
+        if (insertErr) {
+          var failStatusIns = document.getElementById('tonnekm-save-status');
+          failStatusIns.textContent = insertErr;
+          failStatusIns.style.color = '#F0A8A7';
+          failStatusIns.classList.add('visible');
+          setTimeout(function() {
+            failStatusIns.classList.remove('visible');
+            failStatusIns.textContent = 'Saved ✓';
+            failStatusIns.style.color = '';
+          }, 2500);
+          return;
+        }
       }
 
       currentPayloads = await fetchPayloads(selectedVehicle.id);
@@ -924,6 +950,8 @@
       showDashboard(enrichedPeriods);
 
       var status = document.getElementById('tonnekm-save-status');
+      status.textContent = 'Saved ✓';
+      status.style.color = '';
       status.classList.add('visible');
       setTimeout(function() { status.classList.remove('visible'); }, 1500);
     });
@@ -1328,11 +1356,13 @@
       .from('truck_cost_overrides')
       .delete()
       .eq('id', ov.id)
-      .eq('user_id', effectiveAccountId);
+      .eq('user_id', effectiveAccountId)
+      .select('id');
 
     btn.disabled = false;
-    if (result.error) {
-      document.getElementById('modal-error').textContent = result.error.message;
+    var writeErr = window.supabaseWriteError(result, 'Delete');
+    if (writeErr) {
+      document.getElementById('modal-error').textContent = writeErr;
       document.getElementById('modal-error').classList.add('visible');
       return;
     }
@@ -1360,7 +1390,14 @@
 
       if (!valRaw) {
         if (existing) {
-          await supabase.from('truck_cost_overrides').delete().eq('id', existing.id).eq('user_id', effectiveAccountId);
+          var delResult = await supabase.from('truck_cost_overrides').delete().eq('id', existing.id).eq('user_id', effectiveAccountId).select('id');
+          var delErr = window.supabaseWriteError(delResult, 'Delete');
+          if (delErr) {
+            errEl.textContent = delErr;
+            errEl.classList.add('visible');
+            this.disabled = false;
+            return;
+          }
         }
         continue;
       }
@@ -1374,14 +1411,21 @@
       }
 
       if (existing) {
-        await supabase.from('truck_cost_overrides').update({
+        var updateResult = await supabase.from('truck_cost_overrides').update({
           override_value_per_km: val,
           reason: reason || null,
           period_start: p.periodStart,
           period_end: p.periodEnd
-        }).eq('id', existing.id).eq('user_id', effectiveAccountId);
+        }).eq('id', existing.id).eq('user_id', effectiveAccountId).select('id');
+        var updateErr = window.supabaseWriteError(updateResult, 'Save');
+        if (updateErr) {
+          errEl.textContent = updateErr;
+          errEl.classList.add('visible');
+          this.disabled = false;
+          return;
+        }
       } else {
-        await supabase.from('truck_cost_overrides').insert({
+        var insertResult = await supabase.from('truck_cost_overrides').insert({
           user_id: effectiveAccountId,
           vehicle_id: Number(selectedVehicle.id),
           period_start: p.periodStart,
@@ -1389,7 +1433,14 @@
           component_type: type,
           override_value_per_km: val,
           reason: reason || null
-        });
+        }).select('id');
+        var insertErr = window.supabaseWriteError(insertResult, 'Save');
+        if (insertErr) {
+          errEl.textContent = insertErr;
+          errEl.classList.add('visible');
+          this.disabled = false;
+          return;
+        }
       }
     }
 
@@ -1399,12 +1450,20 @@
       if (!isNaN(payloadNum) && payloadNum > 0) {
         var existingPayloadRow = findPayload(currentPayloads, p.periodStart, p.periodEnd);
         if (existingPayloadRow) {
-          await supabase
+          var payloadUpdate = await supabase
             .from('truck_payloads')
             .update({ payload_tonnes: payloadNum })
-            .eq('id', existingPayloadRow.id);
+            .eq('id', existingPayloadRow.id)
+            .select('id');
+          var payloadErr = window.supabaseWriteError(payloadUpdate, 'Save');
+          if (payloadErr) {
+            errEl.textContent = payloadErr;
+            errEl.classList.add('visible');
+            this.disabled = false;
+            return;
+          }
         } else {
-          await supabase
+          var payloadInsert = await supabase
             .from('truck_payloads')
             .insert({
               user_id: effectiveAccountId,
@@ -1412,7 +1471,15 @@
               period_start: p.periodStart,
               period_end: p.periodEnd,
               payload_tonnes: payloadNum
-            });
+            })
+            .select('id');
+          var payloadInsErr = window.supabaseWriteError(payloadInsert, 'Save');
+          if (payloadInsErr) {
+            errEl.textContent = payloadInsErr;
+            errEl.classList.add('visible');
+            this.disabled = false;
+            return;
+          }
         }
       }
     }

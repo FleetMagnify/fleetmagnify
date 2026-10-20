@@ -542,18 +542,19 @@
       };
       if (payload.bp_api_key === undefined) delete updatePayload.bp_api_key;
       if (payload.eroad_api_key === undefined) delete updatePayload.eroad_api_key;
-      result = await supabase.from('company_integrations').update(updatePayload).eq('user_id', effectiveAccountId);
+      result = await supabase.from('company_integrations').update(updatePayload).eq('user_id', effectiveAccountId).select('user_id');
     } else {
       if (payload.bp_api_key === undefined) payload.bp_api_key = null;
       if (payload.eroad_api_key === undefined) payload.eroad_api_key = null;
-      result = await supabase.from('company_integrations').insert(payload);
+      result = await supabase.from('company_integrations').insert(payload).select('user_id');
     }
 
     btn.disabled = false;
     btn.textContent = 'Save Account Connections';
 
-    if (result.error) {
-      showToast('Failed to save: ' + result.error.message, 'error');
+    var writeErr = window.supabaseWriteError(result, 'Save');
+    if (writeErr) {
+      showToast('Failed to save: ' + writeErr, 'error');
       return;
     }
 
