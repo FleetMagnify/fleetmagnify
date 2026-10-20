@@ -437,6 +437,7 @@
 <script src="js/supabase-config.js"></script>
 <script src="js/subscription-guard.js"></script>
 <script src="js/account-context.js"></script>
+<script src="js/division-filter.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
@@ -447,6 +448,7 @@
   var FCM = window.FleetCostModel;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
+  var accountContext = null;
   var effectiveAccountId = null;
   var companyName = '';
   var allAssets = [];
@@ -487,10 +489,12 @@
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
-    effectiveAccountId = (await window.FleetMagnifyAccountContext.load(supabase, currentUser.id)).effectiveAccountId;
+    accountContext = await window.FleetMagnifyAccountContext.load(supabase, currentUser.id);
+    effectiveAccountId = accountContext.effectiveAccountId;
     window.FleetMagnifySidebar.inject('job-cost-analyst.html', supabase, effectiveAccountId);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
+    window.FleetMagnifyDivisionFilter.mount(accountContext);
     companyName = await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
     await loadUserSettings();
     await Promise.all([loadJobs(), loadAssets()]);
@@ -499,7 +503,7 @@
 
   async function loadAssets() {
     var result = await supabase.from('assets').select('*').eq('user_id', effectiveAccountId).eq('is_ignored', false).order('asset_name');
-    allAssets = result.data || [];
+    allAssets = window.FleetMagnifyDivisionFilter.apply(result.data || [], accountContext);
     var opts = '<option value="">Select an asset...</option>' +
       allAssets.map(function(a) { return '<option value="' + a.id + '">' + esc(a.asset_name) + '</option>'; }).join('');
     document.getElementById('add-asset-select').innerHTML = opts;
@@ -519,17 +523,21 @@
       .from('job_assets')
       .select('job_id, asset_id, work_date')
       .eq('user_id', effectiveAccountId);
+    var divisionAssetIds = window.FleetMagnifyDivisionFilter.assetIdSet(allAssets, accountContext);
+    var assignmentRows = window.FleetMagnifyDivisionFilter.restrictByAssetId(countResult.data || [], divisionAssetIds);
+    var jobsInDivision = window.FleetMagnifyDivisionFilter.touchingJobIds(countResult.data || [], divisionAssetIds);
     var daysByJob = {};
-    (countResult.data || []).forEach(function(r) {
+    assignmentRows.forEach(function(r) {
       daysByJob[r.job_id] = daysByJob[r.job_id] || new Set();
       daysByJob[r.job_id].add(r.asset_id + '|' + r.work_date);
     });
-    (countResult.data || []).forEach(function(r) {
+    assignmentRows.forEach(function(r) {
       counts[r.job_id] = counts[r.job_id] || new Set();
       counts[r.job_id].add(r.asset_id);
     });
 
     var filtered = allJobs.filter(function(job) {
+      if (jobsInDivision && !jobsInDivision[String(job.id)]) return false;
       var status = (job.status || 'Active').toLowerCase();
       var matchesFilter = jobsFilter === 'all' ? true :
         jobsFilter === 'archived' ? status === 'archived' :
@@ -740,7 +748,10 @@
   async function refreshJobDetail() {
     if (!currentJob) return;
     var result = await supabase.from('job_assets').select('*').eq('job_id', currentJob.id).eq('user_id', effectiveAccountId).order('work_date');
-    jobAssignments = result.data || [];
+    jobAssignments = window.FleetMagnifyDivisionFilter.restrictByAssetId(
+      result.data || [],
+      window.FleetMagnifyDivisionFilter.assetIdSet(allAssets, accountContext)
+    );
     renderAssignedAssets();
     await calculateCosts();
   }

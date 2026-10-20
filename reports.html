@@ -241,6 +241,7 @@
 <script src="js/supabase-config.js"></script>
 <script src="js/subscription-guard.js"></script>
 <script src="js/account-context.js"></script>
+<script src="js/division-filter.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/fleet-cost-model.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -251,6 +252,7 @@
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var FCM = window.FleetCostModel;
   var currentUser = null;
+  var accountContext = null;
   var effectiveAccountId = null;
   var companyName = '';
   var allAssets = [];
@@ -298,10 +300,12 @@
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
-    effectiveAccountId = (await window.FleetMagnifyAccountContext.load(supabase, currentUser.id)).effectiveAccountId;
+    accountContext = await window.FleetMagnifyAccountContext.load(supabase, currentUser.id);
+    effectiveAccountId = accountContext.effectiveAccountId;
     window.FleetMagnifySidebar.inject('reports.html', supabase, effectiveAccountId);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
+    window.FleetMagnifyDivisionFilter.mount(accountContext);
     companyName = await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
     var today = FCM.nzTodayISO();
@@ -315,7 +319,7 @@
 
   async function loadAssets() {
     var result = await supabase.from('assets').select('*').eq('user_id', effectiveAccountId).eq('is_ignored', false).order('asset_name');
-    allAssets = result.data || [];
+    allAssets = window.FleetMagnifyDivisionFilter.apply(result.data || [], accountContext);
     var options = '<option value="">Select an asset...</option>' +
       allAssets.map(function(a) { return '<option value="' + a.id + '">' + esc(a.asset_name) + '</option>'; }).join('');
     document.querySelectorAll('.asset-select').forEach(function(sel) { sel.innerHTML = options; });

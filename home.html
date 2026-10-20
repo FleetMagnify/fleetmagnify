@@ -208,6 +208,7 @@
 <script src="js/supabase-config.js"></script>
 <script src="js/subscription-guard.js"></script>
 <script src="js/account-context.js"></script>
+<script src="js/division-filter.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/upload-email.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -218,6 +219,7 @@
   var FCM = window.FleetCostModel;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
+  var accountContext = null;
   var effectiveAccountId = null;
   var tourCompleted = false;
   var companyName = '';
@@ -278,10 +280,12 @@
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
-    effectiveAccountId = (await window.FleetMagnifyAccountContext.load(supabase, currentUser.id)).effectiveAccountId;
+    accountContext = await window.FleetMagnifyAccountContext.load(supabase, currentUser.id);
+    effectiveAccountId = accountContext.effectiveAccountId;
     window.FleetMagnifySidebar.inject('home.html', supabase, effectiveAccountId);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
+    window.FleetMagnifyDivisionFilter.mount(accountContext);
     companyName = await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
     if (window.FleetMagnifyUploadEmail) {
@@ -505,7 +509,7 @@
     // both the named top-10 bars and the "Other" bucket across every
     // chart on this page.
     var assetsResult = await supabase.from('assets').select('*').eq('user_id', effectiveAccountId).eq('is_ignored', false).order('asset_name');
-    var assets = assetsResult.data || [];
+    var assets = window.FleetMagnifyDivisionFilter.apply(assetsResult.data || [], accountContext);
     if (assets.length === 0) return { assets: [], purchases: [], tel: [], latestTel: [] };
 
     var fuelPurchasesResult = await supabase.from('fuel_purchases').select('vehicle_id, litres, cost_nzd, purchase_date')

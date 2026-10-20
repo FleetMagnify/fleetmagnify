@@ -153,13 +153,20 @@
     if (cache && cache.userId === userId && cache.supabase === supabase) {
       return cache.promise;
     }
-    var entry = { userId: userId, supabase: supabase, promise: null };
-    entry.promise = fetchContext(supabase, userId).catch(function(err) {
+    var entry = { userId: userId, supabase: supabase, promise: null, context: null };
+    entry.promise = fetchContext(supabase, userId).then(function(ctx) {
+      entry.context = ctx;
+      return ctx;
+    }).catch(function(err) {
       if (cache === entry) cache = null;
       throw err;
     });
     cache = entry;
     return entry.promise;
+  }
+
+  function current() {
+    return cache && cache.context ? cache.context : null;
   }
 
   function clearCache() {
@@ -168,6 +175,7 @@
 
   global.FleetMagnifyAccountContext = {
     load: load,
+    current: current,
     deriveAccountContext: deriveAccountContext,
     clearCache: clearCache,
     MEMBER_COLUMNS: MEMBER_COLUMNS

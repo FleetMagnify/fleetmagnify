@@ -167,6 +167,7 @@ async function runLoadTests() {
   var ownerClient = fakeSupabase(memberFixtures(null));
   var loadedOwner = await ctx.load(ownerClient, ownerId);
   check('load() owner id matches derive', loadedOwner.effectiveAccountId === ownerId && loadedOwner.isOwner === true);
+  check('load() keeps the latest context for the sidebar', ctx.current() === loadedOwner);
   check('load() reads account_members once for an owner', ownerClient.calls.filter(function(call) { return call.table === 'account_members'; }).length === 1);
   check(
     'account_members select includes scope and edit flags',

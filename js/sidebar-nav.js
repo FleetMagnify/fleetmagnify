@@ -19,6 +19,7 @@ window.FleetMagnifySidebar = (function() {
     { type: 'link', href: 'orion-fuel-report.html', icon: '🧾', text: 'Orion Fuel Report', requiresWorkOrderReport: true },
     { type: 'label', text: 'Fleet Management' },
     { type: 'link', href: 'reports.html', icon: '📋', text: 'Reports' },
+    { type: 'link', href: 'divisions.html', icon: '🗂', text: 'Division comparison', requiresDivisions: true },
     { type: 'link', href: 'assets.html', icon: '🚧', text: 'Assets' },
     { type: 'link', href: 'upload.html', icon: '📤', text: 'Upload Data' },
     { type: 'link', href: 'integrations.html', icon: '🔌', text: 'Integrations' },
@@ -31,9 +32,9 @@ window.FleetMagnifySidebar = (function() {
         return '<div class="nav-label">' + item.text + '</div>';
       }
       var cls = (item.href === activePage) ? 'nav-item active' : 'nav-item';
-      var attrs = item.requiresWorkOrderReport
-        ? ' data-work-order-report="true" style="display:none"'
-        : '';
+      var attrs = '';
+      if (item.requiresWorkOrderReport) attrs = ' data-work-order-report="true" style="display:none"';
+      if (item.requiresDivisions) attrs = ' data-divisions-nav="true" style="display:none"';
       return '<a class="' + cls + '" href="' + item.href + '"' + attrs + '><span class="nav-icon">' + item.icon + '</span> ' + item.text + '</a>';
     }).join('\n    ');
   }
@@ -120,6 +121,15 @@ window.FleetMagnifySidebar = (function() {
     }
   }
 
+  function globalAccount() {
+    try {
+      var api = window.FleetMagnifyAccountContext;
+      return api && api.current ? api.current() : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   function mount(activePage) {
     var html = render(activePage);
     var placeholder = document.getElementById('sidebar-placeholder');
@@ -164,6 +174,12 @@ window.FleetMagnifySidebar = (function() {
     }
 
     // Apply after fleet composition so a section hide does not wipe the flag link.
+    var account = globalAccount();
+    if (account && account.hasDivisions && !account.isDivisionManager) {
+      var divisionItems = document.querySelectorAll('[data-divisions-nav="true"]');
+      for (var d = 0; d < divisionItems.length; d++) divisionItems[d].style.display = '';
+    }
+
     if (hasWorkOrderReport) {
       var woItems = document.querySelectorAll('[data-work-order-report="true"]');
       for (var i = 0; i < woItems.length; i++) { woItems[i].style.display = ''; }

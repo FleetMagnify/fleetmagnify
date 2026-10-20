@@ -295,6 +295,7 @@
 <script src="js/supabase-config.js"></script>
 <script src="js/subscription-guard.js"></script>
 <script src="js/account-context.js"></script>
+<script src="js/division-filter.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
@@ -306,6 +307,7 @@
   var DEFAULT_HOURS_PER_WEEK = 40;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
+  var accountContext = null;
   var effectiveAccountId = null;
   var assetsList = [];
   var selectedAsset = null;
@@ -323,7 +325,8 @@
       return;
     }
     currentUser = sessionResult.data.session.user;
-    effectiveAccountId = (await window.FleetMagnifyAccountContext.load(supabase, currentUser.id)).effectiveAccountId;
+    accountContext = await window.FleetMagnifyAccountContext.load(supabase, currentUser.id);
+    effectiveAccountId = accountContext.effectiveAccountId;
     window.FleetMagnifySidebar.inject('utilisation-analyst.html', supabase, effectiveAccountId);
     document.getElementById('signout-btn').addEventListener('click', async function() {
       await supabase.auth.signOut();
@@ -331,6 +334,7 @@
     });
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
+    window.FleetMagnifyDivisionFilter.mount(accountContext);
     await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
     var today = FCM.nzTodayISO();
@@ -343,14 +347,14 @@
   async function loadAssets() {
     var result = await supabase
       .from('assets')
-      .select('id, asset_name, asset_type, available_hours_per_week, target_utilisation_percent, usage_profile')
+      .select('id, asset_name, asset_type, division_id, available_hours_per_week, target_utilisation_percent, usage_profile')
       .eq('user_id', effectiveAccountId)
       .eq('is_ignored', false)
       .order('asset_name');
     if (result.error) {
       result = await supabase
         .from('assets')
-        .select('id, asset_name, asset_type, available_hours_per_week, target_utilisation_percent')
+        .select('id, asset_name, asset_type, division_id, available_hours_per_week, target_utilisation_percent')
         .eq('user_id', effectiveAccountId)
         .eq('is_ignored', false)
         .order('asset_name');
@@ -358,7 +362,7 @@
 
     if (result.error || !result.data) return;
 
-    assetsList = result.data;
+    assetsList = window.FleetMagnifyDivisionFilter.apply(result.data, accountContext);
     var select = document.getElementById('asset-select');
     if (!assetsList.length) {
       select.innerHTML = '<option value="">No assets found</option>';
