@@ -421,6 +421,9 @@ module.exports = async function handler(req, res) {
         }
       } else if (isNavmanMileageCsv(rawCsv)) {
         try {
+          // A header-only mileage export returns processed with
+          // recordsUpserted 0 and does not throw, so this catch must not
+          // send a failure email for it.
           var mileageResult = await parseNavmanMileageReport(supabase, {
             userId: userResult.data.user_id,
             importId: importId,
