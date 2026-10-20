@@ -1,6 +1,8 @@
 /**
  * Daily reconciliation: set every trialing/active/past_due Stripe
- * subscription's quantity to the customer's real non-ignored asset count.
+ * subscription's platform-price quantity to the customer's real
+ * non-ignored asset count, and reconcile the divisions add-on quantity
+ * for accounts that have divisions or already have that line item.
  *
  * Vercel Cron invokes this as GET with Authorization: Bearer CRON_SECRET.
  * Admins can also POST with x-admin-secret to run it on demand.
@@ -53,10 +55,18 @@ module.exports = async function handler(req, res) {
       supabase: createSupabaseClient(),
       stripe: createStripeClient()
     });
+    var divisionResults = summary.divisions && summary.divisions.results || [];
     return res.status(200).json({
       ok: true,
       scanned: summary.scanned,
-      changed: summary.changed
+      changed: summary.changed,
+      divisions: summary.divisions && summary.divisions.skipped
+        ? { skipped: true, reason: summary.divisions.reason }
+        : {
+            updated: divisionResults.filter(function (row) {
+              return row.action === 'add' || row.action === 'update' || row.action === 'remove';
+            }).length
+          }
     });
   } catch (err) {
     console.error('sync-subscription-quantities: unhandled error', err.message);

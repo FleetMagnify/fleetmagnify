@@ -3,6 +3,10 @@
  * FleetMagnify platform fee. Truck/machine fee quantities are added to
  * the subscription later via api/sync-subscription-quantities.js (daily
  * reconciliation) and the invoice.upcoming webhook (charge-time sync).
+ *
+ * This creates one line item, identified by STRIPE_PRICE_PLATFORM. It does
+ * not read or reorder existing subscription items. The divisions add-on is
+ * a separate price added later by the division routes.
  */
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
