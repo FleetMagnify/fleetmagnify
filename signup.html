@@ -134,6 +134,18 @@
     background: rgba(14,165,122,0.04);
   }
 
+  .password-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 7px;
+  }
+  .password-header label { margin-bottom: 0; }
+  .show-password {
+    background: none; border: none; padding: 0; cursor: pointer;
+    font-size: 12px; font-weight: 500; color: #0EA57A;
+    font-family: inherit; transition: color 0.2s;
+  }
+  .show-password:hover { color: #0BC48E; }
+
   .btn-submit {
     width: 100%; margin-top: 8px;
     background: #0EA57A; border: none; color: #080C12;
@@ -207,8 +219,15 @@
         <input type="email" id="email" name="email" placeholder="jane@company.com" required autocomplete="email">
       </div>
       <div class="form-group">
-        <label for="password">Password</label>
+        <div class="password-header">
+          <label for="password">Password</label>
+          <button type="button" class="show-password" id="show-password" aria-pressed="false">Show password</button>
+        </div>
         <input type="password" id="password" name="password" placeholder="Minimum 8 characters" required minlength="8" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label for="confirm-password">Confirm Password</label>
+        <input type="password" id="confirm-password" name="confirmPassword" placeholder="Re-enter your password" required autocomplete="new-password">
       </div>
       <div class="form-group">
         <label for="fleet-size">Fleet Size</label>
@@ -257,6 +276,9 @@
     var cardSub = document.getElementById('card-sub');
     var loginPrompt = document.getElementById('login-prompt');
     var cardTitle = document.querySelector('.signup-card h1');
+    var passwordInput = document.getElementById('password');
+    var confirmPasswordInput = document.getElementById('confirm-password');
+    var showPasswordBtn = document.getElementById('show-password');
 
     if (!window.SUPABASE_URL || window.SUPABASE_URL === 'YOUR_SUPABASE_URL') {
       showError('Supabase is not configured. Add your project URL and anon key in js/supabase-config.js.');
@@ -275,6 +297,22 @@
       errorEl.textContent = '';
       errorEl.classList.remove('is-visible');
     }
+
+    function clearMismatchError() {
+      if (errorEl.textContent === "Passwords don't match") hideError();
+    }
+
+    passwordInput.addEventListener('input', clearMismatchError);
+    confirmPasswordInput.addEventListener('input', clearMismatchError);
+
+    showPasswordBtn.addEventListener('click', function() {
+      var reveal = passwordInput.type === 'password';
+      var nextType = reveal ? 'text' : 'password';
+      passwordInput.type = nextType;
+      confirmPasswordInput.type = nextType;
+      showPasswordBtn.textContent = reveal ? 'Hide password' : 'Show password';
+      showPasswordBtn.setAttribute('aria-pressed', reveal ? 'true' : 'false');
+    });
 
     var trialDays = window.FleetMagnifySubscriptionGuard.TRIAL_DAYS;
     cardSub.textContent = 'Start a ' + trialDays + '-day trial. We\'ll take a card now — you won\'t be charged until day ' + (trialDays + 1) + ', after you\'ve set up your fleet.';
@@ -334,8 +372,15 @@
       var fullName = document.getElementById('full-name').value.trim();
       var companyName = document.getElementById('company-name').value.trim();
       var email = document.getElementById('email').value.trim();
-      var password = document.getElementById('password').value;
+      var password = passwordInput.value;
+      var confirmPassword = confirmPasswordInput.value;
       var fleetSize = document.getElementById('fleet-size').value;
+
+      if (password !== confirmPassword) {
+        showError("Passwords don't match");
+        confirmPasswordInput.focus();
+        return;
+      }
 
       submitBtn.disabled = true;
       submitBtn.textContent = 'Creating account…';
