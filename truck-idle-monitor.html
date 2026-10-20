@@ -154,7 +154,7 @@
     <div id="empty-state" class="empty-state" hidden>
       <span class="icon">⏸</span>
       <h2>Not enough data yet</h2>
-      <p id="empty-state-message">Telematics idle-hour data is needed to calculate idle cost for this vehicle. This will populate automatically once eROAD telematics data is available for this date range.</p>
+      <p id="empty-state-message">Telematics idle-hour data is needed to calculate idle cost for this vehicle. This will populate automatically once your eRoad or Navman report for this date range has been received.</p>
     </div>
 
     <div id="fleet-view">
@@ -539,7 +539,7 @@
     }
 
     if (dailyRows.length === 0) {
-      showEmptyState('Telematics idle-hour data is needed to calculate idle cost for this vehicle. This will populate automatically once eROAD telematics data is available for this date range.');
+      showEmptyState('Telematics idle-hour data is needed to calculate idle cost for this vehicle. This will populate automatically once your eRoad or Navman report for this date range has been received.');
       return;
     }
 

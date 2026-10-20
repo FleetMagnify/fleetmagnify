@@ -279,7 +279,7 @@ body {
 <div class="hero">
   <div class="hero-eyebrow"><div class="dot"></div> Features</div>
   <h1 class="hero-title">Every module.<br>Every calculation.</h1>
-  <p class="hero-sub">A complete walkthrough of what FleetMagnify shows you, how it calculates it, and what you can do with it.</p>
+  <p class="hero-sub">A complete walkthrough of what FleetMagnify shows you, how it calculates it, and what you can do with it. FleetMagnify uses the reports you already receive. Set your telematics and fuel card providers to email their scheduled reports to your FleetMagnify upload address, and your data flows in automatically. No new hardware, and no manual data entry once it's set up.</p>
 </div>
 
 <!-- SECTION NAV -->
@@ -297,7 +297,7 @@ body {
     <div>
       <div class="group-eyebrow teal">⚙️ Machinery Modules</div>
       <h2 class="group-title">Powered by OEM telematics</h2>
-      <p class="group-desc">Data flows from VisionLink, Komtrax, ConSite, ActiveCare and other OEM platforms — direct from the ECU, updated every night.</p>
+      <p class="group-desc">VisionLink reports arrive by email, with more OEM platforms coming soon.</p>
     </div>
   </div>
 
@@ -307,7 +307,7 @@ body {
       <div class="module-tag teal">Machinery</div>
       <span class="module-emoji">⛽</span>
       <div class="module-name">Fuel Analyst</div>
-      <div class="module-tagline">Daily fuel consumption split between productive operating burn and wasted idle burn — calculated from ECU data, not invoices.</div>
+      <div class="module-tagline">Daily fuel consumption split between productive operating burn and wasted idle burn — calculated from VisionLink reports, not invoices.</div>
     </div>
     <div class="module-right">
       <div class="kpi-row">
@@ -329,7 +329,7 @@ body {
       <div class="feature-card">
         <div class="feature-card-title"><span class="icon">🔢</span> How it calculates</div>
         <ul class="feature-list">
-          <li class="feature-item"><span class="check teal">✓</span> Total litres consumed comes from your OEM telematics ECU — not from fuel invoices</li>
+          <li class="feature-item"><span class="check teal">✓</span> Total litres consumed comes from your VisionLink report — not from fuel invoices</li>
           <li class="feature-item"><span class="check teal">✓</span> Idle fuel = idle hours × idle burn rate (set per asset, or platform default by machine type)</li>
           <li class="feature-item"><span class="check teal">✓</span> Operating fuel = total litres minus idle fuel</li>
           <li class="feature-item"><span class="check teal">✓</span> Fuel cost = litres × bulk diesel price per litre (set in Settings — update when your tank price changes)</li>
@@ -426,7 +426,7 @@ body {
     <div class="module-right">
       <div class="kpi-row">
         <div class="kpi-card"><div class="kpi-label">Available Hours</div><div class="kpi-value white">45 hrs/wk</div></div>
-        <div class="kpi-card"><div class="kpi-label">Actual Hours</div><div class="kpi-value teal">from ECU</div></div>
+        <div class="kpi-card"><div class="kpi-label">Actual Hours</div><div class="kpi-value teal">from reports</div></div>
         <div class="kpi-card"><div class="kpi-label">Utilisation Rate</div><div class="kpi-value teal">actual ÷ avail</div></div>
         <div class="kpi-card"><div class="kpi-label">Target</div><div class="kpi-value amber">75%</div></div>
       </div>
@@ -492,8 +492,8 @@ body {
   <div class="group-header">
     <div>
       <div class="group-eyebrow amber">🚛 Truck Modules</div>
-      <h2 class="group-title">Powered by eRoad and BP Fleet Card</h2>
-      <p class="group-desc">Daily odometer readings from eRoad and fill-to-fill fuel transactions from BP Fleet Card — combined to give you true cost per kilometre, per trip, per vehicle.</p>
+      <h2 class="group-title">Powered by eRoad, Navman, BP Fleet Card and Mobil</h2>
+      <p class="group-desc">Mileage reports from eRoad and Navman, and fuel card transactions from BP Fleet Card and Mobil, emailed to your upload address — combined to give you true cost per kilometre, per trip, per vehicle.</p>
     </div>
   </div>
 
@@ -625,7 +625,7 @@ body {
     <div>
       <div class="group-eyebrow grey">🔧 Fleet Management</div>
       <h2 class="group-title">Set up once. Runs itself.</h2>
-      <p class="group-desc">Add your assets, connect your data sources, set your diesel price. Every calculation across every module flows from these three steps.</p>
+      <p class="group-desc">Add your assets, schedule your reports to your upload address, and set your diesel price. Every calculation across every module flows from these three steps.</p>
     </div>
   </div>
 
@@ -671,22 +671,26 @@ body {
       <div class="module-tag grey">Fleet Management</div>
       <span class="module-emoji">🔌</span>
       <div class="module-name">Integrations</div>
-      <div class="module-tagline">Connect your data sources once. Data flows automatically every night from that point on — no ongoing action required.</div>
+      <div class="module-tagline">FleetMagnify uses the reports you already receive. Set your telematics and fuel card providers to email their scheduled reports to your FleetMagnify upload address, and your data flows in automatically. No new hardware, and no manual data entry once it's set up.</div>
     </div>
     <div class="module-right">
       <div class="data-table cols-3">
-        <div class="data-table-head"><span>Integration</span><span>Provider</span><span>Data Provided</span></div>
-        <div class="data-row"><div class="data-cell bold">VisionLink</div><div class="data-cell">Caterpillar</div><div class="data-cell">Engine hours, fuel burn, idle hours</div></div>
-        <div class="data-row"><div class="data-cell bold">Komtrax</div><div class="data-cell">Komatsu</div><div class="data-cell">Engine hours, fuel burn, idle hours</div></div>
-        <div class="data-row"><div class="data-cell bold">ConSite</div><div class="data-cell">Hitachi</div><div class="data-cell">Engine hours, fuel burn, idle hours</div></div>
-        <div class="data-row"><div class="data-cell bold">ActiveCare</div><div class="data-cell">Volvo CE</div><div class="data-cell">Engine hours, fuel burn, idle hours</div></div>
-        <div class="data-row"><div class="data-cell bold">LiDAT</div><div class="data-cell">Liebherr</div><div class="data-cell">Engine hours, fuel burn, idle hours</div></div>
-        <div class="data-row"><div class="data-cell bold">eRoad</div><div class="data-cell">eRoad NZ</div><div class="data-cell">Daily odometer readings</div></div>
-        <div class="data-row"><div class="data-cell bold">BP Fleet Card</div><div class="data-cell">BP New Zealand</div><div class="data-cell">Fill transactions, litres, cost</div></div>
+        <div class="data-table-head"><span>Platform</span><span>Status</span><span>Data provided</span></div>
+        <div class="data-row"><div class="data-cell bold">eRoad</div><div class="data-cell">Available</div><div class="data-cell">Mileage reports by email</div></div>
+        <div class="data-row"><div class="data-cell bold">Navman</div><div class="data-cell">Available</div><div class="data-cell">Mileage, idle, and executive summary reports by email</div></div>
+        <div class="data-row"><div class="data-cell bold">BP Fleet Card</div><div class="data-cell">Available</div><div class="data-cell">Fuel card transactions by email</div></div>
+        <div class="data-row"><div class="data-cell bold">Mobil</div><div class="data-cell">Available</div><div class="data-cell">Fuel card transactions by email</div></div>
+        <div class="data-row"><div class="data-cell bold">VisionLink</div><div class="data-cell">Available</div><div class="data-cell">Engine hours, fuel burn, and idle hours by email</div></div>
+        <div class="data-row"><div class="data-cell bold">Komtrax</div><div class="data-cell">Coming soon</div><div class="data-cell">Komatsu machinery reports</div></div>
+        <div class="data-row"><div class="data-cell bold">ConSite</div><div class="data-cell">Coming soon</div><div class="data-cell">Hitachi machinery reports</div></div>
+        <div class="data-row"><div class="data-cell bold">ActiveCare</div><div class="data-cell">Coming soon</div><div class="data-cell">Volvo CE machinery reports</div></div>
+        <div class="data-row"><div class="data-cell bold">LiDAT</div><div class="data-cell">Coming soon</div><div class="data-cell">Liebherr machinery reports</div></div>
+        <div class="data-row"><div class="data-cell bold">CareTrack</div><div class="data-cell">Coming soon</div><div class="data-cell">Volvo machinery reports</div></div>
+        <div class="data-row"><div class="data-cell bold">FleetPin</div><div class="data-cell">Coming soon</div><div class="data-cell">Truck and light vehicle reports</div></div>
       </div>
       <div class="callout teal">
         <span class="callout-icon">💡</span>
-        <div class="callout-text">All integrations are <strong>included in the base price</strong> — there are no per-integration fees. New OEM integrations are added continuously.</div>
+        <div class="callout-text">All supported platforms are <strong>included in the base price</strong>. More platforms coming soon.</div>
       </div>
     </div>
   </div>
