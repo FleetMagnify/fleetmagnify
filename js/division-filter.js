@@ -9,8 +9,10 @@
  * comparison) wins for that visit and is then stored. Storage access is
  * wrapped so a blocked sessionStorage does not break the page.
  *
- * Divisional managers do not get this control: their rows are already limited
- * to the divisions they manage.
+ * A divisional manager who runs one division does not get a select: row
+ * security already limits the page. A manager who runs several gets a
+ * switcher (All my divisions, then each division they manage). Unassigned
+ * is only offered to the account owner and full-access members.
  */
 (function(global) {
   var STORAGE_KEY = 'fleetmagnify.divisionFilter';
@@ -19,6 +21,22 @@
 
   function shouldShow(account) {
     return !!(account && account.hasDivisions && !account.isDivisionManager);
+  }
+
+  function showsSwitcher(account) {
+    return !!(account && account.isDivisionManager && account.divisions && account.divisions.length > 1);
+  }
+
+  function usesFilter(account) {
+    return shouldShow(account) || showsSwitcher(account);
+  }
+
+  function chipLabel(account) {
+    if (!account || !account.isDivisionManager) return '';
+    var names = (account.divisions || []).map(function(division) {
+      return division && division.name;
+    }).filter(function(name) { return !!name; });
+    return 'Division: ' + (names.length ? names.join(', ') : 'none assigned');
   }
 
   function normaliseSelection(raw, divisions) {
@@ -125,12 +143,12 @@
   }
 
   function apply(assets, account) {
-    if (!shouldShow(account)) return assets;
+    if (!usesFilter(account)) return assets;
     return filterAssets(assets, pageSelection(account.divisions || []));
   }
 
   function assetIdSet(assets, account) {
-    if (!shouldShow(account)) return null;
+    if (!usesFilter(account)) return null;
     var selection = pageSelection(account.divisions || []);
     if (!selection) return null;
     var ids = {};
@@ -184,7 +202,9 @@
   }
 
   function mount(account) {
-    if (!shouldShow(account) || typeof document === 'undefined') return false;
+    var ownerFilter = shouldShow(account);
+    var managerSwitcher = showsSwitcher(account);
+    if ((!ownerFilter && !managerSwitcher) || typeof document === 'undefined') return false;
     if (document.getElementById('division-filter-wrap')) return true;
     var anchor = document.querySelector('.page-content .page-sub') ||
       document.querySelector('.page-content h1.page-title');
@@ -209,11 +229,11 @@
       select.appendChild(option);
     }
 
-    addOption('', 'All');
+    addOption('', ownerFilter ? 'All' : 'All my divisions');
     divisions.forEach(function(division) {
       addOption(String(division.id), division.name || 'Division');
     });
-    addOption(UNASSIGNED, 'Unassigned');
+    if (ownerFilter) addOption(UNASSIGNED, 'Unassigned');
     select.value = selection || '';
     select.addEventListener('change', function() {
       var next = normaliseSelection(select.value, divisions);
@@ -231,6 +251,8 @@
     STORAGE_KEY: STORAGE_KEY,
     UNASSIGNED: UNASSIGNED,
     shouldShow: shouldShow,
+    showsSwitcher: showsSwitcher,
+    chipLabel: chipLabel,
     normaliseSelection: normaliseSelection,
     filterAssets: filterAssets,
     selectionFromStorage: selectionFromStorage,

@@ -216,6 +216,7 @@
 <script src="js/supabase-config.js"></script>
 <script src="js/subscription-guard.js"></script>
 <script src="js/account-context.js"></script>
+<script src="js/division-filter.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
@@ -228,6 +229,7 @@
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
   var effectiveAccountId = null;
+  var accountContext = null;
   var companyName = '';
   var vehiclesList = [];
   var selectedVehicle = null;
@@ -519,7 +521,8 @@
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
-    effectiveAccountId = (await window.FleetMagnifyAccountContext.load(supabase, currentUser.id)).effectiveAccountId;
+    accountContext = await window.FleetMagnifyAccountContext.load(supabase, currentUser.id);
+    effectiveAccountId = accountContext.effectiveAccountId;
     window.FleetMagnifySidebar.inject('trip-report.html', supabase, effectiveAccountId);
     document.getElementById('signout-btn').addEventListener('click', async function() {
       await supabase.auth.signOut();
@@ -527,6 +530,7 @@
     });
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
+    window.FleetMagnifyDivisionFilter.mount(accountContext);
     companyName = await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
     var today = FCM.nzTodayISO();
@@ -545,7 +549,7 @@
       .in('asset_type', ON_ROAD_TYPES)
       .order('asset_name');
 
-    vehiclesList = result.data || [];
+    vehiclesList = window.FleetMagnifyDivisionFilter.apply(result.data || [], accountContext);
     var select = document.getElementById('vehicle-select');
     if (!vehiclesList.length) {
       select.innerHTML = '<option value="">No on-road vehicles found</option>';

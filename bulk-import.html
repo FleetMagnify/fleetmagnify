@@ -87,6 +87,19 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/supabase-config.js"></script>
+<script src="js/account-context.js"></script>
+<script src="js/division-manager.js"></script>
+<script>
+(async function() {
+  try {
+    var client = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+    var sessionResult = await client.auth.getSession();
+    if (!sessionResult.data.session) return;
+    var account = await window.FleetMagnifyAccountContext.load(client, sessionResult.data.session.user.id);
+    window.FleetMagnifyDivisionManager.redirectIfBlocked(account, 'bulk-import.html');
+  } catch (e) { /* the admin gate still applies */ }
+})();
+</script>
 <script>
 (function() {
   var adminSecret = sessionStorage.getItem('fm_bulk_admin') || null;

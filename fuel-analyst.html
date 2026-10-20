@@ -339,6 +339,7 @@
 <script src="js/subscription-guard.js"></script>
 <script src="js/account-context.js"></script>
 <script src="js/division-filter.js"></script>
+<script src="js/account-settings.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -685,15 +686,8 @@
   };
 
   async function loadUserSettings() {
-    var result = await supabase
-      .from('user_settings')
-      .select('machinery_fuel_cost_per_litre')
-      .eq('user_id', effectiveAccountId)
-      .maybeSingle();
-    if (result.data && result.data.machinery_fuel_cost_per_litre != null) {
-      var val = parseFloat(result.data.machinery_fuel_cost_per_litre);
-      if (!isNaN(val)) defaultMachineryFuelCostPerLitre = val;
-    }
+    var val = await window.FleetMagnifyAccountSettings.readMachineryFuelCost(supabase, accountContext);
+    if (val != null) defaultMachineryFuelCostPerLitre = val;
   }
 
   async function init() {
