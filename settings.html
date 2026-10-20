@@ -260,6 +260,7 @@
 <script src="js/supabase-config.js"></script>
 <script src="js/subscription-guard.js"></script>
 <script src="js/account-context.js"></script>
+<script src="js/division-manager.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/sidebar-nav.js"></script>
 <script>
@@ -820,6 +821,7 @@
     currentUser = sessionResult.data.session.user;
     accountContext = await window.FleetMagnifyAccountContext.load(supabase, currentUser.id);
     effectiveAccountId = accountContext.effectiveAccountId;
+    if (window.FleetMagnifyDivisionManager.redirectIfBlocked(accountContext, 'settings.html')) return;
     window.FleetMagnifySidebar.inject('settings.html', supabase, effectiveAccountId);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;

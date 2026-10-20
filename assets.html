@@ -36,6 +36,7 @@
   .btn-secondary:hover { border-color: rgba(255,255,255,0.20); background: rgba(255,255,255,0.07); }
   .btn-teal { display: flex; align-items: center; gap: 7px; background: #0EA57A; border: none; color: #080C12; font-size: 13px; font-weight: 700; padding: 9px 18px; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
   .btn-teal:hover { background: #0BC48E; }
+  [hidden] { display: none !important; }
   .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 24px; }
   .stat-card { background: #111827; border: 1px solid #2D3748; border-radius: 12px; padding: 20px 22px; }
   .stat-card-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #3A4A5C; margin-bottom: 8px; }
@@ -645,6 +646,10 @@
       <label for="asset-name">Asset Name *</label>
       <input type="text" id="asset-name" placeholder="e.g. CAT 390F Excavator #1">
     </div>
+    <div class="form-group" id="asset-division-group" hidden>
+      <label for="asset-division">Division *</label>
+      <select id="asset-division"></select>
+    </div>
     <div class="form-row">
       <div class="form-group" style="margin-bottom:0;">
         <label for="asset-type">Asset Type *</label>
@@ -1095,6 +1100,7 @@
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
     await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
+    applyManagerAssetLimits();
     await loadCompanyIntegrationState();
     loadAssets();
     loadPendingAssets();
@@ -1163,6 +1169,7 @@
   }
 
   async function loadCardMatching() {
+    if (isDivisionManager()) return;
     var section = document.getElementById('card-match-section');
     unmatchedCards = allAssets.filter(function(a) {
       var hasCard = cardValue(a.bp_card_number) != null || cardValue(a.mobil_card_number) != null;
@@ -1695,6 +1702,18 @@
     var stubs = getStubAssets();
     var banner = document.getElementById('incomplete-profile-banner');
     var text = document.getElementById('incomplete-profile-banner-text');
+    var fab = document.getElementById('fab-download-btn');
+    if (isDivisionManager()) {
+      if (fab) {
+        fab.classList.remove('visible');
+        fab.hidden = true;
+      }
+      if (!accountContext.canEditAssets) {
+        banner.classList.remove('visible');
+        incompleteFilterActive = false;
+        return;
+      }
+    }
     if (stubs.length === 0) {
       banner.classList.remove('visible');
       document.getElementById('fab-download-btn').classList.remove('visible');
@@ -1718,7 +1737,50 @@
     });
   }
 
+  function isDivisionManager() {
+    return !!(accountContext && accountContext.isDivisionManager);
+  }
+
+  function hideControl(el) {
+    if (!el) return;
+    el.hidden = true;
+    el.style.setProperty('display', 'none', 'important');
+  }
+
+  function applyManagerAssetLimits() {
+    if (!isDivisionManager()) return;
+    hideControl(document.getElementById('excel-toggle-btn'));
+    hideControl(document.getElementById('excel-section'));
+    hideControl(document.getElementById('edit-profiles-btn'));
+    hideControl(document.getElementById('pending-assets-banner'));
+    hideControl(document.getElementById('fab-download-btn'));
+    var ignored = document.getElementById('show-ignored-btn');
+    if (ignored && ignored.parentNode) hideControl(ignored.parentNode);
+    hideControl(document.getElementById('card-match-section'));
+    var sub = document.querySelector('.page-header .page-sub');
+    if (sub) {
+      sub.textContent = accountContext.canEditAssets
+        ? 'Assets in your divisions. A new asset is added to one of those divisions.'
+        : 'Assets in your divisions.';
+    }
+    var title = document.querySelector('.table-title');
+    if (title) title.textContent = 'Your assets';
+    if (!accountContext.canEditAssets) hideControl(document.getElementById('add-asset-btn'));
+    var select = document.getElementById('asset-division');
+    select.innerHTML = (accountContext.divisions || []).map(function(division) {
+      return '<option value="' + division.id + '">' + esc(division.name || 'Division') + '</option>';
+    }).join('');
+  }
+
+  function managerDivisionForNewAsset() {
+    var divisions = (accountContext && accountContext.divisions) || [];
+    if (divisions.length === 1) return divisions[0].id;
+    var select = document.getElementById('asset-division');
+    return select ? select.value : '';
+  }
+
   async function loadPendingAssets() {
+    if (isDivisionManager()) return;
     var result = await supabase
       .from('pending_assets')
       .select('*')
@@ -1962,7 +2024,13 @@
     var count = document.getElementById('table-count');
     count.textContent = assets.length + ' asset' + (assets.length !== 1 ? 's' : '');
     if (assets.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="' + colCount + '"><div class="empty-state"><div class="empty-icon">🚧</div><div class="empty-title">No assets yet</div><div class="empty-sub">Add your first asset using the button above,<br>or import your fleet via Excel.</div></div></td></tr>';
+      var emptySub = 'Add your first asset using the button above,<br>or import your fleet via Excel.';
+      if (isDivisionManager()) {
+        emptySub = accountContext.canEditAssets
+          ? 'Add an asset to one of your divisions using the button above.'
+          : 'Assets assigned to your divisions will show here.';
+      }
+      tbody.innerHTML = '<tr><td colspan="' + colCount + '"><div class="empty-state"><div class="empty-icon">🚧</div><div class="empty-title">No assets yet</div><div class="empty-sub">' + emptySub + '</div></div></td></tr>';
       return;
     }
     tbody.innerHTML = assets.map(function(a) {
@@ -1986,8 +2054,11 @@
         '<td class="col-life">' + esc(formatExpectedLife(a)) + '</td>' +
         divisionCell +
         '<td class="col-actions"><div class="actions-cell">' +
-          '<button type="button" class="btn-edit" data-id="' + a.id + '">Edit</button>' +
-          '<button type="button" class="btn-remove" data-id="' + a.id + '">Remove</button>' +
+          ((!isDivisionManager() || accountContext.canEditAssets)
+            ? '<button type="button" class="btn-edit" data-id="' + a.id + '">Edit</button>'
+            : '') +
+          (isDivisionManager() ? '' :
+          '<button type="button" class="btn-remove" data-id="' + a.id + '">Remove</button>') +
         '</div></td>' +
       '</tr>';
       return row;
@@ -2379,6 +2450,9 @@
     if (supportsIsOnRoad) {
       payload.is_on_road = onRoad;
     }
+    if (isDivisionManager() && editingAssetId == null) {
+      payload.division_id = Number(managerDivisionForNewAsset());
+    }
     appendTelematicsToPayload(payload);
     var usageEl = document.getElementById('asset-usage-profile');
     if (usageEl) payload.usage_profile = usageEl.value || 'regular';
@@ -2444,22 +2518,30 @@
   }
 
   function openAddModal() {
+    if (isDivisionManager() && !accountContext.canEditAssets) return;
     editingAssetId = null;
     document.getElementById('delete-asset-modal-btn').hidden = true;
     document.getElementById('asset-modal-title').textContent = 'Add New Asset';
-    document.getElementById('asset-modal-sub').textContent = 'Enter the details for this asset. You can add fuel and telematics data from the Upload Data page.';
+    document.getElementById('asset-modal-sub').textContent = isDivisionManager()
+      ? 'Enter the details for this asset. It is added to one of your divisions.'
+      : 'Enter the details for this asset. You can add fuel and telematics data from the Upload Data page.';
     document.getElementById('save-asset-btn').textContent = 'Add Asset';
     document.getElementById('modal-error').classList.remove('visible');
     document.getElementById('modal-error').textContent = '';
     resetAssetForm();
+    var divisionGroup = document.getElementById('asset-division-group');
+    var several = isDivisionManager() && accountContext.divisions && accountContext.divisions.length > 1;
+    divisionGroup.hidden = !several;
     document.getElementById('add-modal').classList.add('open');
   }
 
   function openEditModal(id) {
+    if (isDivisionManager() && !accountContext.canEditAssets) return;
     var asset = allAssets.find(function(a) { return Number(a.id) === Number(id); });
     if (!asset) { showToast('Asset not found', 'error'); return; }
     editingAssetId = asset.id;
-    document.getElementById('delete-asset-modal-btn').hidden = false;
+    document.getElementById('delete-asset-modal-btn').hidden = isDivisionManager();
+    document.getElementById('asset-division-group').hidden = true;
     document.getElementById('asset-modal-title').textContent = 'Edit Asset';
     document.getElementById('asset-modal-sub').textContent = 'Update the details for ' + (asset.asset_name || 'this asset') + '.';
     document.getElementById('save-asset-btn').textContent = 'Save Changes';
@@ -2532,6 +2614,11 @@
 
     if (!payload.asset_name || !payload.asset_type || !payload.fuel_type) {
       errEl.textContent = 'Please fill in Asset Name, Asset Type, and Fuel Type.';
+      errEl.classList.add('visible');
+      return;
+    }
+    if (isDivisionManager() && !isEditing && !managerDivisionForNewAsset()) {
+      errEl.textContent = 'Choose a division for this asset.';
       errEl.classList.add('visible');
       return;
     }

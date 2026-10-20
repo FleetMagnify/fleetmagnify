@@ -52,6 +52,8 @@
     return trialEndsAt.getTime() >= nowMs;
   }
 
+  // Pages pass the resolved account owner id. A team member and a divisional
+  // manager are gated by that owner's subscription, not by their own profile.
   async function checkAccess(supabase, userId, options) {
     options = options || {};
 

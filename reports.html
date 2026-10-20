@@ -314,6 +314,12 @@
     document.querySelectorAll('.date-to').forEach(function(el) { el.value = today; });
 
     await loadAssets();
+    if (accountContext.isDivisionManager) {
+      var fleetDesc = document.querySelector('[data-report="fleet"] .report-desc');
+      if (fleetDesc) {
+        fleetDesc.textContent = 'One-line summary per asset in your divisions, across fuel cost, idle cost, CO₂ emissions, and utilisation.';
+      }
+    }
     bindUI();
   }
 
