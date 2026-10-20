@@ -12,10 +12,12 @@
  * always block, even if an old trial_ends_at is still in the future.
  *
  * A missing trial_ends_at is "no trial", not "trial has not expired".
- * Trial length is 10 days, matching terms-of-service.html §3.
+ * Trial length is 30 days, matching terms-of-service.html §3.
+ * This is the only definition of the trial length. Checkout reads it
+ * from here.
  */
 (function(global) {
-  var TRIAL_DAYS = 10;
+  var TRIAL_DAYS = 30;
   var MS_PER_DAY = 24 * 60 * 60 * 1000;
 
   var LIVE_STATUSES = {

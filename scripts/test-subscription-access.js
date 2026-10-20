@@ -74,16 +74,16 @@ check(
 console.log('\n=== Guard: trial window ===');
 
 check(
-  'Trial length is 10 days (terms-of-service.html §3, not an assumed 14)',
-  guard.TRIAL_DAYS === 10
+  'Trial length is 30 days (terms-of-service.html §3, not an assumed 14)',
+  guard.TRIAL_DAYS === 30
 );
 
 var signupAt = new Date(now);
 var trialEnds = guard.trialEndsAtFrom(signupAt);
 var trialEndsMs = Date.parse(trialEnds);
 check(
-  'trialEndsAtFrom is 10 days after signup',
-  trialEndsMs === now + 10 * day,
+  'trialEndsAtFrom is 30 days after signup',
+  trialEndsMs === now + 30 * day,
   trialEnds
 );
 
@@ -118,7 +118,7 @@ check(
 console.log('\n=== Guard: Stripe-native trialing + dunning past_due ===');
 
 check(
-  'trialing grants access (Stripe-native 10-day trial)',
+  'trialing grants access (Stripe-native 30-day trial)',
   guard.hasAccess({ subscription_status: 'trialing', trial_ends_at: null }, now) === true
 );
 check(
@@ -166,8 +166,16 @@ check(
   /\/api\/create-checkout-session/.test(signupPage)
 );
 check(
-  'signup.html requests Stripe-native trial_period_days: 10',
-  /trialPeriodDays:\s*10/.test(signupPage)
+  'signup.html requests the guard trial length (30 days)',
+  /trialPeriodDays:\s*window\.FleetMagnifySubscriptionGuard\.TRIAL_DAYS/.test(signupPage)
+);
+
+var checkoutSource = fs.readFileSync(path.join(__dirname, '..', 'api/create-checkout-session.js'), 'utf8');
+check(
+  'create-checkout-session uses guard.TRIAL_DAYS and does not take the client length',
+  /require\('\.\.\/js\/subscription-guard'\)/.test(checkoutSource) &&
+    /wantsTrial \? TRIAL_DAYS/.test(checkoutSource) &&
+    !/parseInt\(req\.body\.trialPeriodDays/.test(checkoutSource)
 );
 
 console.log('\n=== checkout.session.completed writes both Stripe ids ===');

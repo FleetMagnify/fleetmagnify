@@ -189,7 +189,7 @@
   <div class="signup-card">
     <div class="card-eyebrow"><div class="dash"></div> Get Started</div>
     <h1>Create your account</h1>
-    <p class="card-sub" id="card-sub">Start a 10-day trial. We'll take a card now — you won't be charged until day 11, after you've set up your fleet.</p>
+    <p class="card-sub" id="card-sub">Start a 30-day trial. We'll take a card now — you won't be charged until day 31, after you've set up your fleet.</p>
 
     <div id="form-error" class="form-error" role="alert"></div>
 
@@ -276,8 +276,11 @@
       errorEl.classList.remove('is-visible');
     }
 
+    var trialDays = window.FleetMagnifySubscriptionGuard.TRIAL_DAYS;
+    cardSub.textContent = 'Start a ' + trialDays + '-day trial. We\'ll take a card now — you won\'t be charged until day ' + (trialDays + 1) + ', after you\'ve set up your fleet.';
+
     if (/[?&]checkout=cancelled/.test(window.location.search)) {
-      showError('Checkout was cancelled. Sign in and finish adding a card to start your 10-day trial.');
+      showError('Checkout was cancelled. Sign in and finish adding a card to start your ' + trialDays + '-day trial.');
     }
 
     function friendlyError(error) {
@@ -388,7 +391,7 @@
           body: JSON.stringify({
             userId: user.id,
             email: email,
-            trialPeriodDays: 10,
+            trialPeriodDays: window.FleetMagnifySubscriptionGuard.TRIAL_DAYS,
             successUrl: window.location.origin + '/home.html?trial=1',
             cancelUrl: window.location.origin + '/signup.html?checkout=cancelled'
           })

@@ -6,6 +6,7 @@
  */
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
+const { TRIAL_DAYS } = require('../js/subscription-guard');
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL || 'https://pddsgvuzvuwueuvpoytw.supabase.co';
@@ -38,9 +39,10 @@ module.exports = async function handler(req, res) {
     var email = req.body && req.body.email;
     var successUrl = req.body && req.body.successUrl;
     var cancelUrl = req.body && req.body.cancelUrl;
-    var trialPeriodDays = req.body && req.body.trialPeriodDays
-      ? parseInt(req.body.trialPeriodDays, 10)
-      : 0;
+    // A truthy trialPeriodDays asks for a trial. The length is always
+    // TRIAL_DAYS from js/subscription-guard.js, not the number sent by the client.
+    var wantsTrial = !!(req.body && req.body.trialPeriodDays);
+    var trialPeriodDays = wantsTrial ? TRIAL_DAYS : 0;
 
     if (!userId || !email) {
       return res.status(400).json({ error: 'userId and email are required' });
