@@ -150,7 +150,7 @@
 
       <div class="card" id="mapping-card" hidden>
         <div class="card-title">Map unrecognised vehicles</div>
-        <div class="card-sub">These Vehicle IDs from the Orion file don't exactly match an asset in FleetMagnify. Map each one to an asset, or click <strong>Ignore</strong> to exclude it from this report (remembered for future uploads).</div>
+        <div class="card-sub" id="mapping-card-sub">These Vehicle IDs from the Orion file don't exactly match an asset in FleetMagnify. Map each one to an asset, or click <strong>Ignore</strong> to exclude it from this report (remembered for future uploads).</div>
         <div id="mapping-list"></div>
         <div class="btn-row">
           <button class="btn-primary" id="save-mapping-btn">Save Mapping &amp; Continue</button>
@@ -216,6 +216,7 @@
 <script src="js/supabase-config.js"></script>
 <script src="js/subscription-guard.js"></script>
 <script src="js/account-context.js"></script>
+<script src="js/edit-permissions.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
@@ -232,6 +233,8 @@
   var LOOKBACK_DAYS = Dist.LOOKBACK_DAYS;
 
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var Perm = window.FleetMagnifyEditPermissions;
+  var accountContext = null;
   var effectiveAccountId = null;
   var companyName = '';
 
@@ -479,10 +482,17 @@
     });
 
     var unmatched = Object.keys(unmatchedSet);
-    if (unmatched.length > 0) {
+    if (unmatched.length > 0 && assetsEditable()) {
       pendingUnmatched = unmatched;
       showMappingUI(unmatched);
       return;
+    }
+    if (unmatched.length > 0) {
+      showReadOnlyMappings(unmatched);
+      resolved = resolved.map(function(x) {
+        if (!x.match || x.match.source === 'suggested') return { row: x.row, match: null };
+        return x;
+      });
     }
 
     // All resolved (excluding not_tracked) — pull telematics
@@ -607,7 +617,27 @@
     document.getElementById('mapping-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  function assetsEditable() {
+    return Perm.canEditAssets(accountContext);
+  }
+
+  function showReadOnlyMappings(unmatched) {
+    var list = document.getElementById('mapping-list');
+    list.innerHTML = unmatched.map(function(raw) {
+      return '<div class="mapping-row"><div class="mapping-raw">' + esc(raw) + '</div><div class="mapping-count">Unmapped</div></div>';
+    }).join('');
+    var sub = document.getElementById('mapping-card-sub');
+    if (sub) sub.textContent = 'You have view-only access to vehicle mappings. These Vehicle IDs stay unmapped.';
+    var saveBtn = document.getElementById('save-mapping-btn');
+    if (saveBtn) saveBtn.hidden = true;
+    document.getElementById('mapping-card').hidden = false;
+  }
+
   async function saveMapping() {
+    if (!assetsEditable()) {
+      showToast(Perm.PERMISSION_DENIED, 'error');
+      return;
+    }
     var rows = document.querySelectorAll('#mapping-list .mapping-row');
     var toInsert = [];
     var incomplete = false;
@@ -628,12 +658,17 @@
     try {
       var result = await supabase.from('vehicle_id_aliases')
         .upsert(toInsert, { onConflict: 'user_id,raw_vehicle_id' });
-      if (result.error) throw result.error;
+      if (result.error) {
+        showToast(Perm.writeErrorMessage(result.error, 'Failed to save mapping: '), 'error');
+        btn.disabled = false;
+        btn.textContent = 'Save Mapping & Continue';
+        return;
+      }
       await loadAliases();
       document.getElementById('mapping-card').hidden = true;
       await buildReport(parsedRows);
     } catch (e) {
-      showToast('Failed to save mapping: ' + e.message, 'error');
+      showToast(Perm.writeErrorMessage(e, 'Failed to save mapping: '), 'error');
     }
     btn.disabled = false; btn.textContent = 'Save Mapping & Continue';
   }
@@ -912,7 +947,8 @@
 
     // Gate on the resolved account owner — not auth.uid() — so ILS members
     // (Riki/Peter) inherit profiles.has_work_order_report from the owner.
-    effectiveAccountId = (await window.FleetMagnifyAccountContext.load(supabase, currentUser.id)).effectiveAccountId;
+    accountContext = await window.FleetMagnifyAccountContext.load(supabase, currentUser.id);
+    effectiveAccountId = accountContext.effectiveAccountId;
     window.FleetMagnifySidebar.inject('orion-fuel-report.html', supabase, effectiveAccountId);
 
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
