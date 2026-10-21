@@ -10,7 +10,7 @@
  */
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
-const { TRIAL_DAYS } = require('../js/subscription-guard');
+const { TRIAL_DAYS, isTrialEligible } = require('../js/subscription-guard');
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL || 'https://pddsgvuzvuwueuvpoytw.supabase.co';
@@ -43,10 +43,6 @@ module.exports = async function handler(req, res) {
     var email = req.body && req.body.email;
     var successUrl = req.body && req.body.successUrl;
     var cancelUrl = req.body && req.body.cancelUrl;
-    // A truthy trialPeriodDays asks for a trial. The length is always
-    // TRIAL_DAYS from js/subscription-guard.js, not the number sent by the client.
-    var wantsTrial = !!(req.body && req.body.trialPeriodDays);
-    var trialPeriodDays = wantsTrial ? TRIAL_DAYS : 0;
 
     if (!userId || !email) {
       return res.status(400).json({ error: 'userId and email are required' });
@@ -57,7 +53,7 @@ module.exports = async function handler(req, res) {
 
     var profileResult = await supabase
       .from('profiles')
-      .select('id, stripe_customer_id, company_name')
+      .select('id, stripe_customer_id, company_name, subscription_status, trial_ends_at, stripe_subscription_id')
       .eq('id', userId)
       .maybeSingle();
 
@@ -69,6 +65,11 @@ module.exports = async function handler(req, res) {
     if (!profileResult.data) {
       return res.status(404).json({ error: 'Account not found' });
     }
+
+    // The client's trialPeriodDays value is ignored. A trial is applied only
+    // when this profile is eligible. An ineligible account that asked for a
+    // trial continues with no trial_period_days and is not rejected.
+    var trialPeriodDays = isTrialEligible(profileResult.data) ? TRIAL_DAYS : 0;
 
     var stripeCustomerId = profileResult.data.stripe_customer_id;
 

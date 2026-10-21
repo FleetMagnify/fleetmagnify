@@ -205,10 +205,20 @@
       return;
     }
 
+    var trialEligible = window.FleetMagnifySubscriptionGuard.isTrialEligible(profile);
+    var cardButtonLabel = 'Pay by Card';
+
     if (profile.subscription_status === 'past_due') {
       document.getElementById('status-eyebrow').textContent = 'Payment Issue';
       document.getElementById('status-heading').textContent = 'There was a problem with your payment';
       document.getElementById('status-sub').textContent = 'Update your payment details to keep your fleet data flowing.';
+    } else if (trialEligible) {
+      var trialDays = window.FleetMagnifySubscriptionGuard.TRIAL_DAYS;
+      cardButtonLabel = 'Start free trial';
+      document.getElementById('status-eyebrow').textContent = 'Free trial';
+      document.getElementById('status-heading').textContent = 'Start your ' + trialDays + '-day free trial';
+      document.getElementById('status-sub').textContent = 'A card is required. You won\'t be charged until the trial ends, and you can cancel any time.';
+      document.getElementById('subscribe-card-btn').textContent = cardButtonLabel;
     }
 
     document.getElementById('signout-btn').addEventListener('click', async function() {
@@ -222,15 +232,15 @@
       btn.textContent = 'Redirecting to checkout…';
 
       try {
-        // Abandoned signup checkout: never started either trial model.
-        // Old expired trial_ends_at accounts do NOT get a second Stripe trial.
+        // Only an account that has never started a trial asks for one.
+        // The server checks the profile again and ignores the request otherwise.
         var checkoutBody = {
           userId: currentUser.id,
           email: currentUser.email,
           successUrl: window.location.origin + '/home.html?upgraded=1',
           cancelUrl: window.location.origin + '/upgrade.html'
         };
-        if (!profile.trial_ends_at && !profile.stripe_subscription_id && !profile.subscription_status) {
+        if (trialEligible) {
           checkoutBody.trialPeriodDays = window.FleetMagnifySubscriptionGuard.TRIAL_DAYS;
         }
 
@@ -250,7 +260,7 @@
       } catch (err) {
         showError('Could not start checkout: ' + err.message + '. Please try again or contact support@fleetmagnify.com.');
         btn.disabled = false;
-        btn.textContent = 'Pay by Card';
+        btn.textContent = cardButtonLabel;
       }
     });
 
