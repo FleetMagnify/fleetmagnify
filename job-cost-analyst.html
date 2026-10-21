@@ -35,6 +35,7 @@
   .method-note p strong { color: #C8D0DB; font-weight: 600; }
   .method-note a { color: #0EA57A; text-decoration: none; }
 
+  [hidden] { display: none !important; }
   .btn-teal { display: inline-flex; align-items: center; gap: 7px; background: #0EA57A; border: none; color: #080C12; font-size: 13px; font-weight: 700; padding: 10px 20px; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
   .btn-teal:hover { background: #0BC48E; }
   .btn-teal:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -436,6 +437,9 @@
 
 <script src="js/supabase-config.js"></script>
 <script src="js/subscription-guard.js"></script>
+<script src="js/account-context.js"></script>
+<script src="js/division-filter.js"></script>
+<script src="js/account-settings.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
@@ -446,6 +450,7 @@
   var FCM = window.FleetCostModel;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
+  var accountContext = null;
   var effectiveAccountId = null;
   var companyName = '';
   var allAssets = [];
@@ -470,48 +475,49 @@
   };
   var EMISSION_FACTORS = { 'Diesel': 2.68, 'Petrol': 2.31 };
 
-  async function loadUserSettings() {
-    var result = await supabase
-      .from('user_settings')
-      .select('machinery_fuel_cost_per_litre')
-      .eq('user_id', effectiveAccountId)
-      .maybeSingle();
-    if (result.data && result.data.machinery_fuel_cost_per_litre != null) {
-      var val = parseFloat(result.data.machinery_fuel_cost_per_litre);
-      if (!isNaN(val)) defaultMachineryFuelCostPerLitre = val;
-    }
+  function managerView() {
+    return !!(accountContext && accountContext.isDivisionManager);
   }
 
-  async function resolveAccountId(supabase, authUserId) {
-    var memberResult = await supabase
-      .from('account_members')
-      .select('account_owner_user_id')
-      .eq('member_auth_user_id', authUserId)
-      .maybeSingle();
+  function lockManagerJobs() {
+    if (!managerView()) return;
+    ['create-job-btn', 'add-asset-btn', 'job-tonnes-save'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.hidden = true;
+    });
+    var status = document.getElementById('detail-status');
+    if (status) status.disabled = true;
+    var tonnes = document.getElementById('job-tonnes-input');
+    if (tonnes) tonnes.disabled = true;
+    var sub = document.querySelector('.page-header .page-sub, .page-content .page-sub');
+    if (sub) sub.textContent = 'Jobs that use assets in your divisions. Costs count those assets only.';
+  }
 
-    if (memberResult.data && memberResult.data.account_owner_user_id) {
-      return memberResult.data.account_owner_user_id;
-    }
-    return authUserId;
+  async function loadUserSettings() {
+    var val = await window.FleetMagnifyAccountSettings.readMachineryFuelCost(supabase, accountContext);
+    if (val != null) defaultMachineryFuelCostPerLitre = val;
   }
 
   async function init() {
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
-    effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
+    accountContext = await window.FleetMagnifyAccountContext.load(supabase, currentUser.id);
+    effectiveAccountId = accountContext.effectiveAccountId;
     window.FleetMagnifySidebar.inject('job-cost-analyst.html', supabase, effectiveAccountId);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
+    window.FleetMagnifyDivisionFilter.mount(accountContext);
     companyName = await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
     await loadUserSettings();
     await Promise.all([loadJobs(), loadAssets()]);
     bindUI();
+    lockManagerJobs();
   }
 
   async function loadAssets() {
     var result = await supabase.from('assets').select('*').eq('user_id', effectiveAccountId).eq('is_ignored', false).order('asset_name');
-    allAssets = result.data || [];
+    allAssets = window.FleetMagnifyDivisionFilter.apply(result.data || [], accountContext);
     var opts = '<option value="">Select an asset...</option>' +
       allAssets.map(function(a) { return '<option value="' + a.id + '">' + esc(a.asset_name) + '</option>'; }).join('');
     document.getElementById('add-asset-select').innerHTML = opts;
@@ -531,17 +537,21 @@
       .from('job_assets')
       .select('job_id, asset_id, work_date')
       .eq('user_id', effectiveAccountId);
+    var divisionAssetIds = window.FleetMagnifyDivisionFilter.assetIdSet(allAssets, accountContext);
+    var assignmentRows = window.FleetMagnifyDivisionFilter.restrictByAssetId(countResult.data || [], divisionAssetIds);
+    var jobsInDivision = window.FleetMagnifyDivisionFilter.touchingJobIds(countResult.data || [], divisionAssetIds);
     var daysByJob = {};
-    (countResult.data || []).forEach(function(r) {
+    assignmentRows.forEach(function(r) {
       daysByJob[r.job_id] = daysByJob[r.job_id] || new Set();
       daysByJob[r.job_id].add(r.asset_id + '|' + r.work_date);
     });
-    (countResult.data || []).forEach(function(r) {
+    assignmentRows.forEach(function(r) {
       counts[r.job_id] = counts[r.job_id] || new Set();
       counts[r.job_id].add(r.asset_id);
     });
 
     var filtered = allJobs.filter(function(job) {
+      if (jobsInDivision && !jobsInDivision[String(job.id)]) return false;
       var status = (job.status || 'Active').toLowerCase();
       var matchesFilter = jobsFilter === 'all' ? true :
         jobsFilter === 'archived' ? status === 'archived' :
@@ -587,8 +597,9 @@
         '<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">' +
           '<button type="button" class="btn-secondary view-job-btn" ' +
             'data-id="' + job.id + '">View Job</button>' +
+          (managerView() ? '' :
           '<button type="button" class="btn-delete-job delete-job-btn" ' +
-            'data-id="' + job.id + '">🗑 Delete</button>' +
+            'data-id="' + job.id + '">🗑 Delete</button>') +
         '</div>' +
       '</div>';
     }
@@ -752,7 +763,10 @@
   async function refreshJobDetail() {
     if (!currentJob) return;
     var result = await supabase.from('job_assets').select('*').eq('job_id', currentJob.id).eq('user_id', effectiveAccountId).order('work_date');
-    jobAssignments = result.data || [];
+    jobAssignments = window.FleetMagnifyDivisionFilter.restrictByAssetId(
+      result.data || [],
+      window.FleetMagnifyDivisionFilter.assetIdSet(allAssets, accountContext)
+    );
     renderAssignedAssets();
     await calculateCosts();
   }
@@ -766,7 +780,9 @@
     });
     var assetIds = Object.keys(byAsset);
     if (assetIds.length === 0) {
-      list.innerHTML = '<div class="empty-state">No assets assigned yet. Click "Add Asset to Job" to get started.</div>';
+      list.innerHTML = managerView()
+        ? '<div class="empty-state">No assets from your divisions are on this job.</div>'
+        : '<div class="empty-state">No assets assigned yet. Click "Add Asset to Job" to get started.</div>';
       return;
     }
 
@@ -778,7 +794,7 @@
       return '<div class="assigned-item">' +
         '<div class="assigned-top">' +
           '<div><div class="assigned-name">' + esc(name) + '</div><div class="assigned-days">' + dates.length + ' day' + (dates.length !== 1 ? 's' : '') + ' assigned</div></div>' +
-          '<button type="button" class="btn-ghost-sm remove-asset-btn" data-asset-id="' + assetId + '">Remove from Job</button>' +
+          (managerView() ? '' : '<button type="button" class="btn-ghost-sm remove-asset-btn" data-asset-id="' + assetId + '">Remove from Job</button>') +
         '</div>' +
         '<span class="expand-toggle" data-target="' + uid + '">Show dates ▾</span>' +
         '<div class="assigned-dates" id="' + uid + '" hidden><div class="date-chips">' +

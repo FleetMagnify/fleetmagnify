@@ -404,6 +404,8 @@
 
 <script src="js/supabase-config.js"></script>
 <script src="js/subscription-guard.js"></script>
+<script src="js/account-context.js"></script>
+<script src="js/division-manager.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script src="js/sidebar-nav.js"></script>
@@ -420,23 +422,13 @@
   var UPLOAD_DOMAIN = 'uploads.fleetmagnify.com';
 
   // ── Auth ──
-  async function resolveAccountId(supabase, authUserId) {
-    var memberResult = await supabase
-      .from('account_members')
-      .select('account_owner_user_id')
-      .eq('member_auth_user_id', authUserId)
-      .maybeSingle();
-    if (memberResult.data && memberResult.data.account_owner_user_id) {
-      return memberResult.data.account_owner_user_id;
-    }
-    return authUserId;
-  }
-
   async function init() {
     var { data: { session } } = await supabase.auth.getSession();
     if (!session) { window.location.href = 'login.html'; return; }
     currentUser = session.user;
-    effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
+    var accountContext = await window.FleetMagnifyAccountContext.load(supabase, currentUser.id);
+    effectiveAccountId = accountContext.effectiveAccountId;
+    if (window.FleetMagnifyDivisionManager.redirectIfBlocked(accountContext, 'upload.html')) return;
     window.FleetMagnifySidebar.inject('upload.html', supabase, effectiveAccountId);
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;

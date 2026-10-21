@@ -270,6 +270,8 @@
 
 <script src="js/supabase-config.js"></script>
 <script src="js/subscription-guard.js"></script>
+<script src="js/account-context.js"></script>
+<script src="js/division-filter.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="js/fleet-cost-model.js"></script>
@@ -278,6 +280,7 @@
 (function() {
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var currentUser = null;
+  var accountContext = null;
   var effectiveAccountId = null;
   var vehiclesList = [];
   var selectedVehicle = null;
@@ -385,24 +388,12 @@
     return { rows: valid, flaggedDates: flaggedDates };
   }
 
-  async function resolveAccountId(supabase, authUserId) {
-    var memberResult = await supabase
-      .from('account_members')
-      .select('account_owner_user_id')
-      .eq('member_auth_user_id', authUserId)
-      .maybeSingle();
-
-    if (memberResult.data && memberResult.data.account_owner_user_id) {
-      return memberResult.data.account_owner_user_id;
-    }
-    return authUserId;
-  }
-
   async function init() {
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
     currentUser = sessionResult.data.session.user;
-    effectiveAccountId = await resolveAccountId(supabase, currentUser.id);
+    accountContext = await window.FleetMagnifyAccountContext.load(supabase, currentUser.id);
+    effectiveAccountId = accountContext.effectiveAccountId;
     window.FleetMagnifySidebar.inject('truck-idle-monitor.html', supabase, effectiveAccountId);
     document.getElementById('signout-btn').addEventListener('click', async function() {
       await supabase.auth.signOut();
@@ -410,6 +401,7 @@
     });
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
+    window.FleetMagnifyDivisionFilter.mount(accountContext);
     await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
     var today = FCM.nzTodayISO();
@@ -430,7 +422,7 @@
       .in('asset_type', ON_ROAD_TYPES)
       .order('asset_name');
 
-    vehiclesList = result.data || [];
+    vehiclesList = window.FleetMagnifyDivisionFilter.apply(result.data || [], accountContext);
     var select = document.getElementById('vehicle-select');
     if (vehiclesList.length === 0) {
       select.innerHTML = '<option value="">No on-road vehicles found</option>';

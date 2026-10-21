@@ -7,6 +7,9 @@ var assert = require('assert');
 var fs = require('fs');
 var path = require('path');
 
+process.env.STRIPE_PRICE_PLATFORM = 'price_platform_test';
+delete process.env.STRIPE_DIVISION_PRICE_ID;
+
 var guard = require('../js/subscription-guard');
 var webhook = require('../api/stripe-webhook');
 var sync = require('../lib/sync-subscription-quantity');
@@ -436,6 +439,32 @@ webhook.processStripeEvent(fake, {
         status: 'active',
         customer: 'cus_live_1',
         cancel_at: null,
+        cancel_at_period_end: true,
+        items: {
+          data: [
+            { price: { id: 'price_division_test' } },
+            { price: { id: 'price_platform_test' }, current_period_end: itemPeriodEnd }
+          ]
+        },
+        metadata: { supabase_user_id: userId }
+      }
+    }
+  });
+}).then(function () {
+  check(
+    'subscription.updated reads period end from a later line item',
+    recorded[0].payload.cancel_at === new Date(itemPeriodEnd * 1000).toISOString()
+  );
+
+  recorded.length = 0;
+  return webhook.processStripeEvent(fake, {
+    type: 'customer.subscription.updated',
+    data: {
+      object: {
+        id: 'sub_live_2',
+        status: 'active',
+        customer: 'cus_live_1',
+        cancel_at: null,
         cancel_at_period_end: false,
         metadata: { supabase_user_id: userId }
       }
@@ -597,7 +626,7 @@ webhook.processStripeEvent(fake, {
         retrieve: function () {
           return Promise.resolve({
             id: 'sub_fleet',
-            items: { data: [{ id: 'si_1', quantity: 1 }] }
+            items: { data: [{ id: 'si_1', quantity: 1, price: { id: 'price_platform_test' } }] }
           });
         },
         update: function (id, params) {
@@ -638,7 +667,7 @@ webhook.processStripeEvent(fake, {
         retrieve: function () {
           return Promise.resolve({
             id: 'sub_same',
-            items: { data: [{ id: 'si_1', quantity: 1 }] }
+            items: { data: [{ id: 'si_1', quantity: 1, price: { id: 'price_platform_test' } }] }
           });
         },
         update: function () {
@@ -700,7 +729,7 @@ webhook.processStripeEvent(fake, {
           }
           return Promise.resolve({
             id: id,
-            items: { data: [{ id: 'si-' + id, quantity: 1 }] }
+            items: { data: [{ id: 'si-' + id, quantity: 1, price: { id: 'price_platform_test' } }] }
           });
         },
         update: function (id, params) {

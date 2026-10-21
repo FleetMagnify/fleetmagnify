@@ -83,14 +83,22 @@ function unixSecondsToIso(seconds) {
 }
 
 // cancel_at is unix seconds. On API version 2026-06-24.dahlia the period end
-// may live on the subscription or only on items.data[0].
+// may live on the subscription or only on a subscription item. Items are not
+// in a fixed order once a divisions price is present, so any item's period
+// end counts.
 function cancelAtFromSubscription(sub) {
   if (!sub) return null;
   if (sub.cancel_at) return unixSecondsToIso(sub.cancel_at);
   if (sub.cancel_at_period_end) {
     var periodEnd = sub.current_period_end;
-    if (!periodEnd && sub.items && sub.items.data && sub.items.data[0]) {
-      periodEnd = sub.items.data[0].current_period_end;
+    var itemList = sub.items && sub.items.data;
+    if (!periodEnd && itemList) {
+      for (var i = 0; i < itemList.length; i++) {
+        if (itemList[i] && itemList[i].current_period_end) {
+          periodEnd = itemList[i].current_period_end;
+          break;
+        }
+      }
     }
     return unixSecondsToIso(periodEnd);
   }

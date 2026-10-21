@@ -105,6 +105,8 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    // Platform price only. Later line items (truck/machine quantity on this
+    // price, and the divisions price) are identified by price id, not position.
     var subscription = await stripe.subscriptions.create({
       customer: stripeCustomerId,
       items: [{ price: process.env.STRIPE_PRICE_PLATFORM, quantity: 1 }],

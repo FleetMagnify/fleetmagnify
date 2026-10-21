@@ -19,10 +19,11 @@ window.FleetMagnifySidebar = (function() {
     { type: 'link', href: 'orion-fuel-report.html', icon: '🧾', text: 'Orion Fuel Report', requiresWorkOrderReport: true },
     { type: 'label', text: 'Fleet Management' },
     { type: 'link', href: 'reports.html', icon: '📋', text: 'Reports' },
+    { type: 'link', href: 'divisions.html', icon: '🗂', text: 'Division comparison', requiresDivisions: true },
     { type: 'link', href: 'assets.html', icon: '🚧', text: 'Assets' },
-    { type: 'link', href: 'upload.html', icon: '📤', text: 'Upload Data' },
-    { type: 'link', href: 'integrations.html', icon: '🔌', text: 'Integrations' },
-    { type: 'link', href: 'settings.html', icon: '⚙️', text: 'Settings' }
+    { type: 'link', href: 'upload.html', icon: '📤', text: 'Upload Data', managerHidden: true },
+    { type: 'link', href: 'integrations.html', icon: '🔌', text: 'Integrations', managerHidden: true },
+    { type: 'link', href: 'settings.html', icon: '⚙️', text: 'Settings', managerHidden: true }
   ];
 
   function renderNavItems(activePage) {
@@ -31,9 +32,10 @@ window.FleetMagnifySidebar = (function() {
         return '<div class="nav-label">' + item.text + '</div>';
       }
       var cls = (item.href === activePage) ? 'nav-item active' : 'nav-item';
-      var attrs = item.requiresWorkOrderReport
-        ? ' data-work-order-report="true" style="display:none"'
-        : '';
+      var attrs = '';
+      if (item.requiresWorkOrderReport) attrs = ' data-work-order-report="true" style="display:none"';
+      if (item.requiresDivisions) attrs = ' data-divisions-nav="true" style="display:none"';
+      if (item.managerHidden) attrs += ' data-manager-hidden="true"';
       return '<a class="' + cls + '" href="' + item.href + '"' + attrs + '><span class="nav-icon">' + item.icon + '</span> ' + item.text + '</a>';
     }).join('\n    ');
   }
@@ -120,6 +122,43 @@ window.FleetMagnifySidebar = (function() {
     }
   }
 
+  function divisionChipLabel(account) {
+    if (window.FleetMagnifyDivisionFilter && window.FleetMagnifyDivisionFilter.chipLabel) {
+      return window.FleetMagnifyDivisionFilter.chipLabel(account);
+    }
+    if (!account || !account.isDivisionManager) return '';
+    var names = (account.divisions || []).map(function(division) {
+      return division && division.name;
+    }).filter(function(name) { return !!name; });
+    return 'Division: ' + (names.length ? names.join(', ') : 'none assigned');
+  }
+
+  function mountDivisionChip(account) {
+    var label = divisionChipLabel(account);
+    if (!label || document.getElementById('division-chip')) return;
+    if (!document.getElementById('division-chip-style')) {
+      var style = document.createElement('style');
+      style.id = 'division-chip-style';
+      style.textContent = '#division-chip { font-size: 12px; font-weight: 600; color: #C8D0DB; background: rgba(255,255,255,0.04); border: 1px solid #2D3748; border-radius: 100px; padding: 6px 12px; margin-right: 10px; white-space: nowrap; }';
+      document.head.appendChild(style);
+    }
+    var chip = document.createElement('div');
+    chip.id = 'division-chip';
+    chip.setAttribute('role', 'status');
+    chip.textContent = label;
+    var pill = document.querySelector('.user-pill');
+    if (pill && pill.parentNode) pill.parentNode.insertBefore(chip, pill);
+  }
+
+  function globalAccount() {
+    try {
+      var api = window.FleetMagnifyAccountContext;
+      return api && api.current ? api.current() : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   function mount(activePage) {
     var html = render(activePage);
     var placeholder = document.getElementById('sidebar-placeholder');
@@ -149,7 +188,8 @@ window.FleetMagnifySidebar = (function() {
         .eq('id', effectiveAccountId)
         .maybeSingle();
       hasWorkOrderReport = !!(flagResult.data && flagResult.data.has_work_order_report);
-      if (flagResult.data && flagResult.data.subscription_status === 'past_due') {
+      var viewer = globalAccount();
+      if (flagResult.data && flagResult.data.subscription_status === 'past_due' && !(viewer && viewer.isDivisionManager)) {
         showPastDueBanner();
       }
     } catch (err) {
@@ -164,6 +204,17 @@ window.FleetMagnifySidebar = (function() {
     }
 
     // Apply after fleet composition so a section hide does not wipe the flag link.
+    var account = globalAccount();
+    if (account && account.hasDivisions && !account.isDivisionManager) {
+      var divisionItems = document.querySelectorAll('[data-divisions-nav="true"]');
+      for (var d = 0; d < divisionItems.length; d++) divisionItems[d].style.display = '';
+    }
+    if (account && account.isDivisionManager) {
+      var hidden = document.querySelectorAll('[data-manager-hidden="true"]');
+      for (var h = 0; h < hidden.length; h++) hidden[h].style.display = 'none';
+      mountDivisionChip(account);
+    }
+
     if (hasWorkOrderReport) {
       var woItems = document.querySelectorAll('[data-work-order-report="true"]');
       for (var i = 0; i < woItems.length; i++) { woItems[i].style.display = ''; }

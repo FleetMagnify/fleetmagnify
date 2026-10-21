@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Division comparison | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/mobile-responsive.css">
+<link rel="stylesheet" href="css/sidebar.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #E2E8F0; min-height: 100vh; display: flex; }
+  .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar {
+    padding: 20px 36px; border-bottom: 1px solid #2D3748;
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(8,12,18,0.80); backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 40;
+  }
+  .breadcrumb { font-size: 13px; color: #3A4A5C; margin-bottom: 2px; }
+  .breadcrumb a { color: #3A4A5C; text-decoration: none; }
+  .breadcrumb a:hover { color: #6B7785; }
+  .topbar-title { font-size: 18px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.4px; }
+  .user-pill {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.04); border: 1px solid #2D3748;
+    border-radius: 100px; padding: 6px 14px 6px 8px;
+  }
+  .user-avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: rgba(14,165,122,0.20); border: 1px solid rgba(14,165,122,0.30);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #0EA57A;
+  }
+  .user-name { font-size: 12.5px; font-weight: 500; color: #9BA4B0; }
+  .page-content { padding: 36px; flex: 1; }
+  .page-eyebrow {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #0EA57A; margin-bottom: 8px;
+  }
+  .page-eyebrow .dash { width: 14px; height: 1.5px; background: #0EA57A; border-radius: 2px; }
+  .page-title { font-size: 28px; font-weight: 800; letter-spacing: -1px; color: #F0F2F5; margin-bottom: 6px; }
+  .page-sub { font-size: 14px; color: #5A6474; line-height: 1.55; margin-bottom: 28px; max-width: 720px; }
+  .method-note {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: rgba(14,165,122,0.05); border: 1px solid rgba(14,165,122,0.14);
+    border-radius: 12px; padding: 14px 18px; margin-bottom: 28px;
+  }
+  .method-note p { font-size: 12.5px; color: #5A6474; line-height: 1.6; }
+  .method-note p strong { color: #C8D0DB; font-weight: 600; }
+  .filter-bar {
+    background: #111827; border: 1px solid #2D3748;
+    border-radius: 14px; padding: 18px 22px; margin-bottom: 28px;
+    display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 6px; }
+  .filter-group label { font-size: 11px; font-weight: 600; color: #4A5568; letter-spacing: 0.02em; }
+  .filter-group input {
+    background: rgba(255,255,255,0.04); border: 1px solid #2D3748;
+    border-radius: 8px; padding: 9px 13px; color: #F0F2F5; font-size: 13px;
+    font-family: inherit; outline: none; min-width: 150px;
+  }
+  .filter-group input:focus { border-color: rgba(14,165,122,0.4); }
+  .filter-date-row { display: flex; gap: 10px; }
+  .btn-apply {
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 13px; font-weight: 700; padding: 10px 24px;
+    border-radius: 8px; cursor: pointer; font-family: inherit;
+  }
+  .btn-apply:hover { background: #0BC48E; }
+  .table-card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; overflow: hidden; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    padding: 11px 14px; text-align: left;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: #FFFFFF;
+    border-bottom: 1px solid #2D3748; background: rgba(255,255,255,0.01);
+    white-space: nowrap; cursor: pointer; user-select: none;
+  }
+  thead th .sort-mark { color: #0EA57A; margin-left: 4px; }
+  tbody td { padding: 12px 14px; font-size: 13px; color: #E2E8F0; border-bottom: 1px solid #2D3748; white-space: nowrap; vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr.account-row td { background: rgba(255,255,255,0.03); font-weight: 650; color: #F0F2F5; }
+  .div-link { color: #F0F2F5; font-weight: 650; text-decoration: none; }
+  .div-link:hover { color: #0EA57A; }
+  .cell-sub { display: block; margin-top: 3px; font-size: 11px; font-weight: 500; color: #6B7785; }
+  .extreme { border-radius: 8px; padding: 2px 0; }
+  .extreme .extreme-tag {
+    display: block; margin-top: 3px; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.04em; color: #8B97A6;
+  }
+  .status-line { margin-top: 16px; font-size: 13px; color: #E2754A; }
+  .empty-state { padding: 28px 8px; color: #6B7785; font-size: 13.5px; }
+</style>
+</head>
+<body>
+<div id="sidebar-placeholder"></div>
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="breadcrumb"><a href="home.html">Overview</a> / Division comparison</div>
+      <div class="topbar-title">Division comparison</div>
+    </div>
+    <div class="user-pill">
+      <div class="user-avatar" id="user-avatar">?</div>
+      <span class="user-name" id="user-name">Loading...</span>
+    </div>
+  </div>
+  <div class="page-content">
+    <div class="page-eyebrow"><div class="dash"></div> Fleet Management</div>
+    <h1 class="page-title">Division comparison</h1>
+    <p class="page-sub">One row per division, plus Unassigned, for the dates you choose. Asset counts, fuel, and running cost add up to the account total. Rates are per asset, per kilometre, or per operating hour, so a smaller division is compared on the same basis as a larger one.</p>
+    <div class="method-note">
+      <p><strong>Lowest and highest</strong> mark the ends of each rate in this period. They compare the divisions with each other. A higher or lower figure does not mean the data is wrong. Select a division to open the analyst page for that set of assets.</p>
+    </div>
+    <div class="filter-bar">
+      <div class="filter-group">
+        <label>Date range</label>
+        <div class="filter-date-row">
+          <input type="date" id="date-from" aria-label="From">
+          <input type="date" id="date-to" aria-label="To">
+        </div>
+      </div>
+      <button type="button" class="btn-apply" id="apply-filters-btn">Apply</button>
+    </div>
+    <div class="table-card">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th data-sort="name">Division</th>
+              <th data-sort="assetCount">Assets</th>
+              <th data-sort="litres">Fuel litres</th>
+              <th data-sort="fuelCost">Fuel cost</th>
+              <th data-sort="costPerKm">Cost per km</th>
+              <th data-sort="costPerHour">Cost per hour</th>
+              <th data-sort="idlePct">Idle %</th>
+              <th data-sort="utilisation">Utilisation</th>
+              <th data-sort="runningCost">Running cost</th>
+              <th data-sort="jobs">Jobs touched</th>
+            </tr>
+          </thead>
+          <tbody id="comparison-body">
+            <tr><td colspan="10" class="empty-state">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="status-line" id="comparison-status" hidden></p>
+  </div>
+</div>
+<script src="js/supabase-config.js"></script>
+<script src="js/subscription-guard.js"></script>
+<script src="js/account-context.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/fleet-cost-model.js"></script>
+<script src="js/division-comparison.js"></script>
+<script src="js/sidebar-nav.js"></script>
+<script>
+(function() {
+  var FCM = window.FleetCostModel;
+  var Compare = window.FleetMagnifyDivisionComparison;
+  var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var currentUser = null;
+  var accountContext = null;
+  var effectiveAccountId = null;
+  var machineryCpl = 0;
+  var latest = null;
+  var sortKey = 'name';
+  var sortDir = 1;
+
+  function esc(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function money(value, digits) {
+    if (value == null || !isFinite(value)) return '—';
+    return '$' + Number(value).toLocaleString(undefined, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits
+    });
+  }
+
+  function litres(value) {
+    if (value == null || !isFinite(value)) return '—';
+    return Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  }
+
+  function percent(value) {
+    if (value == null || !isFinite(value)) return '—';
+    return value.toFixed(1) + '%';
+  }
+
+  function extremeTag(mark) {
+    if (mark === 'lowest') return 'Lowest';
+    if (mark === 'highest') return 'Highest';
+    return '';
+  }
+
+  function rateCell(formatted, mark) {
+    var tag = extremeTag(mark);
+    if (!tag) return esc(formatted);
+    return '<div class="extreme">' + esc(formatted) + '<span class="extreme-tag">' + tag + '</span></div>';
+  }
+
+  function totalCell(totalText, perText, mark) {
+    var tag = extremeTag(mark);
+    var detail = perText || '';
+    if (tag) detail = detail ? detail + ' · ' + tag : tag;
+    if (!detail) return esc(totalText);
+    return esc(totalText) + '<span class="cell-sub">' + esc(detail) + '</span>';
+  }
+
+  function rowCells(row, linked) {
+    var name = linked
+      ? '<a class="div-link" href="' + esc(row.href) + '">' + esc(row.name) + '</a>'
+      : esc(row.name);
+    var litreSub = row.assetCount > 0 && row.litresPerAsset != null
+      ? litres(row.litresPerAsset) + ' L per asset' : '';
+    var fuelSub = row.assetCount > 0 && row.fuelPerAsset != null
+      ? money(row.fuelPerAsset, 0) + ' per asset' : '';
+    var runningSub = row.assetCount > 0 && row.runningPerAsset != null
+      ? money(row.runningPerAsset, 0) + ' per asset' : '';
+    return '<td>' + name + '</td>' +
+      '<td>' + row.assetCount + '</td>' +
+      '<td>' + totalCell(litres(row.litres), litreSub, row.marks.litresPerAsset) + '</td>' +
+      '<td>' + totalCell(money(row.fuelCost, 0), fuelSub, row.marks.fuelPerAsset) + '</td>' +
+      '<td>' + rateCell(money(row.costPerKm, 2), row.marks.costPerKm) + '</td>' +
+      '<td>' + rateCell(money(row.costPerHour, 2), row.marks.costPerHour) + '</td>' +
+      '<td>' + rateCell(percent(row.idlePct), row.marks.idlePct) + '</td>' +
+      '<td>' + rateCell(percent(row.utilisation), row.marks.utilisation) + '</td>' +
+      '<td>' + totalCell(money(row.runningCost, 0), runningSub, row.marks.runningPerAsset) + '</td>' +
+      '<td>' + row.jobs + '</td>';
+  }
+
+  function sortRows(rows) {
+    var copy = rows.slice();
+    copy.sort(function(a, b) {
+      var av = a[sortKey];
+      var bv = b[sortKey];
+      if (sortKey === 'name') {
+        av = String(a.name || '').toLowerCase();
+        bv = String(b.name || '').toLowerCase();
+        if (av < bv) return -sortDir;
+        if (av > bv) return sortDir;
+        return 0;
+      }
+      var aMissing = av == null || !isFinite(av);
+      var bMissing = bv == null || !isFinite(bv);
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+      if (av < bv) return -sortDir;
+      if (av > bv) return sortDir;
+      return 0;
+    });
+    return copy;
+  }
+
+  function render() {
+    var body = document.getElementById('comparison-body');
+    if (!latest) {
+      body.innerHTML = '<tr><td colspan="10" class="empty-state">No comparison for this period.</td></tr>';
+      return;
+    }
+    var html = sortRows(latest.rows).map(function(row) {
+      return '<tr>' + rowCells(row, true) + '</tr>';
+    }).join('');
+    html += '<tr class="account-row">' + rowCells(latest.account, false) + '</tr>';
+    body.innerHTML = html;
+    document.querySelectorAll('thead th').forEach(function(th) {
+      var mark = th.querySelector('.sort-mark');
+      if (mark) mark.remove();
+      if (th.getAttribute('data-sort') === sortKey) {
+        var span = document.createElement('span');
+        span.className = 'sort-mark';
+        span.textContent = sortDir > 0 ? '↑' : '↓';
+        th.appendChild(span);
+      }
+    });
+  }
+
+  function setStatus(message) {
+    var el = document.getElementById('comparison-status');
+    if (!message) { el.hidden = true; el.textContent = ''; return; }
+    el.hidden = false;
+    el.textContent = message;
+  }
+
+  async function loadComparison() {
+    var dateFrom = document.getElementById('date-from').value;
+    var dateTo = document.getElementById('date-to').value;
+    if (!dateFrom || !dateTo || dateFrom > dateTo) {
+      setStatus('Choose a start date on or before the end date.');
+      return;
+    }
+    setStatus('');
+    var assetsResult = await supabase.from('assets').select('*')
+      .eq('user_id', effectiveAccountId).eq('is_ignored', false);
+    var telResult = await supabase.from('telematics_records')
+      .select('asset_id, idle_hours, operating_hours, total_engine_hours, litres_consumed, daily_distance_km, record_date')
+      .eq('user_id', effectiveAccountId).gte('record_date', dateFrom).lte('record_date', dateTo);
+    var latestTelResult = await supabase.from('telematics_records')
+      .select('asset_id, total_engine_hours, record_date')
+      .eq('user_id', effectiveAccountId).order('record_date', { ascending: false });
+    var purchaseResult = await supabase.from('fuel_purchases')
+      .select('vehicle_id, litres, cost_nzd, purchase_date')
+      .eq('user_id', effectiveAccountId).gte('purchase_date', dateFrom).lte('purchase_date', dateTo);
+    var jobResult = await supabase.from('job_assets')
+      .select('job_id, asset_id, work_date')
+      .eq('user_id', effectiveAccountId).gte('work_date', dateFrom).lte('work_date', dateTo);
+
+    var failed = [assetsResult, telResult, purchaseResult, jobResult].filter(function(result) { return result.error; });
+    if (failed.length) {
+      latest = null;
+      render();
+      setStatus(failed[0].error.message || 'Could not load division comparison.');
+      return;
+    }
+    latest = Compare.buildDivisionComparison({
+      assets: assetsResult.data || [],
+      divisions: accountContext.divisions || [],
+      telRows: telResult.data || [],
+      latestTelRows: (latestTelResult && latestTelResult.data) || [],
+      purchaseRows: purchaseResult.data || [],
+      jobRows: jobResult.data || [],
+      machineryCpl: machineryCpl,
+      dateFrom: dateFrom,
+      dateTo: dateTo
+    });
+    render();
+  }
+
+  async function init() {
+    var sessionResult = await supabase.auth.getSession();
+    if (!sessionResult.data.session) { window.location.href = 'login.html'; return; }
+    currentUser = sessionResult.data.session.user;
+    accountContext = await window.FleetMagnifyAccountContext.load(supabase, currentUser.id);
+    effectiveAccountId = accountContext.effectiveAccountId;
+    if (!accountContext.hasDivisions || accountContext.isDivisionManager) {
+      window.location.href = 'home.html';
+      return;
+    }
+    window.FleetMagnifySidebar.inject('divisions.html', supabase, effectiveAccountId);
+    var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
+    if (!hasAccess) return;
+    await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
+
+    var settings = await supabase.from('user_settings')
+      .select('machinery_fuel_cost_per_litre')
+      .eq('user_id', effectiveAccountId)
+      .maybeSingle();
+    if (settings.data && settings.data.machinery_fuel_cost_per_litre != null) {
+      var parsed = parseFloat(settings.data.machinery_fuel_cost_per_litre);
+      if (!isNaN(parsed)) machineryCpl = parsed;
+    }
+
+    var today = FCM.nzTodayISO();
+    document.getElementById('date-to').value = today;
+    document.getElementById('date-from').value = FCM.addDaysISO(today, -30);
+    document.getElementById('apply-filters-btn').addEventListener('click', loadComparison);
+    document.querySelectorAll('thead th').forEach(function(th) {
+      th.addEventListener('click', function() {
+        var key = th.getAttribute('data-sort');
+        if (sortKey === key) sortDir = -sortDir;
+        else { sortKey = key; sortDir = key === 'name' ? 1 : -1; }
+        render();
+      });
+    });
+    document.getElementById('signout-btn').addEventListener('click', async function() {
+      await supabase.auth.signOut();
+      window.location.href = 'login.html';
+    });
+    await loadComparison();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
