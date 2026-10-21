@@ -104,6 +104,20 @@
     padding: 12px 14px; border-radius: 10px; margin-bottom: 20px;
   }
   .form-error.is-visible { display: block; }
+  .form-error a,
+  .account-notice a { color: #0EA57A; font-weight: 600; text-decoration: none; }
+  .form-error a:hover,
+  .account-notice a:hover { color: #0BC48E; }
+
+  .account-notice {
+    display: none;
+    background: rgba(14,165,122,0.08);
+    border: 1px solid rgba(14,165,122,0.28);
+    color: #C8D0DB;
+    font-size: 13.5px; line-height: 1.5;
+    padding: 12px 14px; border-radius: 10px; margin-bottom: 20px;
+  }
+  .account-notice.is-visible { display: block; }
 
   .form-group { margin-bottom: 18px; }
   .form-group label {
@@ -203,6 +217,10 @@
     <h1>Create your account</h1>
     <p class="card-sub" id="card-sub">Start a 30-day trial. We'll take a card now — you won't be charged until day 31, after you've set up your fleet.</p>
 
+    <div id="checkout-cancelled-notice" class="account-notice" role="status">
+      Your account is created but checkout wasn't completed. <a href="login.html">Log in</a> to finish starting your free trial.
+    </div>
+
     <div id="form-error" class="form-error" role="alert"></div>
 
     <form id="signup-form" novalidate>
@@ -280,6 +298,10 @@
     var confirmPasswordInput = document.getElementById('confirm-password');
     var showPasswordBtn = document.getElementById('show-password');
 
+    if (/[?&]checkout=cancelled/.test(window.location.search)) {
+      document.getElementById('checkout-cancelled-notice').classList.add('is-visible');
+    }
+
     if (!window.SUPABASE_URL || window.SUPABASE_URL === 'YOUR_SUPABASE_URL') {
       showError('Supabase is not configured. Add your project URL and anon key in js/supabase-config.js.');
       submitBtn.disabled = true;
@@ -317,18 +339,27 @@
     var trialDays = window.FleetMagnifySubscriptionGuard.TRIAL_DAYS;
     cardSub.textContent = 'Start a ' + trialDays + '-day trial. We\'ll take a card now — you won\'t be charged until day ' + (trialDays + 1) + ', after you\'ve set up your fleet.';
 
-    if (/[?&]checkout=cancelled/.test(window.location.search)) {
-      showError('Checkout was cancelled. Sign in and finish adding a card to start your ' + trialDays + '-day trial.');
+    function isExistingAccountError(error) {
+      var msg = (error && error.message) ? error.message.toLowerCase() : '';
+      var code = (error && error.code) ? String(error.code).toLowerCase() : '';
+      return msg.indexOf('already registered') !== -1 ||
+        msg.indexOf('already been registered') !== -1 ||
+        msg.indexOf('user already exists') !== -1 ||
+        msg.indexOf('email address is already') !== -1 ||
+        code === 'email_exists' ||
+        code === 'user_already_exists';
+    }
+
+    function showExistingAccountError() {
+      errorEl.innerHTML = 'An account with this email already exists. <a href="login.html">Log in</a> instead.';
+      errorEl.classList.add('is-visible');
     }
 
     function friendlyError(error) {
       var msg = (error && error.message) ? error.message.toLowerCase() : '';
 
-      if (msg.indexOf('already registered') !== -1 ||
-          msg.indexOf('already been registered') !== -1 ||
-          msg.indexOf('user already exists') !== -1 ||
-          msg.indexOf('email address is already') !== -1) {
-        return 'This email address is already in use. Please sign in or use a different email.';
+      if (isExistingAccountError(error)) {
+        return 'An account with this email already exists. Log in instead.';
       }
       if (msg.indexOf('password') !== -1 && msg.indexOf('least') !== -1) {
         return 'Password must be at least 8 characters long.';
@@ -449,7 +480,8 @@
 
         window.location.href = checkoutData.url;
       } catch (err) {
-        showError(friendlyError(err));
+        if (isExistingAccountError(err)) showExistingAccountError();
+        else showError(friendlyError(err));
         submitBtn.disabled = false;
         submitBtn.textContent = 'Create Account & Continue to Checkout';
       }

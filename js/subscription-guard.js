@@ -38,6 +38,25 @@
     return new Date(start.getTime() + TRIAL_DAYS * MS_PER_DAY).toISOString();
   }
 
+  function blank(value) {
+    if (value == null) return true;
+    return String(value).trim() === '';
+  }
+
+  /**
+   * A Stripe trial may be started only for an account that has never had one.
+   * Eligible when there is no subscription, no trial end, and the status is
+   * still the pre-checkout default (null, empty, or 'trial').
+   * This does not grant app access. hasAccess decides that separately.
+   */
+  function isTrialEligible(profile) {
+    if (!profile || typeof profile !== 'object') return false;
+    if (!blank(profile.stripe_subscription_id)) return false;
+    if (!blank(profile.trial_ends_at)) return false;
+    if (blank(profile.subscription_status)) return true;
+    return String(profile.subscription_status).trim() === 'trial';
+  }
+
   function hasAccess(profile, nowMs) {
     if (nowMs == null) nowMs = Date.now();
     if (!profile) return false;
@@ -79,6 +98,7 @@
   global.FleetMagnifySubscriptionGuard = {
     TRIAL_DAYS: TRIAL_DAYS,
     trialEndsAtFrom: trialEndsAtFrom,
+    isTrialEligible: isTrialEligible,
     hasAccess: hasAccess,
     checkAccess: checkAccess
   };

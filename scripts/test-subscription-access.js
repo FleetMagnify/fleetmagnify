@@ -156,6 +156,53 @@ check(
   guard.hasAccess({ subscription_status: null, trial_ends_at: trialEnds }, now) === true
 );
 
+console.log('\n=== Trial eligibility for checkout ===');
+
+check(
+  'status trial with nothing else set is eligible',
+  guard.isTrialEligible({ subscription_status: 'trial', trial_ends_at: null, stripe_subscription_id: null }) === true
+);
+check(
+  'status null with nothing else set is eligible',
+  guard.isTrialEligible({ subscription_status: null, trial_ends_at: null, stripe_subscription_id: null }) === true
+);
+check(
+  'empty status with nothing else set is eligible',
+  guard.isTrialEligible({ subscription_status: '', trial_ends_at: null, stripe_subscription_id: null }) === true
+);
+check(
+  'trial_ends_at set is not eligible',
+  guard.isTrialEligible({ subscription_status: 'trial', trial_ends_at: trialEnds, stripe_subscription_id: null }) === false
+);
+check(
+  'stripe_subscription_id set is not eligible',
+  guard.isTrialEligible({ subscription_status: 'trial', trial_ends_at: null, stripe_subscription_id: 'sub_123' }) === false
+);
+check(
+  'cancelled is not eligible',
+  guard.isTrialEligible({ subscription_status: 'cancelled', trial_ends_at: null, stripe_subscription_id: null }) === false
+);
+check(
+  'canceled is not eligible',
+  guard.isTrialEligible({ subscription_status: 'canceled', trial_ends_at: null, stripe_subscription_id: null }) === false
+);
+check(
+  'active is not eligible',
+  guard.isTrialEligible({ subscription_status: 'active', trial_ends_at: null, stripe_subscription_id: null }) === false
+);
+check(
+  'trialing is not eligible',
+  guard.isTrialEligible({ subscription_status: 'trialing', trial_ends_at: null, stripe_subscription_id: null }) === false
+);
+check(
+  'past_due is not eligible',
+  guard.isTrialEligible({ subscription_status: 'past_due', trial_ends_at: null, stripe_subscription_id: null }) === false
+);
+check(
+  'status trial and no trial_ends_at still has no app access',
+  guard.hasAccess({ subscription_status: 'trial', trial_ends_at: null }, now) === false
+);
+
 console.log('\n=== signup.html card-upfront Checkout ===');
 
 var signupPage = fs.readFileSync(path.join(__dirname, '..', 'signup.html'), 'utf8');
@@ -180,8 +227,14 @@ var checkoutSource = fs.readFileSync(path.join(__dirname, '..', 'api/create-chec
 check(
   'create-checkout-session uses guard.TRIAL_DAYS and does not take the client length',
   /require\('\.\.\/js\/subscription-guard'\)/.test(checkoutSource) &&
-    /wantsTrial \? TRIAL_DAYS/.test(checkoutSource) &&
+    /isTrialEligible\(profileResult\.data\) \? TRIAL_DAYS : 0/.test(checkoutSource) &&
     !/parseInt\(req\.body\.trialPeriodDays/.test(checkoutSource)
+);
+check(
+  'signup.html explains an abandoned checkout and an existing email',
+  /Your account is created but checkout wasn't completed/.test(signupPage) &&
+    /An account with this email already exists/.test(signupPage) &&
+    /href="login\.html"/.test(signupPage)
 );
 
 console.log('\n=== checkout.session.completed writes both Stripe ids ===');
