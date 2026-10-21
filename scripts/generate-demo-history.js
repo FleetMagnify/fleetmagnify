@@ -1739,19 +1739,16 @@ async function main() {
 
   await deleteScoped(supabase, 'telematics_records', {
     user_id: DEMO_USER_ID,
-    asset_id: { in: demoAssetIds },
-    record_date: { gte: startDate }
+    asset_id: { in: demoAssetIds }
   });
   await deleteScoped(supabase, 'fuel_purchases', {
     user_id: DEMO_USER_ID,
-    vehicle_id: { in: demoAssetIds },
-    purchase_date: { gte: startDate }
+    vehicle_id: { in: demoAssetIds }
   });
   if (fuelRecordsExist) {
     await deleteScoped(supabase, 'fuel_records', {
       user_id: DEMO_USER_ID,
-      asset_id: { in: demoAssetIds },
-      record_date: { gte: startDate }
+      asset_id: { in: demoAssetIds }
     });
   }
   var calExists = await tableExists(supabase, 'fuel_calibration_intervals');
