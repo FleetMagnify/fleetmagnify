@@ -73,6 +73,7 @@
   .tonnekm-input-row input:focus { border-color: rgba(239,159,39,0.4); }
   .tonnekm-save-status { font-size: 11px; color: #0EA57A; opacity: 0; transition: opacity 0.3s; }
   .tonnekm-save-status.visible { opacity: 1; }
+  .tonnekm-save-status.error { color: #F0A8A7; }
 
   .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 28px; }
   .kpi-card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 20px 22px; }
@@ -301,7 +302,7 @@
                 <th>RUC/km</th>
                 <th>Total / KM</th>
                 <th>Total Cost per Tonne-KM</th>
-                <th></th>
+                <th id="override-col-head"></th>
               </tr>
             </thead>
             <tbody id="periods-tbody"></tbody>
@@ -328,6 +329,7 @@
 <script src="js/supabase-config.js"></script>
 <script src="js/subscription-guard.js"></script>
 <script src="js/account-context.js"></script>
+<script src="js/edit-permissions.js"></script>
 <script src="js/division-filter.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -337,6 +339,7 @@
 (function() {
   var FCM = window.FleetCostModel;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var Perm = window.FleetMagnifyEditPermissions;
   var currentUser = null;
   var accountContext = null;
   var effectiveAccountId = null;
@@ -881,6 +884,7 @@
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
     window.FleetMagnifyDivisionFilter.mount(accountContext);
+    applyAssetEditors();
     await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
     var today = FCM.nzTodayISO();
@@ -891,6 +895,10 @@
     await loadFleetComparison();
 
     document.getElementById('tonnekm-payload-input').addEventListener('change', async function() {
+      if (!assetsEditable()) {
+        showPayloadStatus(Perm.PERMISSION_DENIED, true);
+        return;
+      }
       var val = this.value.trim();
       if (val === '') return;
       var num = parseFloat(val);
@@ -899,10 +907,11 @@
       var latestPeriod = enrichedPeriods[enrichedPeriods.length - 1];
       var existing = findPayload(currentPayloads, latestPeriod.periodStart, latestPeriod.periodEnd);
 
+      var writeResult;
       if (existing) {
-        await supabase.from('truck_payloads').update({ payload_tonnes: num }).eq('id', existing.id);
+        writeResult = await supabase.from('truck_payloads').update({ payload_tonnes: num }).eq('id', existing.id);
       } else {
-        await supabase.from('truck_payloads').insert({
+        writeResult = await supabase.from('truck_payloads').insert({
           user_id: effectiveAccountId,
           vehicle_id: Number(selectedVehicle.id),
           period_start: latestPeriod.periodStart,
@@ -910,15 +919,40 @@
           payload_tonnes: num
         });
       }
+      if (writeResult.error) {
+        showPayloadStatus(Perm.writeErrorMessage(writeResult.error), true);
+        return;
+      }
 
       currentPayloads = await fetchPayloads(selectedVehicle.id);
       enrichedPeriods = enrichPeriods(selectedVehicle, basePeriods, currentOverrides);
       showDashboard(enrichedPeriods);
 
-      var status = document.getElementById('tonnekm-save-status');
-      status.classList.add('visible');
-      setTimeout(function() { status.classList.remove('visible'); }, 1500);
+      showPayloadStatus('Saved ✓', false);
     });
+  }
+
+  function assetsEditable() {
+    return Perm.canEditAssets(accountContext);
+  }
+
+  function applyAssetEditors() {
+    if (assetsEditable()) return;
+    var input = document.getElementById('tonnekm-payload-input');
+    if (input) {
+      input.readOnly = true;
+      input.disabled = true;
+    }
+    var head = document.getElementById('override-col-head');
+    if (head) head.hidden = true;
+  }
+
+  function showPayloadStatus(text, isError) {
+    var status = document.getElementById('tonnekm-save-status');
+    status.textContent = text;
+    status.classList.toggle('error', !!isError);
+    status.classList.add('visible');
+    setTimeout(function() { status.classList.remove('visible'); }, isError ? 3500 : 1500);
   }
 
   async function loadVehicles() {
@@ -1112,7 +1146,7 @@
       tonneEl.innerHTML = fmtMoney(headlineCostPerTonneKm);
     } else {
       tonneEl.className = 'tonnekm-value missing';
-      tonneEl.textContent = 'Enter payload weight to calculate';
+      tonneEl.textContent = assetsEditable() ? 'Enter payload weight to calculate' : 'No payload weight on file';
     }
     var payloadInput = document.getElementById('tonnekm-payload-input');
     payloadInput.value = latest.payloadTonnes !== null ? latest.payloadTonnes : '';
@@ -1229,9 +1263,13 @@
         '<td>' + renderTotalCell(p) + '</td>' +
         '<td>' + (p.costPerTonneKm !== null
           ? fmtMoney(p.costPerTonneKm)
-          : '<span class="payload-missing" data-period-idx="' + idx + '">Enter payload →</span>'
+          : (assetsEditable()
+            ? '<span class="payload-missing" data-period-idx="' + idx + '">Enter payload →</span>'
+            : '—')
         ) + '</td>' +
-        '<td><button type="button" class="btn-override" data-period-idx="' + idx + '">Override</button></td>' +
+        (assetsEditable()
+          ? '<td><button type="button" class="btn-override" data-period-idx="' + idx + '">Override</button></td>'
+          : '') +
       '</tr>';
     }).join('');
 
@@ -1243,6 +1281,7 @@
   }
 
   function openOverrideModal(periodIdx) {
+    if (!assetsEditable()) return;
     pendingOverrideIndex = periodIdx;
     var p = enrichedPeriods[periodIdx];
     document.getElementById('override-modal-sub').textContent =
@@ -1309,6 +1348,11 @@
   });
 
   async function removeOverride(componentType) {
+    if (!assetsEditable()) {
+      document.getElementById('modal-error').textContent = Perm.PERMISSION_DENIED;
+      document.getElementById('modal-error').classList.add('visible');
+      return;
+    }
     if (pendingOverrideIndex === null || !selectedVehicle) return;
     var p = enrichedPeriods[pendingOverrideIndex];
     var ov = findOverride(currentOverrides, componentType, p.periodStart, p.periodEnd);
@@ -1324,7 +1368,7 @@
 
     btn.disabled = false;
     if (result.error) {
-      document.getElementById('modal-error').textContent = result.error.message;
+      document.getElementById('modal-error').textContent = Perm.writeErrorMessage(result.error);
       document.getElementById('modal-error').classList.add('visible');
       return;
     }
@@ -1337,6 +1381,11 @@
   }
 
   document.getElementById('override-save-btn').addEventListener('click', async function() {
+    if (!assetsEditable()) {
+      document.getElementById('modal-error').textContent = Perm.PERMISSION_DENIED;
+      document.getElementById('modal-error').classList.add('visible');
+      return;
+    }
     if (pendingOverrideIndex === null || !selectedVehicle) return;
     var p = enrichedPeriods[pendingOverrideIndex];
     var errEl = document.getElementById('modal-error');
@@ -1352,7 +1401,13 @@
 
       if (!valRaw) {
         if (existing) {
-          await supabase.from('truck_cost_overrides').delete().eq('id', existing.id).eq('user_id', effectiveAccountId);
+          var cleared = await supabase.from('truck_cost_overrides').delete().eq('id', existing.id).eq('user_id', effectiveAccountId);
+          if (cleared.error) {
+            errEl.textContent = Perm.writeErrorMessage(cleared.error);
+            errEl.classList.add('visible');
+            this.disabled = false;
+            return;
+          }
         }
         continue;
       }
@@ -1365,15 +1420,16 @@
         return;
       }
 
+      var writeResult;
       if (existing) {
-        await supabase.from('truck_cost_overrides').update({
+        writeResult = await supabase.from('truck_cost_overrides').update({
           override_value_per_km: val,
           reason: reason || null,
           period_start: p.periodStart,
           period_end: p.periodEnd
         }).eq('id', existing.id).eq('user_id', effectiveAccountId);
       } else {
-        await supabase.from('truck_cost_overrides').insert({
+        writeResult = await supabase.from('truck_cost_overrides').insert({
           user_id: effectiveAccountId,
           vehicle_id: Number(selectedVehicle.id),
           period_start: p.periodStart,
@@ -1383,6 +1439,12 @@
           reason: reason || null
         });
       }
+      if (writeResult.error) {
+        errEl.textContent = Perm.writeErrorMessage(writeResult.error);
+        errEl.classList.add('visible');
+        this.disabled = false;
+        return;
+      }
     }
 
     var payloadValue = document.getElementById('payload-input').value.trim();
@@ -1390,13 +1452,14 @@
       var payloadNum = parseFloat(payloadValue);
       if (!isNaN(payloadNum) && payloadNum > 0) {
         var existingPayloadRow = findPayload(currentPayloads, p.periodStart, p.periodEnd);
+        var payloadResult;
         if (existingPayloadRow) {
-          await supabase
+          payloadResult = await supabase
             .from('truck_payloads')
             .update({ payload_tonnes: payloadNum })
             .eq('id', existingPayloadRow.id);
         } else {
-          await supabase
+          payloadResult = await supabase
             .from('truck_payloads')
             .insert({
               user_id: effectiveAccountId,
@@ -1405,6 +1468,12 @@
               period_end: p.periodEnd,
               payload_tonnes: payloadNum
             });
+        }
+        if (payloadResult.error) {
+          errEl.textContent = Perm.writeErrorMessage(payloadResult.error);
+          errEl.classList.add('visible');
+          this.disabled = false;
+          return;
         }
       }
     }

@@ -71,6 +71,7 @@
   .emtonne-input-row input:focus { border-color: rgba(14,165,122,0.4); }
   .emtonne-save-status { font-size: 11px; color: #0EA57A; opacity: 0; transition: opacity 0.3s; }
   .emtonne-save-status.visible { opacity: 1; }
+  .emtonne-save-status.error { color: #F0A8A7; }
 
   .chart-card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 24px; margin-bottom: 28px; }
   .chart-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 12px; }
@@ -252,6 +253,7 @@
 <script src="js/supabase-config.js"></script>
 <script src="js/subscription-guard.js"></script>
 <script src="js/account-context.js"></script>
+<script src="js/edit-permissions.js"></script>
 <script src="js/division-filter.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -263,6 +265,7 @@
 <script>
 (function() {
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var Perm = window.FleetMagnifyEditPermissions;
   var currentUser = null;
   var accountContext = null;
   var effectiveAccountId = null;
@@ -566,6 +569,7 @@
     var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
     if (!hasAccess) return;
     window.FleetMagnifyDivisionFilter.mount(accountContext);
+    applyAssetEditors();
     companyName = await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
 
     var today = FCM.nzTodayISO();
@@ -576,16 +580,21 @@
     await loadFleetComparison();
 
     document.getElementById('emtonne-payload-input').addEventListener('change', async function() {
+      if (!assetsEditable()) {
+        showPayloadStatus(Perm.PERMISSION_DENIED, true);
+        return;
+      }
       var val = this.value.trim();
       if (val === '' || !selectedVehicle || !latestPeriod) return;
       var num = parseFloat(val);
       if (isNaN(num) || num <= 0) return;
 
       var existing = findPayload(currentPayloads, latestPeriod.periodStart, latestPeriod.periodEnd);
+      var writeResult;
       if (existing) {
-        await supabase.from('truck_payloads').update({ payload_tonnes: num }).eq('id', existing.id);
+        writeResult = await supabase.from('truck_payloads').update({ payload_tonnes: num }).eq('id', existing.id);
       } else {
-        await supabase.from('truck_payloads').insert({
+        writeResult = await supabase.from('truck_payloads').insert({
           user_id: effectiveAccountId,
           vehicle_id: Number(selectedVehicle.id),
           period_start: latestPeriod.periodStart,
@@ -593,14 +602,37 @@
           payload_tonnes: num
         });
       }
+      if (writeResult.error) {
+        showPayloadStatus(Perm.writeErrorMessage(writeResult.error), true);
+        return;
+      }
 
       currentPayloads = await fetchPayloads(selectedVehicle.id);
       if (displayPeriods.length) showDashboard(displayPeriods);
 
-      var status = document.getElementById('emtonne-save-status');
-      status.classList.add('visible');
-      setTimeout(function() { status.classList.remove('visible'); }, 1500);
+      showPayloadStatus('Saved ✓', false);
     });
+  }
+
+  function assetsEditable() {
+    return Perm.canEditAssets(accountContext);
+  }
+
+  function applyAssetEditors() {
+    if (assetsEditable()) return;
+    var input = document.getElementById('emtonne-payload-input');
+    if (input) {
+      input.readOnly = true;
+      input.disabled = true;
+    }
+  }
+
+  function showPayloadStatus(text, isError) {
+    var status = document.getElementById('emtonne-save-status');
+    status.textContent = text;
+    status.classList.toggle('error', !!isError);
+    status.classList.add('visible');
+    setTimeout(function() { status.classList.remove('visible'); }, isError ? 3500 : 1500);
   }
 
   async function loadVehicles() {
@@ -762,12 +794,12 @@
         emTonneEl.textContent = fmtNum(emPerTonneKm, 4) + ' kg/tonne-km';
       } else {
         emTonneEl.className = 'emtonne-value missing';
-        emTonneEl.textContent = 'Enter payload weight to calculate';
+        emTonneEl.textContent = assetsEditable() ? 'Enter payload weight to calculate' : 'No payload weight on file';
       }
       emTonneInput.value = payloadT;
     } else {
       emTonneEl.className = 'emtonne-value missing';
-      emTonneEl.textContent = 'Enter payload weight to calculate';
+      emTonneEl.textContent = assetsEditable() ? 'Enter payload weight to calculate' : 'No payload weight on file';
       emTonneInput.value = '';
     }
 

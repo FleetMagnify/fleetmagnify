@@ -28,6 +28,7 @@
   .page-eyebrow .dash { width: 14px; height: 1.5px; background: #0EA57A; border-radius: 2px; }
   .page-title { font-size: 28px; font-weight: 800; letter-spacing: -1px; color: #F0F2F5; margin-bottom: 6px; }
   .page-sub { font-size: 14px; color: #5A6474; line-height: 1.55; }
+  .jobs-view-only { margin-bottom: 16px; }
 
   .method-note { display: flex; align-items: flex-start; gap: 12px; background: rgba(14,165,122,0.05); border: 1px solid rgba(14,165,122,0.14); border-radius: 12px; padding: 14px 18px; margin-bottom: 28px; }
   .method-note-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
@@ -228,6 +229,7 @@
   </div>
 
   <div class="page-content">
+    <p class="page-sub jobs-view-only" id="jobs-view-only-note" hidden>You have view-only access to jobs.</p>
     <!-- LIST VIEW -->
     <div id="list-view" class="view-panel">
       <div class="page-header">
@@ -438,6 +440,7 @@
 <script src="js/supabase-config.js"></script>
 <script src="js/subscription-guard.js"></script>
 <script src="js/account-context.js"></script>
+<script src="js/edit-permissions.js"></script>
 <script src="js/division-filter.js"></script>
 <script src="js/account-settings.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -474,13 +477,22 @@
     'Rigid Truck': 2.5, 'Semi Trailer': 3.0, 'Truck & Trailer': 3.0, 'Water Truck': 3.5, 'Other': 3.0
   };
   var EMISSION_FACTORS = { 'Diesel': 2.68, 'Petrol': 2.31 };
+  var Perm = window.FleetMagnifyEditPermissions;
 
   function managerView() {
     return !!(accountContext && accountContext.isDivisionManager);
   }
 
-  function lockManagerJobs() {
-    if (!managerView()) return;
+  function jobsEditable() {
+    return Perm.canEditJobs(accountContext);
+  }
+
+  function jobWriteMessage(error, prefix) {
+    return Perm.writeErrorMessage(error, prefix);
+  }
+
+  function applyJobPermissions() {
+    if (jobsEditable()) return;
     ['create-job-btn', 'add-asset-btn', 'job-tonnes-save'].forEach(function(id) {
       var el = document.getElementById(id);
       if (el) el.hidden = true;
@@ -489,7 +501,10 @@
     if (status) status.disabled = true;
     var tonnes = document.getElementById('job-tonnes-input');
     if (tonnes) tonnes.disabled = true;
-    var sub = document.querySelector('.page-header .page-sub, .page-content .page-sub');
+    var note = document.getElementById('jobs-view-only-note');
+    if (note) note.hidden = false;
+    if (!managerView()) return;
+    var sub = document.querySelector('.page-header .page-sub');
     if (sub) sub.textContent = 'Jobs that use assets in your divisions. Costs count those assets only.';
   }
 
@@ -512,7 +527,7 @@
     await loadUserSettings();
     await Promise.all([loadJobs(), loadAssets()]);
     bindUI();
-    lockManagerJobs();
+    applyJobPermissions();
   }
 
   async function loadAssets() {
@@ -565,7 +580,9 @@
     if (filtered.length === 0) {
       var msg = jobsSearch ? 'No jobs match your search.' :
         jobsFilter === 'archived' ? 'No archived jobs.' :
-        'No active jobs. Create your first job to start tracking costs.';
+        (jobsEditable()
+          ? 'No active jobs. Create your first job to start tracking costs.'
+          : 'No jobs to show.');
       grid.innerHTML = '<div class="empty-state"><span class="icon">🏗</span>' + msg + '</div>';
       return;
     }
@@ -597,9 +614,9 @@
         '<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">' +
           '<button type="button" class="btn-secondary view-job-btn" ' +
             'data-id="' + job.id + '">View Job</button>' +
-          (managerView() ? '' :
+          (jobsEditable() ?
           '<button type="button" class="btn-delete-job delete-job-btn" ' +
-            'data-id="' + job.id + '">🗑 Delete</button>') +
+            'data-id="' + job.id + '">🗑 Delete</button>' : '') +
         '</div>' +
       '</div>';
     }
@@ -634,14 +651,17 @@
   }
 
   async function deleteJob(jobId) {
+    if (!jobsEditable()) {
+      showToast(Perm.PERMISSION_DENIED, 'error');
+      return false;
+    }
     var deleteAssignments = await supabase
       .from('job_assets')
       .delete()
       .eq('job_id', jobId)
       .eq('user_id', effectiveAccountId);
     if (deleteAssignments.error) {
-      showToast('Failed to delete job assignments: ' + 
-        deleteAssignments.error.message, 'error');
+      showToast(jobWriteMessage(deleteAssignments.error, 'Failed to delete job assignments: '), 'error');
       return false;
     }
     var jobDeleteResult = await supabase
@@ -650,7 +670,7 @@
       .eq('id', jobId)
       .eq('user_id', effectiveAccountId);
     if (jobDeleteResult.error) {
-      showToast('Failed to delete job: ' + jobDeleteResult.error.message, 'error');
+      showToast(jobWriteMessage(jobDeleteResult.error, 'Failed to delete job: '), 'error');
       return false;
     }
     return true;
@@ -708,11 +728,12 @@
     document.getElementById('export-csv-btn').addEventListener('click', exportCsv);
     document.getElementById('export-pdf-btn').addEventListener('click', exportPdf);
     document.getElementById('job-tonnes-save').addEventListener('click', async function() {
+      if (!jobsEditable()) { showToast(Perm.PERMISSION_DENIED, 'error'); return; }
       var val = parseFloat(document.getElementById('job-tonnes-input').value);
       if (isNaN(val) || val <= 0) { showToast('Please enter a valid number of tonnes.', 'error'); return; }
       if (!currentJob) return;
       var result = await supabase.from('jobs').update({ tonnes_moved: val }).eq('id', currentJob.id).eq('user_id', effectiveAccountId);
-      if (result.error) { showToast(result.error.message, 'error'); return; }
+      if (result.error) { showToast(jobWriteMessage(result.error), 'error'); return; }
       jobTonnes = val;
       currentJob.tonnes_moved = val;
       await calculateCosts();
@@ -780,9 +801,12 @@
     });
     var assetIds = Object.keys(byAsset);
     if (assetIds.length === 0) {
-      list.innerHTML = managerView()
-        ? '<div class="empty-state">No assets from your divisions are on this job.</div>'
-        : '<div class="empty-state">No assets assigned yet. Click "Add Asset to Job" to get started.</div>';
+      var emptyCopy = managerView()
+        ? 'No assets from your divisions are on this job.'
+        : (jobsEditable()
+          ? 'No assets assigned yet. Click "Add Asset to Job" to get started.'
+          : 'No assets assigned yet.');
+      list.innerHTML = '<div class="empty-state">' + emptyCopy + '</div>';
       return;
     }
 
@@ -794,7 +818,7 @@
       return '<div class="assigned-item">' +
         '<div class="assigned-top">' +
           '<div><div class="assigned-name">' + esc(name) + '</div><div class="assigned-days">' + dates.length + ' day' + (dates.length !== 1 ? 's' : '') + ' assigned</div></div>' +
-          (managerView() ? '' : '<button type="button" class="btn-ghost-sm remove-asset-btn" data-asset-id="' + assetId + '">Remove from Job</button>') +
+          (jobsEditable() ? '<button type="button" class="btn-ghost-sm remove-asset-btn" data-asset-id="' + assetId + '">Remove from Job</button>' : '') +
         '</div>' +
         '<span class="expand-toggle" data-target="' + uid + '">Show dates ▾</span>' +
         '<div class="assigned-dates" id="' + uid + '" hidden><div class="date-chips">' +
@@ -817,18 +841,20 @@
   }
 
   async function removeAssetFromJob(assetId) {
+    if (!jobsEditable()) { showToast(Perm.PERMISSION_DENIED, 'error'); return; }
     if (!currentJob || !confirm('Remove this asset and all its assigned days from this job?')) return;
     var result = await supabase.from('job_assets').delete().eq('job_id', currentJob.id).eq('asset_id', assetId).eq('user_id', effectiveAccountId);
-    if (result.error) { showToast(result.error.message, 'error'); return; }
+    if (result.error) { showToast(jobWriteMessage(result.error), 'error'); return; }
     showToast('Asset removed from job.', 'success');
     await refreshJobDetail();
   }
 
   async function updateJobStatus() {
+    if (!jobsEditable()) { showToast(Perm.PERMISSION_DENIED, 'error'); return; }
     if (!currentJob) return;
     var status = document.getElementById('detail-status').value;
     var result = await supabase.from('jobs').update({ status: status }).eq('id', currentJob.id).eq('user_id', effectiveAccountId);
-    if (result.error) { showToast(result.error.message, 'error'); return; }
+    if (result.error) { showToast(jobWriteMessage(result.error), 'error'); return; }
     currentJob.status = status;
     showToast('Job status updated.', 'success');
   }
@@ -1163,6 +1189,7 @@
   }
 
   function openCreateModal() {
+    if (!jobsEditable()) { showToast(Perm.PERMISSION_DENIED, 'error'); return; }
     document.getElementById('new-job-name').value = '';
     document.getElementById('new-job-start').value = '';
     document.getElementById('new-job-end').value = '';
@@ -1173,6 +1200,11 @@
   function closeCreateModal() { document.getElementById('create-job-modal').classList.remove('open'); }
 
   async function saveNewJob() {
+    if (!jobsEditable()) {
+      document.getElementById('create-job-error').textContent = Perm.PERMISSION_DENIED;
+      document.getElementById('create-job-error').classList.add('visible');
+      return;
+    }
     var name = document.getElementById('new-job-name').value.trim();
     var status = document.getElementById('new-job-status').value;
     var errEl = document.getElementById('create-job-error');
@@ -1183,7 +1215,7 @@
     var endDate = document.getElementById('new-job-end').value || null;
     var result = await supabase.from('jobs').insert({ user_id: effectiveAccountId, job_name: name, status: status, start_date: startDate, end_date: endDate }).select().single();
     btn.disabled = false; btn.textContent = 'Create Job';
-    if (result.error) { errEl.textContent = result.error.message; errEl.classList.add('visible'); return; }
+    if (result.error) { errEl.textContent = jobWriteMessage(result.error); errEl.classList.add('visible'); return; }
     closeCreateModal();
     showToast('Job created successfully.', 'success');
     await loadJobs();
@@ -1191,6 +1223,7 @@
   }
 
   function openAddAssetModal() {
+    if (!jobsEditable()) { showToast(Perm.PERMISSION_DENIED, 'error'); return; }
     addAssetId = null;
     selectedDates = new Set();
     calMonth = new Date();
@@ -1309,13 +1342,20 @@
 
   async function saveAssetDays() {
     var errEl = document.getElementById('add-asset-error');
+    if (!jobsEditable()) { errEl.textContent = Perm.PERMISSION_DENIED; errEl.classList.add('visible'); return; }
     if (!addAssetId) { errEl.textContent = 'Please select an asset.'; errEl.classList.add('visible'); return; }
     if (selectedDates.size === 0) { errEl.textContent = 'Please select at least one work day.'; errEl.classList.add('visible'); return; }
 
     var btn = document.getElementById('save-add-asset');
     btn.disabled = true; btn.textContent = 'Saving...';
 
-    await supabase.from('job_assets').delete().eq('job_id', currentJob.id).eq('asset_id', addAssetId).eq('user_id', effectiveAccountId);
+    var cleared = await supabase.from('job_assets').delete().eq('job_id', currentJob.id).eq('asset_id', addAssetId).eq('user_id', effectiveAccountId);
+    if (cleared.error) {
+      btn.disabled = false; btn.textContent = 'Save Days';
+      errEl.textContent = jobWriteMessage(cleared.error);
+      errEl.classList.add('visible');
+      return;
+    }
 
     var rows = Array.from(selectedDates).map(function(d) {
       return { job_id: currentJob.id, asset_id: addAssetId, user_id: effectiveAccountId, work_date: d };
@@ -1323,7 +1363,7 @@
     var result = await supabase.from('job_assets').insert(rows);
 
     btn.disabled = false; btn.textContent = 'Save Days';
-    if (result.error) { errEl.textContent = result.error.message; errEl.classList.add('visible'); return; }
+    if (result.error) { errEl.textContent = jobWriteMessage(result.error); errEl.classList.add('visible'); return; }
     closeAddAssetModal();
     showToast('Work days saved.', 'success');
     await refreshJobDetail();
