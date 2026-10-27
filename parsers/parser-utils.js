@@ -231,6 +231,183 @@ function parseNavmanDate(dateStr) {
  * Returns { dateIso, ms } or null. dateIso is the NZ-local calendar date
  * with no UTC day-shift (see parseNavmanDate).
  */
+/**
+ * Calendar date (YYYY-MM-DD) of a UTC instant in an IANA time zone.
+ *
+ * VisionLink "Hour Meter Last Reported Time" and "Latest Utilization Report"
+ * are true UTC timestamps (they end in Z). The calendar date on the Z string
+ * is the UTC date and can be one day earlier than the New Zealand date.
+ * en-CA formats as YYYY-MM-DD. A blank or invalid zone falls back to
+ * Pacific/Auckland.
+ */
+function utcTimestampToLocalDate(isoString, ianaZone) {
+  var requested = String(ianaZone || '').trim();
+  var zone = requested || 'Pacific/Auckland';
+  var raw = String(isoString || '').trim();
+  if (!raw) return null;
+
+  var ms = Date.parse(raw);
+  if (isNaN(ms)) {
+    var normalized = raw.replace(/^(\d{4}-\d{2}-\d{2})[ ]/, '$1T');
+    if (normalized !== raw) ms = Date.parse(normalized);
+  }
+  if (isNaN(ms)) return null;
+
+  var formatted = formatInstantInZone(ms, zone);
+  if (formatted) return formatted;
+  if (zone !== 'Pacific/Auckland') return formatInstantInZone(ms, 'Pacific/Auckland');
+  return null;
+}
+
+function formatInstantInZone(ms, zone) {
+  try {
+    var fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    var parts = fmt.formatToParts(new Date(ms));
+    var year = '';
+    var month = '';
+    var day = '';
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].type === 'year') year = parts[i].value;
+      else if (parts[i].type === 'month') month = parts[i].value;
+      else if (parts[i].type === 'day') day = parts[i].value;
+    }
+    if (!year || !month || !day) return null;
+    return year + '-' + month + '-' + day;
+  } catch (e) {
+    return null;
+  }
+}
+
+function pad2(n) {
+  return (n < 10 ? '0' : '') + n;
+}
+
+function validCalendarDate(year, month, day) {
+  if (!year || year < 2000 || year > 2100) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  var dt = new Date(year, month - 1, day);
+  if (dt.getFullYear() !== year || dt.getMonth() !== month - 1 || dt.getDate() !== day) return null;
+  return year + '-' + pad2(month) + '-' + pad2(day);
+}
+
+function interpretVisionLinkReading(tokens, mode) {
+  var out = [];
+  for (var i = 0; i < tokens.length; i++) {
+    var token = tokens[i];
+    var month = mode === 'dmy' ? token.b : token.a;
+    var day = mode === 'dmy' ? token.a : token.b;
+    var iso = validCalendarDate(token.year, month, day);
+    if (!iso) return null;
+    out.push(iso);
+  }
+  return out;
+}
+
+function readingsMatch(left, right) {
+  if (!left || !right || left.length !== right.length) return false;
+  for (var i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) return false;
+  }
+  return true;
+}
+
+function nzDateFromReceivedAt(receivedAt) {
+  if (receivedAt == null || receivedAt === '') return null;
+  if (receivedAt instanceof Date) {
+    if (isNaN(receivedAt.getTime())) return null;
+    return utcTimestampToLocalDate(receivedAt.toISOString(), 'Pacific/Auckland');
+  }
+  if (typeof receivedAt === 'number' && isFinite(receivedAt)) {
+    return utcTimestampToLocalDate(new Date(receivedAt).toISOString(), 'Pacific/Auckland');
+  }
+  return utcTimestampToLocalDate(String(receivedAt), 'Pacific/Auckland');
+}
+
+function daysApart(isoA, isoB) {
+  var ms = Date.parse(isoB + 'T00:00:00Z') - Date.parse(isoA + 'T00:00:00Z');
+  if (isNaN(ms)) return Infinity;
+  return Math.round(Math.abs(ms) / 86400000);
+}
+
+/**
+ * Pick one locale reading (DD-MM-YYYY or MM-DD-YYYY) for a set of numeric
+ * dates that share a VisionLink account locale.
+ *
+ * tokens: [{ a, b, year }, ...] in the order written (a is the first
+ * number, b the second). A component greater than 12 makes the other
+ * reading's month invalid, so only one reading survives. When both
+ * readings are valid and differ, the reading whose END date (second
+ * token, or the only token) is closest to receivedAt's New Zealand
+ * calendar date is used, and only if that end date is within 7 days.
+ * Otherwise null.
+ */
+function resolveVisionLinkDateReading(tokens, receivedAt) {
+  if (!tokens || !tokens.length) return null;
+  var dmy = interpretVisionLinkReading(tokens, 'dmy');
+  var mdy = interpretVisionLinkReading(tokens, 'mdy');
+  if (!dmy && !mdy) return null;
+  if (dmy && !mdy) return dmy;
+  if (mdy && !dmy) return mdy;
+  if (readingsMatch(dmy, mdy)) return dmy;
+
+  var receivedNz = nzDateFromReceivedAt(receivedAt);
+  if (!receivedNz) return null;
+  var endIdx = tokens.length >= 2 ? 1 : 0;
+  var dmyDist = daysApart(dmy[endIdx], receivedNz);
+  var mdyDist = daysApart(mdy[endIdx], receivedNz);
+  var dmyIn = dmyDist <= 7;
+  var mdyIn = mdyDist <= 7;
+  if (!dmyIn && !mdyIn) return null;
+  if (dmyIn && !mdyIn) return dmy;
+  if (mdyIn && !dmyIn) return mdy;
+  if (dmyDist < mdyDist) return dmy;
+  if (mdyDist < dmyDist) return mdy;
+  return null;
+}
+
+function inclusiveDayCount(start, end) {
+  var days = daysApart(start, end);
+  if (!isFinite(days)) return null;
+  return days + 1;
+}
+
+function visionLinkOneDayMessage(start, end) {
+  var n = inclusiveDayCount(start, end);
+  return 'VisionLink report covers ' + n + ' days (' + start + ' to ' + end +
+    '). FleetMagnify needs a one-day report: schedule it Daily with Report Duration \'Previous day\'.';
+}
+
+/**
+ * Fleet_Utilization_<start>_<end>_<generated>.csv / .xlsx
+ *
+ * Case-insensitive. Optional trailing _<digits> before the extension
+ * (VisionLink sometimes appends _1). Date order follows the account
+ * locale (DD-MM-YYYY or MM-DD-YYYY); see resolveVisionLinkDateReading.
+ * Returns { start, end, generated } as YYYY-MM-DD, or null when the
+ * name does not match or the locale cannot be resolved.
+ */
+function parseVisionLinkFilenameRange(filename, receivedAt) {
+  if (!filename) return null;
+  var base = String(filename).split(/[/\\]/).pop();
+  var match = base.match(
+    /^fleet_utilization_(\d{2})-(\d{2})-(\d{4})_(\d{2})-(\d{2})-(\d{4})_(\d{2})-(\d{2})-(\d{4})(?:_\d+)?\.(csv|xlsx)$/i
+  );
+  if (!match) return null;
+  var tokens = [
+    { a: parseInt(match[1], 10), b: parseInt(match[2], 10), year: parseInt(match[3], 10) },
+    { a: parseInt(match[4], 10), b: parseInt(match[5], 10), year: parseInt(match[6], 10) },
+    { a: parseInt(match[7], 10), b: parseInt(match[8], 10), year: parseInt(match[9], 10) },
+  ];
+  var dates = resolveVisionLinkDateReading(tokens, receivedAt);
+  if (!dates) return null;
+  return { start: dates[0], end: dates[1], generated: dates[2] };
+}
+
 function parseNavmanDatetime(datetimeStr) {
   var raw = String(datetimeStr || '').trim();
   if (!raw) return null;
@@ -274,6 +451,10 @@ module.exports = {
   detectAssetType: detectAssetType,
   parseNavmanDate: parseNavmanDate,
   parseNavmanDatetime: parseNavmanDatetime,
+  utcTimestampToLocalDate: utcTimestampToLocalDate,
+  resolveVisionLinkDateReading: resolveVisionLinkDateReading,
+  parseVisionLinkFilenameRange: parseVisionLinkFilenameRange,
+  visionLinkOneDayMessage: visionLinkOneDayMessage,
   BP_FUEL_PRODUCT_ALLOWLIST: BP_FUEL_PRODUCT_ALLOWLIST,
   isKnownFuelProduct: isKnownFuelProduct,
   MOBIL_FUEL_PRODUCT_ALLOWLIST: MOBIL_FUEL_PRODUCT_ALLOWLIST,
