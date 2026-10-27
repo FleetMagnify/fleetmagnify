@@ -1,14 +1,18 @@
 /**
  * VisionLink scheduled reports arrive as an https download link, not an
- * attachment. Extract vl.cat.com/downloadreport links from the email and
- * fetch the CSV. Never log the URL or the token: host and path only, and
- * the final hostname after redirects.
+ * attachment. The vl.cat.com page is a web app: the CSV comes from Cat's
+ * report-download API, which returns a short-lived S3 URL. Never log or
+ * store a full URL, the token, or any X-Amz-* value. Log hosts only.
  */
 
 var MAX_REDIRECTS = 3;
 var TIMEOUT_MS = 20000;
 var MAX_BYTES = 5 * 1024 * 1024;
-var ALLOWED_HOST_SUFFIXES = ['.cat.com', '.caterpillar.com', '.amazonaws.com'];
+var API_MAX_BYTES = 64 * 1024;
+var API_URL_PREFIX = 'https://api.cat.com/catDigital/reportDownloads/v1/download?token=';
+var BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+var S3_VIRTUAL_HOST = /^[a-z0-9][a-z0-9.-]*\.s3\.[a-z0-9-]+\.amazonaws\.com$/;
+var S3_LEGACY_HOST = /^[a-z0-9][a-z0-9.-]*\.s3\.amazonaws\.com$/;
 
 function decodeHtmlEntities(value) {
   return String(value || '')
@@ -38,19 +42,28 @@ function isIpLiteral(hostname) {
   return false;
 }
 
-function isAllowedDownloadHost(hostname) {
-  var host = String(hostname || '').toLowerCase().replace(/\.+$/, '');
+function hostOnly(hostname) {
+  return String(hostname || '').toLowerCase().replace(/\.+$/, '');
+}
+
+function isS3Host(hostname) {
+  var host = hostOnly(hostname);
+  return S3_VIRTUAL_HOST.test(host) || S3_LEGACY_HOST.test(host);
+}
+
+function isCatHost(hostname) {
+  var host = hostOnly(hostname);
   if (!host || host === 'localhost' || isIpLiteral(host)) return false;
   if (host === 'vl.cat.com') return true;
-  for (var i = 0; i < ALLOWED_HOST_SUFFIXES.length; i++) {
-    var suffix = ALLOWED_HOST_SUFFIXES[i];
-    if (host.length > suffix.length && host.endsWith(suffix)) return true;
-  }
-  return false;
+  return host.length > '.cat.com'.length && host.endsWith('.cat.com');
+}
+
+function isAllowedFileHost(hostname) {
+  return isS3Host(hostname) || isCatHost(hostname);
 }
 
 function linkError(message, filename) {
-  var err = new Error(message);
+  var err = new Error(scrubLinkError(message));
   err.reportFilename = filename || null;
   return err;
 }
@@ -58,9 +71,12 @@ function linkError(message, filename) {
 function scrubLinkError(message) {
   return String(message || 'download failed')
     .replace(/https?:\/\/\S+/gi, '[link]')
+    .replace(/X-Amz-[A-Za-z0-9-]+=[^&\s]*/gi, '')
+    .replace(/X-Amz[A-Za-z0-9-]*/gi, '')
     .replace(/[?&]token=[^\s&]*/gi, '')
     .replace(/\btoken=[^\s&]*/gi, '')
-    .slice(0, 300);
+    .replace(/[A-Za-z0-9+/_=-]{64,}/g, '[redacted]')
+    .slice(0, 500);
 }
 
 /**
@@ -164,6 +180,14 @@ function decodeRfc5987(value) {
   return basenameFilename(encoded);
 }
 
+function loosePercentDecode(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch (err) {
+    return value;
+  }
+}
+
 function filenameFromContentDisposition(header) {
   if (!header) return null;
   var star = matchDispositionParam(header, 'filename*');
@@ -173,24 +197,64 @@ function filenameFromContentDisposition(header) {
   }
   var plain = matchDispositionParam(header, 'filename');
   if (!plain) return null;
-  return basenameFilename(unquote(plain));
+  return basenameFilename(loosePercentDecode(unquote(plain)));
+}
+
+function filenameFromUrlPath(urlString) {
+  var parsed;
+  try {
+    parsed = new URL(urlString);
+  } catch (err) {
+    return null;
+  }
+  var segments = String(parsed.pathname || '').split('/');
+  var seg = '';
+  for (var i = segments.length - 1; i >= 0; i--) {
+    if (segments[i]) {
+      seg = segments[i];
+      break;
+    }
+  }
+  if (!seg) return null;
+  return basenameFilename(loosePercentDecode(seg));
 }
 
 function isRedirectStatus(status) {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 }
 
-function validateFetchUrl(urlString) {
+function mediaTypeOf(response) {
+  return (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+}
+
+function assertSafeUrl(urlString, allowHost) {
   var parsed;
   try {
     parsed = new URL(urlString);
   } catch (err) {
-    throw linkError('download link was not a valid URL');
+    throw linkError('download URL was not valid');
   }
   if (parsed.protocol !== 'https:') throw linkError('redirect was not https');
-  if (parsed.username || parsed.password) throw linkError('redirect host not allowed');
-  if (parsed.port) throw linkError('redirect host not allowed');
-  if (!isAllowedDownloadHost(parsed.hostname)) throw linkError('redirect host not allowed');
+  if (parsed.username || parsed.password || parsed.port || parsed.hostname === 'localhost' ||
+      isIpLiteral(parsed.hostname) || !allowHost(parsed.hostname)) {
+    throw linkError('redirect host not allowed: ' + parsed.hostname);
+  }
+  return parsed;
+}
+
+function validateDownloadUrl(raw) {
+  var parsed;
+  try {
+    parsed = new URL(String(raw));
+  } catch (err) {
+    throw linkError('download URL was not valid');
+  }
+  if (parsed.protocol !== 'https:') {
+    throw linkError('download URL was not https: ' + parsed.hostname);
+  }
+  if (parsed.username || parsed.password || parsed.port || !isS3Host(parsed.hostname)) {
+    throw linkError('download host not allowed: ' + parsed.hostname);
+  }
   return parsed;
 }
 
@@ -200,15 +264,16 @@ async function cancelBody(response) {
   }
 }
 
-async function readLimitedBody(response) {
+async function readLimitedBody(response, maxBytes, tooBigMessage) {
+  var limit = maxBytes || MAX_BYTES;
   var declared = response.headers.get('content-length');
-  if (declared && /^\d+$/.test(String(declared).trim()) && parseInt(declared, 10) > MAX_BYTES) {
+  if (declared && /^\d+$/.test(String(declared).trim()) && parseInt(declared, 10) > limit) {
     await cancelBody(response);
-    throw linkError('download exceeded 5 MB');
+    throw linkError(tooBigMessage || 'download exceeded 5 MB');
   }
   if (!response.body || typeof response.body.getReader !== 'function') {
     var buffered = Buffer.from(await response.arrayBuffer());
-    if (buffered.length > MAX_BYTES) throw linkError('download exceeded 5 MB');
+    if (buffered.length > limit) throw linkError(tooBigMessage || 'download exceeded 5 MB');
     return buffered;
   }
   var reader = response.body.getReader();
@@ -220,9 +285,9 @@ async function readLimitedBody(response) {
       if (step.done) break;
       var piece = Buffer.from(step.value);
       received += piece.length;
-      if (received > MAX_BYTES) {
+      if (received > limit) {
         try { await reader.cancel(); } catch (err) { /* ignore */ }
-        throw linkError('download exceeded 5 MB');
+        throw linkError(tooBigMessage || 'download exceeded 5 MB');
       }
       chunks.push(piece);
     }
@@ -237,9 +302,70 @@ function bodyLooksLikeHtml(buffer) {
   return head.charAt(0) === '<';
 }
 
+function describeApiFailure(status, contentType, bodyBuffer) {
+  var ctype = contentType || '(none)';
+  var text = bodyBuffer ? bodyBuffer.toString('utf8') : '';
+  var msg = 'report download API returned HTTP ' + status + ' Content-Type ' + ctype;
+  var parsed = null;
+  if (text && !(bodyBuffer && bodyLooksLikeHtml(bodyBuffer))) {
+    try { parsed = JSON.parse(text); } catch (err) { parsed = null; }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    msg += '; not JSON';
+  } else {
+    var keys = Object.keys(parsed);
+    msg += '; keys: ' + (keys.length ? keys.join(', ') : '(none)');
+    if (typeof parsed.downloadUrl !== 'string' || !String(parsed.downloadUrl).trim()) {
+      msg += '; no downloadUrl';
+    }
+    var detail = '';
+    ['message', 'error', 'errorMessage', 'error_message'].forEach(function(name) {
+      if (!detail && typeof parsed[name] === 'string' && parsed[name]) {
+        detail = parsed[name].slice(0, 120);
+      }
+    });
+    if (detail) msg += '; detail: ' + detail;
+  }
+  return msg;
+}
+
+async function fetchWithRedirects(startUrl, options) {
+  var current = startUrl;
+  var redirects = 0;
+  var response;
+  while (true) {
+    var parsed = assertSafeUrl(current, options.allowHost);
+    console.log('visionlink-link:', options.label, 'host', parsed.hostname);
+    var init = {
+      method: 'GET',
+      redirect: 'manual',
+      signal: options.signal,
+    };
+    if (options.headers) init.headers = options.headers;
+    response = await options.doFetch(current, init);
+    if (isRedirectStatus(response.status)) {
+      redirects += 1;
+      var location = response.headers.get('location');
+      await cancelBody(response);
+      if (redirects > MAX_REDIRECTS) throw linkError('too many redirects');
+      if (!location) throw linkError('redirect missing location');
+      var next;
+      try {
+        next = new URL(location, current);
+      } catch (err) {
+        throw linkError('redirect URL was not valid');
+      }
+      console.log('visionlink-link: redirect host', next.hostname);
+      current = next.href;
+      continue;
+    }
+    return { response: response, finalUrl: current, finalHost: parsed.hostname };
+  }
+}
+
 /**
- * GET the report. Follows at most 3 redirects, and only to https hosts
- * under cat.com, caterpillar.com, or amazonaws.com (or vl.cat.com).
+ * Turn a vl.cat.com/downloadreport link into a CSV. The page itself is not
+ * the file: ask api.cat.com for downloadUrl, then GET that S3 object.
  */
 async function fetchReportFromLink(url, options) {
   var timeoutMs = options && options.timeoutMs ? options.timeoutMs : TIMEOUT_MS;
@@ -247,73 +373,86 @@ async function fetchReportFromLink(url, options) {
   var controller = new AbortController();
   var timer = setTimeout(function() { controller.abort(); }, timeoutMs);
   try {
-    var current = String(url);
-    var redirects = 0;
-    var response;
-    var loggedStart = false;
-    while (true) {
-      var parsed = validateFetchUrl(current);
-      if (!loggedStart) {
-        console.log('visionlink-link: fetch', parsed.hostname + parsed.pathname);
-        loggedStart = true;
+    var page = acceptReportLink(String(url));
+    if (!page) throw linkError('download link was not a VisionLink report link');
+    var token = page.searchParams.get('token');
+    var apiUrl = API_URL_PREFIX + encodeURIComponent(token) + '&source=schedule';
+
+    var apiCall = await fetchWithRedirects(apiUrl, {
+      doFetch: doFetch,
+      signal: controller.signal,
+      label: 'api',
+      allowHost: function(host) { return hostOnly(host) === 'api.cat.com'; },
+      headers: {
+        Accept: 'application/json',
+        Origin: 'https://vl.cat.com',
+        Referer: 'https://vl.cat.com/',
+        'User-Agent': BROWSER_UA,
+      },
+    });
+
+    var apiType = mediaTypeOf(apiCall.response);
+    var apiStatus = apiCall.response.status;
+    var apiBody = await readLimitedBody(
+      apiCall.response,
+      API_MAX_BYTES,
+      'report download API body exceeded 64 KB; HTTP ' + apiStatus + ' Content-Type ' + (apiType || '(none)')
+    );
+
+    var apiFailed = apiStatus !== 200 || apiType === 'text/html' || bodyLooksLikeHtml(apiBody);
+    var payload = null;
+    if (!apiFailed) {
+      try { payload = JSON.parse(apiBody.toString('utf8')); } catch (err) { payload = null; }
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
+          typeof payload.downloadUrl !== 'string' || !payload.downloadUrl.trim()) {
+        apiFailed = true;
       }
-      response = await doFetch(current, {
-        method: 'GET',
-        redirect: 'manual',
-        signal: controller.signal,
-      });
-      if (isRedirectStatus(response.status)) {
-        redirects += 1;
-        var location = response.headers.get('location');
-        await cancelBody(response);
-        if (redirects > MAX_REDIRECTS) throw linkError('too many redirects');
-        if (!location) throw linkError('redirect missing location');
-        var next = new URL(location, current);
-        console.log('visionlink-link: redirect host', next.hostname);
-        current = next.href;
-        continue;
-      }
-      break;
+    }
+    if (apiFailed) throw linkError(describeApiFailure(apiStatus, apiType, apiBody));
+
+    var download = validateDownloadUrl(payload.downloadUrl.trim());
+    var fileCall = await fetchWithRedirects(download.href, {
+      doFetch: doFetch,
+      signal: controller.signal,
+      label: 'file',
+      allowHost: isAllowedFileHost,
+    });
+
+    if (fileCall.response.status !== 200) {
+      await cancelBody(fileCall.response);
+      throw linkError('download returned HTTP ' + fileCall.response.status);
     }
 
-    var finalHost = '';
-    try { finalHost = new URL(current).hostname; } catch (err) { finalHost = ''; }
-    console.log('visionlink-link: final host', finalHost);
-
-    if (response.status !== 200) {
-      await cancelBody(response);
-      throw linkError('download returned HTTP ' + response.status);
-    }
-
-    var filename = filenameFromContentDisposition(response.headers.get('content-disposition'));
+    var filename = filenameFromContentDisposition(fileCall.response.headers.get('content-disposition'));
+    if (!filename) filename = filenameFromUrlPath(fileCall.finalUrl);
     if (filename && /\.xlsx?$/i.test(filename)) {
-      await cancelBody(response);
+      await cancelBody(fileCall.response);
       throw linkError(
         'link served an Excel file; only CSV is supported for link downloads',
         filename
       );
     }
 
-    var contentType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-    if (contentType === 'text/html') {
-      await cancelBody(response);
+    var fileType = mediaTypeOf(fileCall.response);
+    if (fileType === 'text/html') {
+      await cancelBody(fileCall.response);
       throw linkError('download was an HTML page, not a CSV');
     }
 
-    var buffer = await readLimitedBody(response);
-    if (bodyLooksLikeHtml(buffer)) {
-      throw linkError('download was an HTML page, not a CSV');
-    }
+    var buffer = await readLimitedBody(fileCall.response, MAX_BYTES, 'download exceeded 5 MB');
+    if (bodyLooksLikeHtml(buffer)) throw linkError('download was an HTML page, not a CSV');
 
+    console.log('visionlink-link: final host', fileCall.finalHost);
     return {
       filename: filename,
       buffer: buffer,
       mimeType: 'text/csv',
-      finalHost: finalHost,
+      finalHost: fileCall.finalHost,
     };
   } catch (err) {
     if (err && err.name === 'AbortError') throw linkError('download timed out');
-    throw err;
+    if (err && Object.prototype.hasOwnProperty.call(err, 'reportFilename')) throw err;
+    throw linkError(err && err.message ? err.message : 'download failed');
   } finally {
     clearTimeout(timer);
   }
@@ -324,6 +463,7 @@ module.exports = {
   fetchReportFromLink: fetchReportFromLink,
   scrubLinkError: scrubLinkError,
   filenameFromContentDisposition: filenameFromContentDisposition,
-  isAllowedDownloadHost: isAllowedDownloadHost,
+  isS3Host: isS3Host,
   MAX_BYTES: MAX_BYTES,
+  API_MAX_BYTES: API_MAX_BYTES,
 };

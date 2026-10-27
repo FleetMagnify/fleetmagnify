@@ -7,11 +7,16 @@
 var assert = require('assert');
 var links = require('../parsers/email-report-link');
 var inbound = require('../api/email-inbound');
+var utils = require('../parsers/parser-utils');
 
 var TOKEN = 'FAKETOKEN';
 var LINK = 'https://vl.cat.com/downloadreport?token=' + TOKEN;
 var ONE_DAY_NAME = 'Fleet_Utilization_27-10-2026_27-10-2026_27-10-2026.csv';
 var MULTI_DAY_NAME = 'Fleet_Utilization_08-17-2026_08-23-2026_08-24-2026.csv';
+var S3_HOST = 'example-bucket.s3.us-east-2.amazonaws.com';
+var S3_URL = 'https://' + S3_HOST + '/FAKEKEY/Fleet%20Fuel%202026-10-28.csv?response-content-disposition=attachment%3B%20filename%3DFleet%2520Fuel%25202026-10-28.csv&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=FAKE';
+var SPACED_NAME = 'Fleet Utilization 27-10-2026 27-10-2026 27-10-2026.csv';
+var SPACED_DISPOSITION = 'attachment; filename="Fleet%20Utilization%2027-10-2026%2027-10-2026%2027-10-2026.csv"';
 var USER = '00000000-0000-4000-8000-0000000000a1';
 
 var UTIL_HEADER = [
@@ -49,9 +54,14 @@ function captureConsole() {
 }
 
 function assertNoSecret(text) {
-  assert.strictEqual(text.indexOf(TOKEN) === -1, true, 'logged or stored the token');
-  assert.strictEqual(text.indexOf('https://vl.cat.com') === -1, true, 'logged the full download URL');
-  assert.strictEqual(text.indexOf('token=') === -1, true, 'logged a token query');
+  var blob = String(text);
+  assert.strictEqual(blob.indexOf(TOKEN) === -1, true, 'logged or stored the token');
+  assert.strictEqual(blob.indexOf('https://vl.cat.com') === -1, true, 'logged the full download URL');
+  assert.strictEqual(blob.indexOf('token=') === -1, true, 'logged a token query');
+  assert.strictEqual(blob.indexOf('X-Amz') === -1, true, 'logged an S3 signature parameter');
+  assert.strictEqual(blob.indexOf('x-amz') === -1, true, 'logged an S3 signature parameter');
+  assert.strictEqual(blob.indexOf(S3_URL) === -1, true, 'logged the download URL');
+  assert.strictEqual(blob.indexOf('FAKEKEY') === -1, true, 'logged the S3 key');
 }
 
 function csvResponse(body, headers, status) {
@@ -59,6 +69,41 @@ function csvResponse(body, headers, status) {
     status: status || 200,
     headers: headers || { 'content-type': 'text/csv' },
   });
+}
+
+function jsonResponse(obj, status, contentType) {
+  return new Response(JSON.stringify(obj), {
+    status: status == null ? 200 : status,
+    headers: { 'content-type': contentType || 'application/json' },
+  });
+}
+
+function hang(opts) {
+  return new Promise(function(resolve, reject) {
+    var signal = opts && opts.signal;
+    function abort() {
+      var err = new Error('The operation was aborted');
+      err.name = 'AbortError';
+      reject(err);
+    }
+    if (signal && signal.aborted) return abort();
+    if (signal) signal.addEventListener('abort', abort);
+  });
+}
+
+function sequencedDownload(fileResponse) {
+  var n = 0;
+  return function(url, opts) {
+    n += 1;
+    var host = new URL(String(url)).hostname;
+    if (host === 'vl.cat.com') throw new Error('fetched the web app page');
+    if (n === 1) {
+      if (host !== 'api.cat.com') throw new Error('first request host was ' + host);
+      return Promise.resolve(jsonResponse({ downloadUrl: S3_URL }));
+    }
+    if (opts.headers) throw new Error('S3 request must not send extra headers');
+    return Promise.resolve(fileResponse);
+  };
 }
 
 function redirectResponse(location) {
@@ -123,212 +168,380 @@ function testExtraction() {
   console.log('✓ html entity, plain text, dedupe, rejects, and cap of 3');
 }
 
-function testFilenameAndFetch() {
+async function rejected(needle, options) {
+  try {
+    await links.fetchReportFromLink(LINK, options);
+  } catch (err) {
+    assert.ok(err.message.indexOf(needle) !== -1, err.message + ' (expected ' + needle + ')');
+    assertNoSecret(err.message);
+    return err;
+  }
+  throw new Error('expected rejection containing ' + needle);
+}
+
+function bigStream(size) {
+  var ReadableStream = require('stream/web').ReadableStream;
+  var big = new Uint8Array(size);
+  big.fill(97);
+  return new ReadableStream({
+    start: function(controller) {
+      controller.enqueue(big);
+      controller.close();
+    },
+  });
+}
+
+async function testFilenameAndFetch() {
   console.log('\n=== Download fetch ===');
   var original = global.fetch;
   var cap = captureConsole();
-  var calls = [];
-  global.fetch = function(url, opts) {
-    calls.push({ url: String(url), opts: opts });
-    return Promise.resolve(csvResponse('asset,hours\nEQ000001,1\n', {
-      'content-type': 'text/csv',
-      'content-disposition': 'attachment; filename="' + ONE_DAY_NAME + '"',
-    }));
-  };
-  return links.fetchReportFromLink(LINK).then(function(result) {
-    assert.strictEqual(calls[0].opts.redirect, 'manual');
-    assert.strictEqual(calls[0].opts.method, 'GET');
-    assert.strictEqual(result.filename, ONE_DAY_NAME);
-    assert.strictEqual(result.mimeType, 'text/csv');
-    assert.strictEqual(result.finalHost, 'vl.cat.com');
-    assert.strictEqual(result.buffer.toString('utf8').indexOf('EQ000001') !== -1, true);
-    assertNoSecret(cap.text());
-    assert.ok(cap.text().indexOf('vl.cat.com/downloadreport') !== -1);
-    assert.ok(cap.text().indexOf('final host vl.cat.com') !== -1);
+  try {
+    assert.strictEqual(links.isS3Host('example-bucket.s3.us-east-2.amazonaws.com'), true);
+    assert.strictEqual(links.isS3Host('pfm-storage-service-s3-prod.s3.us-east-2.amazonaws.com'), true);
+    assert.strictEqual(links.isS3Host('bucket.s3.amazonaws.com'), true);
+    assert.strictEqual(links.isS3Host('ec2.amazonaws.com'), false);
+    assert.strictEqual(links.isS3Host('s3.amazonaws.com'), false);
+    assert.strictEqual(links.isS3Host('s3.us-east-2.amazonaws.com'), false);
 
-    global.fetch = function() {
-      return Promise.resolve(csvResponse('a,b\n', {
+    var scrubbed = links.scrubLinkError(
+      'failed X-Amz-Signature=FAKESIG and ' + 'C'.repeat(80) + ' kept ' + MULTI_DAY_NAME
+    );
+    assert.strictEqual(scrubbed.indexOf('X-Amz'), -1);
+    assert.strictEqual(scrubbed.indexOf('C'.repeat(80)), -1);
+    assert.ok(scrubbed.indexOf('[redacted]') !== -1);
+    assert.ok(scrubbed.indexOf(MULTI_DAY_NAME) !== -1, 'filename was redacted');
+
+    var seen = [];
+    var plusLink = 'https://vl.cat.com/downloadreport?lang=en&token=ab%2Bcd%2Fef';
+    global.fetch = function(url, opts) {
+      seen.push({ url: String(url), opts: opts });
+      var host = new URL(String(url)).hostname;
+      if (host === 'vl.cat.com') throw new Error('fetched the web app page');
+      if (seen.length === 1) return Promise.resolve(jsonResponse({ downloadUrl: S3_URL }));
+      return Promise.resolve(csvResponse('asset,hours\nEQ000001,1\n', {
         'content-type': 'text/csv',
-        'content-disposition': "attachment; filename=\"other.csv\"; filename*=UTF-8''Fleet%5FUtilization%5F27-10-2026%5F27-10-2026%5F27-10-2026.csv",
+        'content-disposition': SPACED_DISPOSITION,
       }));
     };
-    return links.fetchReportFromLink(LINK);
-  }).then(function(result) {
+    var result = await links.fetchReportFromLink(plusLink);
+    assert.strictEqual(seen.length, 2);
+    var api = new URL(seen[0].url);
+    assert.strictEqual(api.hostname, 'api.cat.com');
+    assert.strictEqual(api.pathname, '/catDigital/reportDownloads/v1/download');
+    assert.strictEqual(api.searchParams.get('source'), 'schedule');
+    assert.strictEqual(api.searchParams.get('lang'), null);
+    assert.strictEqual(api.searchParams.get('token'), 'ab+cd/ef');
+    assert.ok(seen[0].url.indexOf('token=ab%2Bcd%2Fef') !== -1);
+    assert.strictEqual(seen[0].url.indexOf('token=ab+') === -1, true);
+    assert.strictEqual(seen[0].url.indexOf('lang') === -1, true);
+    assert.strictEqual(seen[0].opts.method, 'GET');
+    assert.strictEqual(seen[0].opts.redirect, 'manual');
+    assert.strictEqual(seen[0].opts.headers.Accept, 'application/json');
+    assert.strictEqual(seen[0].opts.headers.Origin, 'https://vl.cat.com');
+    assert.strictEqual(seen[0].opts.headers.Referer, 'https://vl.cat.com/');
+    assert.ok(seen[0].opts.headers['User-Agent'].indexOf('Mozilla') !== -1);
+    assert.strictEqual(seen[0].opts.headers.Authorization, undefined);
+    assert.strictEqual(seen[1].opts.redirect, 'manual');
+    assert.strictEqual(seen[1].opts.method, 'GET');
+    assert.strictEqual(seen[1].opts.headers, undefined);
+    assert.strictEqual(new URL(seen[1].url).hostname, S3_HOST);
+    assert.strictEqual(result.filename, SPACED_NAME);
+    assert.strictEqual(result.mimeType, 'text/csv');
+    assert.strictEqual(result.finalHost, S3_HOST);
+    assert.ok(result.buffer.toString('utf8').indexOf('EQ000001') !== -1);
+    var range = utils.parseVisionLinkFilenameRange(result.filename);
+    assert.ok(range, 'spaced filename did not parse');
+    assert.strictEqual(range.start, range.end);
+    assert.strictEqual(range.start, '2026-10-27');
+    assert.strictEqual(cap.text().indexOf('ab%2B') === -1, true);
+    assert.strictEqual(cap.text().indexOf('ab+cd') === -1, true);
+    assert.ok(cap.text().indexOf('api.cat.com') !== -1);
+    assert.ok(cap.text().indexOf(S3_HOST) !== -1);
+    assert.strictEqual(cap.text().indexOf('catDigital') === -1, true);
+    assertNoSecret(cap.text());
+    console.log('✓ API then S3, token re-encoded, spaced filename is one day');
+
+    global.fetch = sequencedDownload(csvResponse('a,b\n', {
+      'content-type': 'text/csv',
+      'content-disposition': "attachment; filename=\"other.csv\"; filename*=UTF-8''Fleet%5FUtilization%5F27-10-2026%5F27-10-2026%5F27-10-2026.csv",
+    }));
+    result = await links.fetchReportFromLink(LINK);
     assert.strictEqual(result.filename, ONE_DAY_NAME);
 
-    global.fetch = function() {
+    global.fetch = sequencedDownload(csvResponse('a,b\n1,2\n', { 'content-type': 'text/csv' }));
+    result = await links.fetchReportFromLink(LINK);
+    assert.strictEqual(result.filename, 'Fleet Fuel 2026-10-28.csv');
+
+    global.fetch = function(url, opts) {
+      var host = new URL(String(url)).hostname;
+      if (host === 'api.cat.com') {
+        return Promise.resolve(jsonResponse({
+          downloadUrl: 'https://' + S3_HOST + '/',
+        }));
+      }
+      if (opts.headers) throw new Error('S3 request must not send extra headers');
       return Promise.resolve(csvResponse('a,b\n1,2\n', { 'content-type': 'text/csv' }));
     };
-    return links.fetchReportFromLink(LINK);
-  }).then(function(result) {
+    result = await links.fetchReportFromLink(LINK);
     assert.strictEqual(result.filename, null);
-    assert.strictEqual(result.buffer.toString('utf8'), 'a,b\n1,2\n');
 
-    global.fetch = function() {
-      return Promise.resolve(csvResponse('a,b\n', {
-        'content-type': 'text/csv',
-        'content-disposition': 'attachment; filename="reports/' + ONE_DAY_NAME + '"',
-      }));
-    };
-    return links.fetchReportFromLink(LINK);
-  }).then(function(result) {
-    assert.strictEqual(result.filename, ONE_DAY_NAME);
-    console.log('✓ filename, filename*, missing filename, path stripped');
+    global.fetch = sequencedDownload(csvResponse('a,b\n', {
+      'content-type': 'text/csv',
+      'content-disposition': 'attachment; filename="reports/Fleet%20Utilization%2027-10-2026%2027-10-2026%2027-10-2026.csv"',
+    }));
+    result = await links.fetchReportFromLink(LINK);
+    assert.strictEqual(result.filename, SPACED_NAME);
+
+    global.fetch = sequencedDownload(csvResponse('a,b\n', {
+      'content-type': 'text/csv',
+      'content-disposition': 'attachment; filename="100%done.csv"',
+    }));
+    result = await links.fetchReportFromLink(LINK);
+    assert.strictEqual(result.filename, '100%done.csv');
+    console.log('✓ filename*, S3 key fallback, path strip, malformed percent');
 
     var hops = 0;
-    global.fetch = function(url) {
+    global.fetch = function(url, opts) {
       hops += 1;
-      if (hops === 1) return Promise.resolve(redirectResponse('https://files.cat.com/reports/' + ONE_DAY_NAME));
-      assert.strictEqual(new URL(String(url)).hostname, 'files.cat.com');
+      var host = new URL(String(url)).hostname;
+      if (hops === 1) {
+        assert.strictEqual(host, 'api.cat.com');
+        return Promise.resolve(jsonResponse({ downloadUrl: S3_URL }));
+      }
+      if (hops === 2) {
+        assert.strictEqual(host, S3_HOST);
+        assert.strictEqual(opts.headers, undefined);
+        return Promise.resolve(redirectResponse('https://files.cat.com/reports/' + ONE_DAY_NAME));
+      }
+      assert.strictEqual(host, 'files.cat.com');
       return Promise.resolve(csvResponse('asset,hours\n', {
         'content-type': 'text/csv',
         'content-disposition': 'attachment; filename="' + ONE_DAY_NAME + '"',
       }));
     };
-    return links.fetchReportFromLink(LINK);
-  }).then(function(result) {
+    result = await links.fetchReportFromLink(LINK);
     assert.strictEqual(result.finalHost, 'files.cat.com');
     assert.strictEqual(result.filename, ONE_DAY_NAME);
-    console.log('✓ redirect to an allowed host is followed');
 
-    return expectReject(
-      (global.fetch = function() {
-        return Promise.resolve(redirectResponse('https://evil.example/report.csv'));
-      }, links.fetchReportFromLink(LINK)),
-      'redirect host not allowed'
-    );
-  }).then(function() {
-    return expectReject(
-      (global.fetch = function() {
-        return Promise.resolve(redirectResponse('https://203.0.113.10/report.csv'));
-      }, links.fetchReportFromLink(LINK)),
-      'redirect host not allowed'
-    );
-  }).then(function() {
-    return expectReject(
-      (global.fetch = function() {
-        return Promise.resolve(redirectResponse('https://localhost/report.csv'));
-      }, links.fetchReportFromLink(LINK)),
-      'redirect host not allowed'
-    );
-  }).then(function() {
-    return expectReject(
-      (global.fetch = function() {
-        return Promise.resolve(redirectResponse('http://files.cat.com/report.csv'));
-      }, links.fetchReportFromLink(LINK)),
-      'redirect was not https'
-    );
-  }).then(function() {
+    hops = 0;
+    global.fetch = function(url, opts) {
+      hops += 1;
+      if (hops === 1) {
+        return Promise.resolve(jsonResponse({
+          downloadUrl: 'https://bucket.s3.amazonaws.com/FAKEKEY/report.csv?X-Amz-Signature=FAKE',
+        }));
+      }
+      assert.strictEqual(opts.headers, undefined);
+      assert.strictEqual(new URL(String(url)).hostname, 'bucket.s3.amazonaws.com');
+      return Promise.resolve(csvResponse('a,b\n', { 'content-type': 'text/csv' }));
+    };
+    result = await links.fetchReportFromLink(LINK);
+    assert.strictEqual(result.finalHost, 'bucket.s3.amazonaws.com');
+    assert.strictEqual(result.filename, 'report.csv');
+    console.log('✓ file redirect stays on cat.com or an S3 bucket host');
+
+    global.fetch = function() {
+      return Promise.resolve(redirectResponse('https://files.cat.com/report.csv'));
+    };
+    var err = await rejected('redirect host not allowed');
+    assert.ok(err.message.indexOf('files.cat.com') !== -1);
+
+    global.fetch = function() {
+      return Promise.resolve(redirectResponse(S3_URL));
+    };
+    err = await rejected('redirect host not allowed');
+    assert.ok(err.message.indexOf(S3_HOST) !== -1);
+    assert.strictEqual(err.message.indexOf('FAKEKEY'), -1);
+
+    global.fetch = sequencedDownload(redirectResponse('https://evil.example/report.csv'));
+    err = await rejected('evil.example');
+    assert.strictEqual(err.message.indexOf('/report.csv'), -1);
+
+    global.fetch = sequencedDownload(redirectResponse('https://203.0.113.10/report.csv'));
+    await rejected('203.0.113.10');
+
+    global.fetch = sequencedDownload(redirectResponse('https://localhost/report.csv'));
+    await rejected('localhost');
+
+    global.fetch = sequencedDownload(redirectResponse('http://files.cat.com/report.csv'));
+    await rejected('redirect was not https');
+
+    global.fetch = sequencedDownload(redirectResponse('https://data.caterpillar.com/report.csv'));
+    await rejected('data.caterpillar.com');
+
     var n = 0;
     global.fetch = function() {
       n += 1;
       if (n > 4) throw new Error('followed a fourth redirect');
-      return Promise.resolve(redirectResponse('https://downloads.cat.com/step' + n));
+      return Promise.resolve(redirectResponse('https://api.cat.com/again'));
     };
-    return expectReject(links.fetchReportFromLink(LINK), 'too many redirects').then(function() {
-      assert.strictEqual(n, 4);
-    });
-  }).then(function() {
-    var step = 0;
-    global.fetch = function() {
-      step += 1;
-      if (step === 1) return Promise.resolve(redirectResponse('https://data.caterpillar.com/report.csv'));
-      return Promise.resolve(csvResponse('a,b\n', { 'content-type': 'text/csv' }));
-    };
-    return links.fetchReportFromLink(LINK);
-  }).then(function(result) {
-    assert.strictEqual(result.finalHost, 'data.caterpillar.com');
-    var step = 0;
-    global.fetch = function() {
-      step += 1;
-      if (step === 1) return Promise.resolve(redirectResponse('https://bucket.s3.amazonaws.com/report.csv'));
-      return Promise.resolve(csvResponse('a,b\n', { 'content-type': 'text/csv' }));
-    };
-    return links.fetchReportFromLink(LINK);
-  }).then(function(result) {
-    assert.strictEqual(result.finalHost, 'bucket.s3.amazonaws.com');
-    console.log('✓ refused evil, IP, localhost, http, and a 4th redirect');
+    await rejected('too many redirects');
+    assert.strictEqual(n, 4);
+    console.log('✓ refused API redirects off api.cat.com, bad file redirects, and a 4th hop');
+
+    function apiReturning(downloadUrl) {
+      var calls = 0;
+      global.fetch = function() {
+        calls += 1;
+        if (calls > 1) throw new Error('file fetch should not run');
+        return Promise.resolve(jsonResponse({ downloadUrl: downloadUrl }));
+      };
+    }
+
+    apiReturning('http://' + S3_HOST + '/file.csv?X-Amz-Signature=FAKE');
+    err = await rejected('not https');
+    assert.ok(err.message.indexOf(S3_HOST) !== -1);
+    assert.strictEqual(err.message.indexOf('/file.csv'), -1);
+
+    apiReturning('https://evil.example/file.csv');
+    err = await rejected('evil.example');
+    assert.strictEqual(err.message.indexOf('/file.csv'), -1);
+
+    apiReturning('https://ec2.amazonaws.com/file.csv');
+    err = await rejected('ec2.amazonaws.com');
+    assert.strictEqual(err.message.indexOf('/file.csv'), -1);
+
+    apiReturning('https://203.0.113.50/secret.csv');
+    err = await rejected('203.0.113.50');
+    assert.strictEqual(err.message.indexOf('secret.csv'), -1);
+
+    apiReturning('https://user:pass@' + S3_HOST + '/file.csv');
+    err = await rejected(S3_HOST);
+    assert.strictEqual(err.message.indexOf('user'), -1);
+    assert.strictEqual(err.message.indexOf('pass'), -1);
+
+    apiReturning('https://' + S3_HOST + ':8443/file.csv');
+    err = await rejected(S3_HOST);
+    assert.strictEqual(err.message.indexOf('8443'), -1);
 
     global.fetch = function() {
-      return Promise.resolve(csvResponse('<html>login</html>', {
-        'content-type': 'text/html; charset=utf-8',
+      return Promise.resolve(jsonResponse({
+        message: 'schedule denied',
+        code: 'DENIED',
+        downloadUrl: S3_URL,
+      }, 403));
+    };
+    err = await rejected('HTTP 403');
+    assert.ok(err.message.indexOf('application/json') !== -1);
+    assert.ok(err.message.indexOf('message') !== -1);
+    assert.ok(err.message.indexOf('code') !== -1);
+    assert.ok(err.message.indexOf('downloadUrl') !== -1);
+    assert.ok(err.message.indexOf('schedule denied') !== -1);
+    assert.strictEqual(err.message.indexOf('DENIED'), -1);
+
+    global.fetch = function() {
+      return Promise.resolve(new Response('<html>NOTAREALPAGE</html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
       }));
     };
-    return expectReject(links.fetchReportFromLink(LINK), 'HTML page');
-  }).then(function() {
+    err = await rejected('HTTP 200');
+    assert.ok(err.message.indexOf('text/html') !== -1);
+    assert.ok(err.message.indexOf('not JSON') !== -1);
+    assert.strictEqual(err.message.indexOf('NOTAREALPAGE'), -1);
+
     global.fetch = function() {
-      return Promise.resolve(csvResponse('<!DOCTYPE html><html></html>', {
-        'content-type': 'text/plain',
-      }));
+      return Promise.resolve(jsonResponse({ reportName: 'Utilization Summary', ok: true }));
     };
-    return expectReject(links.fetchReportFromLink(LINK), 'HTML page');
-  }).then(function() {
+    err = await rejected('no downloadUrl');
+    assert.ok(err.message.indexOf('reportName') !== -1);
+    assert.ok(err.message.indexOf('ok') !== -1);
+    assert.strictEqual(err.message.indexOf('Utilization'), -1);
+    assert.strictEqual(err.message.indexOf('Summary'), -1);
+
     global.fetch = function() {
-      return Promise.resolve(csvResponse('x', {
-        'content-type': 'text/csv',
-        'content-length': String(links.MAX_BYTES + 1),
-      }));
+      return Promise.resolve(jsonResponse({
+        message: 'expired https://evil.example/secret?token=' + TOKEN + '&X-Amz-Signature=FAKESIG',
+      }, 401));
     };
-    return expectReject(links.fetchReportFromLink(LINK), 'exceeded 5 MB');
-  }).then(function() {
-    var { ReadableStream } = require('stream/web');
-    var big = new Uint8Array(links.MAX_BYTES + 1);
-    big.fill(97);
+    err = await rejected('HTTP 401');
+    assert.ok(err.message.indexOf('expired') !== -1);
+    assert.ok(err.message.indexOf('[link]') !== -1);
+
     global.fetch = function() {
-      var stream = new ReadableStream({
-        start: function(controller) {
-          controller.enqueue(big);
-          controller.close();
+      return Promise.resolve(jsonResponse({ error: 'C'.repeat(90) }, 400));
+    };
+    err = await rejected('HTTP 400');
+    assert.strictEqual(err.message.indexOf('C'.repeat(64)), -1);
+    assert.ok(err.message.indexOf('[redacted]') !== -1);
+
+    global.fetch = function() {
+      return Promise.resolve(new Response('{}', {
+        status: 200,
+        headers: {
+          'content-type': 'application/json',
+          'content-length': String(links.API_MAX_BYTES + 1),
         },
-      });
-      return Promise.resolve(new Response(stream, {
+      }));
+    };
+    err = await rejected('64 KB');
+    assert.ok(err.message.indexOf('HTTP 200') !== -1);
+
+    global.fetch = sequencedDownload(csvResponse('<html>NOTAREALPAGE</html>', {
+      'content-type': 'text/html; charset=utf-8',
+    }));
+    err = await rejected('HTML page');
+    assert.strictEqual(err.message.indexOf('NOTAREALPAGE'), -1);
+
+    global.fetch = sequencedDownload(csvResponse('<!DOCTYPE html><html></html>', {
+      'content-type': 'text/plain',
+    }));
+    await rejected('HTML page');
+
+    global.fetch = sequencedDownload(csvResponse('x', {
+      'content-type': 'text/csv',
+      'content-length': String(links.MAX_BYTES + 1),
+    }));
+    await rejected('exceeded 5 MB');
+
+    global.fetch = function(url) {
+      var host = new URL(String(url)).hostname;
+      if (host === 'api.cat.com') return Promise.resolve(jsonResponse({ downloadUrl: S3_URL }));
+      return Promise.resolve(new Response(bigStream(links.MAX_BYTES + 1), {
         status: 200,
         headers: { 'content-type': 'text/csv' },
       }));
     };
-    return expectReject(links.fetchReportFromLink(LINK), 'exceeded 5 MB');
-  }).then(function() {
-    global.fetch = function() {
-      return Promise.resolve(csvResponse('nope', { 'content-type': 'text/plain' }, 502));
-    };
-    return expectReject(links.fetchReportFromLink(LINK), 'HTTP 502');
-  }).then(function() {
+    await rejected('exceeded 5 MB');
+
+    global.fetch = sequencedDownload(csvResponse('nope', { 'content-type': 'text/plain' }, 403));
+    await rejected('HTTP 403');
+
+    global.fetch = function(url, opts) { return hang(opts); };
+    await rejected('timed out', { timeoutMs: 40 });
+
+    var step = 0;
     global.fetch = function(url, opts) {
-      return new Promise(function(resolve, reject) {
-        var signal = opts && opts.signal;
-        function abort() {
-          var err = new Error('The operation was aborted');
-          err.name = 'AbortError';
-          reject(err);
-        }
-        if (signal && signal.aborted) return abort();
-        if (signal) signal.addEventListener('abort', abort);
-      });
+      step += 1;
+      if (step === 1) return Promise.resolve(jsonResponse({ downloadUrl: S3_URL }));
+      return hang(opts);
     };
-    return expectReject(links.fetchReportFromLink(LINK, { timeoutMs: 30 }), 'timed out');
-  }).then(function() {
-    global.fetch = function() {
-      return Promise.resolve(csvResponse('PK', {
-        'content-type': 'application/octet-stream',
-        'content-disposition': 'attachment; filename="Fleet_Fuel_2026-10-28.xlsx"',
-      }));
-    };
-    return links.fetchReportFromLink(LINK).then(function() {
+    await rejected('timed out', { timeoutMs: 40 });
+
+    global.fetch = sequencedDownload(csvResponse('PK', {
+      'content-type': 'application/octet-stream',
+      'content-disposition': 'attachment; filename="Fleet_Fuel_2026-10-28.xlsx"',
+    }));
+    try {
+      await links.fetchReportFromLink(LINK);
       throw new Error('xlsx should have failed');
-    }, function(err) {
-      assert.strictEqual(err.message, 'link served an Excel file; only CSV is supported for link downloads');
-      assert.strictEqual(err.reportFilename, 'Fleet_Fuel_2026-10-28.xlsx');
-      assertNoSecret(cap.text());
-      console.log('✓ html, size, status, timeout, and xlsx rejected');
-    });
-  }).then(function() {
+    } catch (xlsxErr) {
+      if (xlsxErr.message === 'xlsx should have failed') throw xlsxErr;
+      assert.strictEqual(
+        xlsxErr.message,
+        'link served an Excel file; only CSV is supported for link downloads'
+      );
+      assert.strictEqual(xlsxErr.reportFilename, 'Fleet_Fuel_2026-10-28.xlsx');
+      assertNoSecret(xlsxErr.message);
+    }
+
+    assert.strictEqual(cap.text().indexOf('catDigital') === -1, true);
+    assertNoSecret(cap.text());
+    console.log('✓ html, size, status, timeout, and xlsx rejected');
+  } finally {
     cap.restore();
     global.fetch = original;
-  }, function(err) {
-    cap.restore();
-    global.fetch = original;
-    throw err;
-  });
+  }
 }
 
 function createInboundMock() {
@@ -438,14 +651,10 @@ function testHandler() {
   }
 
   var mock = createInboundMock();
-  installFetch(function(url, opts) {
-    assert.strictEqual(opts.redirect, 'manual');
-    assert.strictEqual(new URL(String(url)).hostname, 'vl.cat.com');
-    return Promise.resolve(csvResponse(UTIL_CSV, {
-      'content-type': 'text/csv',
-      'content-disposition': 'attachment; filename="' + ONE_DAY_NAME + '"',
-    }));
-  });
+  installFetch(sequencedDownload(csvResponse(UTIL_CSV, {
+    'content-type': 'text/csv',
+    'content-disposition': 'attachment; filename="' + ONE_DAY_NAME + '"',
+  })));
 
   return inbound.processInboundEmail(mock.supabase, mailInput()).then(function(result) {
     assert.strictEqual(result.ok, true);
@@ -503,12 +712,10 @@ function testHandler() {
 
     alerts.length = 0;
     multi = createInboundMock();
-    installFetch(function() {
-      return Promise.resolve(csvResponse(UTIL_CSV, {
-        'content-type': 'text/csv',
-        'content-disposition': 'attachment; filename="' + MULTI_DAY_NAME + '"',
-      }));
-    });
+    installFetch(sequencedDownload(csvResponse(UTIL_CSV, {
+      'content-type': 'text/csv',
+      'content-disposition': 'attachment; filename="' + MULTI_DAY_NAME + '"',
+    })));
     return inbound.processInboundEmail(multi.supabase, mailInput());
   }).then(function() {
     assert.strictEqual(multi.state.inserts.length, 1);
