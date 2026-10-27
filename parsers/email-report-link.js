@@ -6,7 +6,13 @@
  */
 
 var MAX_REDIRECTS = 3;
-var TIMEOUT_MS = 20000;
+var TIMEOUT_MS = 45000;
+var API_RETRY_DELAY_MS = 2000;
+// Leave this much time after the first POST and the retry pause so a hung
+// call can be tried once more and the file can still be fetched. A fast
+// failure (5xx or a network error) does not wait out this reserve: the
+// second attempt gets whatever budget remains.
+var API_RETRY_TAIL_MS = 5000;
 var MAX_BYTES = 5 * 1024 * 1024;
 var API_MAX_BYTES = 64 * 1024;
 var API_URL_PREFIX = 'https://api.cat.com/catDigital/reportDownloads/v1/download?token=';
@@ -410,14 +416,121 @@ async function fetchWithRedirects(startUrl, options) {
   }
 }
 
+function sleep(ms, signal) {
+  return new Promise(function(resolve, reject) {
+    function abort() {
+      cleanup();
+      var err = new Error('The operation was aborted');
+      err.name = 'AbortError';
+      reject(err);
+    }
+    var timer = setTimeout(function() {
+      cleanup();
+      resolve();
+    }, ms);
+    function cleanup() {
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', abort);
+    }
+    if (signal && signal.aborted) return abort();
+    if (signal) signal.addEventListener('abort', abort);
+  });
+}
+
+function isNetworkError(err) {
+  if (!err || err.name === 'AbortError') return false;
+  return !Object.prototype.hasOwnProperty.call(err, 'reportFilename');
+}
+
+function openAttempt(parent, limitMs) {
+  var child = new AbortController();
+  var timer = setTimeout(function() { child.abort(); }, Math.max(0, limitMs));
+  function onParent() { child.abort(); }
+  if (parent.signal.aborted) child.abort();
+  else parent.signal.addEventListener('abort', onParent);
+  return {
+    signal: child.signal,
+    clear: function() {
+      clearTimeout(timer);
+      parent.signal.removeEventListener('abort', onParent);
+    },
+  };
+}
+
+function firstApiAttemptLimit(timeoutMs, retryDelayMs, deadline) {
+  var left = deadline - Date.now();
+  if (left <= 0) return 0;
+  var tail = Math.min(API_RETRY_TAIL_MS, Math.floor(timeoutMs / 5));
+  var reserve = retryDelayMs + tail;
+  if (left <= reserve) return left;
+  return left - reserve;
+}
+
+async function requestReportApi(apiUrl, doFetch, signal) {
+  var apiCall = await fetchWithRedirects(apiUrl, {
+    doFetch: doFetch,
+    signal: signal,
+    label: 'api',
+    method: 'POST',
+    body: '',
+    followRedirects: false,
+    allowHost: function(host) { return hostOnly(host) === 'api.cat.com'; },
+    headers: {
+      Accept: 'application/json, text/plain, */*',
+      Origin: 'https://vl.cat.com',
+      Referer: 'https://vl.cat.com/',
+      'User-Agent': BROWSER_UA,
+      'Content-Length': '0',
+    },
+  });
+
+  var apiType = mediaTypeOf(apiCall.response);
+  var apiStatus = apiCall.response.status;
+  var apiBody;
+  try {
+    apiBody = await readLimitedBody(
+      apiCall.response,
+      API_MAX_BYTES,
+      'report download API body exceeded 64 KB; HTTP ' + apiStatus + ' Content-Type ' + (apiType || '(none)')
+    );
+  } catch (err) {
+    if (apiStatus >= 500 && apiStatus <= 599 && err && Object.prototype.hasOwnProperty.call(err, 'reportFilename')) {
+      err.retryable = true;
+    }
+    throw err;
+  }
+
+  if (apiStatus >= 500 && apiStatus <= 599) {
+    var failure = linkError(describeApiFailure(apiStatus, apiType, apiBody, apiCall.response));
+    failure.retryable = true;
+    throw failure;
+  }
+
+  var apiFailed = apiStatus !== 200 || apiType === 'text/html' || bodyLooksLikeHtml(apiBody);
+  var payload = null;
+  if (!apiFailed) {
+    try { payload = JSON.parse(apiBody.toString('utf8')); } catch (err) { payload = null; }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
+        typeof payload.downloadUrl !== 'string' || !payload.downloadUrl.trim()) {
+      apiFailed = true;
+    }
+  }
+  if (apiFailed) throw linkError(describeApiFailure(apiStatus, apiType, apiBody, apiCall.response));
+  return payload;
+}
+
 /**
  * Turn a vl.cat.com/downloadreport link into a CSV. The page itself is not
  * the file: POST to api.cat.com for downloadUrl, then GET that S3 object.
+ * The whole call, including one API retry, stays inside the 45s budget.
  */
 async function fetchReportFromLink(url, options) {
   var timeoutMs = options && options.timeoutMs ? options.timeoutMs : TIMEOUT_MS;
+  var retryDelayMs = API_RETRY_DELAY_MS;
+  if (options && options.retryDelayMs != null) retryDelayMs = options.retryDelayMs;
   var doFetch = (options && options.fetch) || global.fetch;
   var controller = new AbortController();
+  var deadline = Date.now() + timeoutMs;
   var timer = setTimeout(function() { controller.abort(); }, timeoutMs);
   try {
     var page = acceptReportLink(String(url));
@@ -425,41 +538,32 @@ async function fetchReportFromLink(url, options) {
     var token = page.searchParams.get('token');
     var apiUrl = API_URL_PREFIX + encodeURIComponent(token) + '&source=schedule';
 
-    var apiCall = await fetchWithRedirects(apiUrl, {
-      doFetch: doFetch,
-      signal: controller.signal,
-      label: 'api',
-      method: 'POST',
-      body: '',
-      followRedirects: false,
-      allowHost: function(host) { return hostOnly(host) === 'api.cat.com'; },
-      headers: {
-        Accept: 'application/json, text/plain, */*',
-        Origin: 'https://vl.cat.com',
-        Referer: 'https://vl.cat.com/',
-        'User-Agent': BROWSER_UA,
-        'Content-Length': '0',
-      },
-    });
-
-    var apiType = mediaTypeOf(apiCall.response);
-    var apiStatus = apiCall.response.status;
-    var apiBody = await readLimitedBody(
-      apiCall.response,
-      API_MAX_BYTES,
-      'report download API body exceeded 64 KB; HTTP ' + apiStatus + ' Content-Type ' + (apiType || '(none)')
-    );
-
-    var apiFailed = apiStatus !== 200 || apiType === 'text/html' || bodyLooksLikeHtml(apiBody);
     var payload = null;
-    if (!apiFailed) {
-      try { payload = JSON.parse(apiBody.toString('utf8')); } catch (err) { payload = null; }
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
-          typeof payload.downloadUrl !== 'string' || !payload.downloadUrl.trim()) {
-        apiFailed = true;
+    var attempt = 0;
+    while (attempt < 2) {
+      attempt += 1;
+      var limit = attempt === 1
+        ? firstApiAttemptLimit(timeoutMs, retryDelayMs, deadline)
+        : deadline - Date.now();
+      if (limit <= 0 || controller.signal.aborted) throw linkError('download timed out');
+      var attemptCtrl = openAttempt(controller, limit);
+      try {
+        payload = await requestReportApi(apiUrl, doFetch, attemptCtrl.signal);
+        attemptCtrl.clear();
+        break;
+      } catch (err) {
+        attemptCtrl.clear();
+        var retryable = !!(err && (err.retryable || err.name === 'AbortError' || isNetworkError(err)));
+        var timeLeft = deadline - Date.now();
+        if (attempt === 1 && retryable && timeLeft > retryDelayMs && !controller.signal.aborted) {
+          console.log('visionlink-link: retry api host api.cat.com');
+          await sleep(retryDelayMs, controller.signal);
+          continue;
+        }
+        if (err && err.name === 'AbortError') throw linkError('download timed out');
+        throw err;
       }
     }
-    if (apiFailed) throw linkError(describeApiFailure(apiStatus, apiType, apiBody, apiCall.response));
 
     var download = validateDownloadUrl(payload.downloadUrl.trim());
     var fileCall = await fetchWithRedirects(download.href, {
@@ -517,4 +621,6 @@ module.exports = {
   isS3Host: isS3Host,
   MAX_BYTES: MAX_BYTES,
   API_MAX_BYTES: API_MAX_BYTES,
+  TIMEOUT_MS: TIMEOUT_MS,
+  API_RETRY_DELAY_MS: API_RETRY_DELAY_MS,
 };

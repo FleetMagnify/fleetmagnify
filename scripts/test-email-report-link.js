@@ -585,16 +585,161 @@ async function testFilenameAndFetch() {
     global.fetch = sequencedDownload(csvResponse('nope', { 'content-type': 'text/plain' }, 403));
     await rejected('HTTP 403');
 
-    global.fetch = function(url, opts) { return hang(opts); };
-    await rejected('timed out', { timeoutMs: 40 });
-
-    var step = 0;
+    var apiHangs = 0;
     global.fetch = function(url, opts) {
-      step += 1;
-      if (step === 1) return Promise.resolve(jsonResponse({ downloadUrl: S3_URL }));
+      apiHangs += 1;
+      return hang(opts);
+    };
+    var deadlineStart = Date.now();
+    await rejected('timed out', { timeoutMs: 40 });
+    assert.strictEqual(apiHangs, 1);
+    assert.ok(Date.now() - deadlineStart < 1000, 'deadline timeout waited to retry');
+
+    var fileHangs = 0;
+    global.fetch = function(url, opts) {
+      fileHangs += 1;
+      var host = new URL(String(url)).hostname;
+      if (host === 'api.cat.com') return Promise.resolve(jsonResponse({ downloadUrl: S3_URL }));
       return hang(opts);
     };
     await rejected('timed out', { timeoutMs: 40 });
+    assert.strictEqual(fileHangs, 2);
+
+    assert.strictEqual(links.TIMEOUT_MS, 45000);
+    assert.strictEqual(links.API_RETRY_DELAY_MS, 2000);
+
+    var retryCalls = 0;
+    var released = 0;
+    var retryStarted = Date.now();
+    global.fetch = function(url, opts) {
+      retryCalls += 1;
+      var host = new URL(String(url)).hostname;
+      if (host === 'api.cat.com') {
+        assert.strictEqual(opts.method, 'POST');
+        assert.strictEqual(opts.body, '');
+        if (retryCalls === 1) {
+          return hang(opts).then(function() {}, function(hangErr) {
+            released = Date.now();
+            throw hangErr;
+          });
+        }
+        assert.ok(released > 0, 'second POST ran before the first timed out');
+        assert.ok(Date.now() - released >= 25, 'retried without the pause');
+        return Promise.resolve(jsonResponse({ downloadUrl: S3_URL }));
+      }
+      assert.strictEqual(opts.method, 'GET');
+      assert.ok(!opts.headers || !opts.headers.Origin);
+      assert.ok(!opts.headers || !opts.headers.Referer);
+      return Promise.resolve(csvResponse('a,b\n', {
+        'content-type': 'text/csv',
+        'content-disposition': 'attachment; filename="' + ONE_DAY_NAME + '"',
+      }));
+    };
+    var retried = await links.fetchReportFromLink(LINK, { timeoutMs: 1500, retryDelayMs: 40 });
+    assert.strictEqual(retried.filename, ONE_DAY_NAME);
+    assert.strictEqual(retryCalls, 3);
+    assert.ok(Date.now() - retryStarted < 1500, 'used the whole budget instead of retrying the POST');
+
+    var bothHung = 0;
+    global.fetch = function(url, opts) {
+      bothHung += 1;
+      assert.strictEqual(new URL(String(url)).hostname, 'api.cat.com');
+      return hang(opts);
+    };
+    await rejected('timed out', { timeoutMs: 400, retryDelayMs: 30 });
+    assert.strictEqual(bothHung, 2);
+
+    function apiThenFile(onApi) {
+      var n = 0;
+      global.fetch = function(url, opts) {
+        n += 1;
+        var host = new URL(String(url)).hostname;
+        if (host === 'api.cat.com') {
+          assert.strictEqual(opts.method, 'POST');
+          assert.strictEqual(opts.body, '');
+          return onApi(n, opts);
+        }
+        assert.strictEqual(opts.method, 'GET');
+        assert.ok(!opts.headers || !opts.headers.Origin);
+        return Promise.resolve(csvResponse('a,b\n', { 'content-type': 'text/csv' }));
+      };
+      return function calls() { return n; };
+    }
+
+    var calls = apiThenFile(function(n) {
+      if (n === 1) return Promise.resolve(jsonResponse({ message: 'busy' }, 503));
+      return Promise.resolve(jsonResponse({ downloadUrl: S3_URL }));
+    });
+    var again = await links.fetchReportFromLink(LINK, { retryDelayMs: 20 });
+    assert.strictEqual(again.buffer.toString('utf8'), 'a,b\n');
+    assert.strictEqual(calls(), 3);
+
+    calls = apiThenFile(function(n) {
+      if (n === 1) {
+        var net = new TypeError('fetch failed');
+        return Promise.reject(net);
+      }
+      return Promise.resolve(jsonResponse({ downloadUrl: S3_URL }));
+    });
+    await links.fetchReportFromLink(LINK, { retryDelayMs: 20 });
+    assert.strictEqual(calls(), 3);
+
+    calls = apiThenFile(function() {
+      return Promise.resolve(jsonResponse({
+        message: 'down https://evil.example/x?token=' + TOKEN + '&X-Amz-Signature=FAKE',
+        downloadUrl: S3_URL,
+      }, 503));
+    });
+    err = await rejected('HTTP 503', { retryDelayMs: 20 });
+    assert.strictEqual(calls(), 2);
+    assert.ok(err.message.indexOf('[link]') !== -1);
+    assertNoSecret(err.message);
+
+    calls = apiThenFile(function() {
+      return Promise.resolve(jsonResponse({ message: 'nope' }, 403));
+    });
+    await rejected('HTTP 403', { retryDelayMs: 20 });
+    assert.strictEqual(calls(), 1);
+
+    calls = apiThenFile(function() {
+      return Promise.resolve(new Response('<html><title>Not a file</title><body>' + S3_URL + '</body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html', server: 'edge', 'x-cache': 'Miss' },
+      }));
+    });
+    err = await rejected('Not a file', { retryDelayMs: 20 });
+    assert.strictEqual(calls(), 1);
+    assertNoSecret(err.message);
+
+    calls = apiThenFile(function() {
+      return Promise.resolve(jsonResponse({ reportName: 'Utilization Summary', ok: true }));
+    });
+    await rejected('no downloadUrl', { retryDelayMs: 20 });
+    assert.strictEqual(calls(), 1);
+
+    var s3Status = 0;
+    global.fetch = function(url, opts) {
+      s3Status += 1;
+      var host = new URL(String(url)).hostname;
+      if (host === 'api.cat.com') return Promise.resolve(jsonResponse({ downloadUrl: S3_URL }));
+      assert.strictEqual(opts.method, 'GET');
+      return Promise.resolve(csvResponse('nope', { 'content-type': 'text/plain' }, 503));
+    };
+    await rejected('HTTP 503', { retryDelayMs: 20 });
+    assert.strictEqual(s3Status, 2);
+
+    var s3Net = 0;
+    global.fetch = function(url) {
+      s3Net += 1;
+      var host = new URL(String(url)).hostname;
+      if (host === 'api.cat.com') return Promise.resolve(jsonResponse({ downloadUrl: S3_URL }));
+      return Promise.reject(new TypeError('https://' + S3_HOST + '/FAKEKEY/file.csv?X-Amz-Signature=FAKE failed'));
+    };
+    err = await rejected('[link]', { retryDelayMs: 20 });
+    assert.strictEqual(s3Net, 2);
+    assertNoSecret(err.message);
+    assertNoSecret(cap.text());
+    console.log('✓ API POST retries once inside the 45s budget; S3 is not retried');
 
     global.fetch = sequencedDownload(csvResponse('PK', {
       'content-type': 'application/octet-stream',
