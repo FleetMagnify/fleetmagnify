@@ -12,6 +12,7 @@ const { isMobilCsv, parseMobilReport } = require('../parsers/mobil');
 const { isNavmanMileageCsv, parseNavmanMileageReport } = require('../parsers/navman-mileage');
 const { isNavmanIdleCsv, parseNavmanIdleReport } = require('../parsers/navman-idle');
 const { isVisionLinkCsv, parseVisionLinkReport } = require('../parsers/visionlink');
+const { isVisionLinkFuelCsv, parseVisionLinkFuelReport } = require('../parsers/visionlink-fuel');
 const { isEroadCsv, parseEroadReport } = require('../parsers/eroad');
 
 function classifyUnknownCsv(rawCsv) {
@@ -513,12 +514,43 @@ module.exports = async function handler(req, res) {
             userResult.data.user_id
           );
         }
+      } else if (isVisionLinkFuelCsv(rawCsv)) {
+        try {
+          var visionFuelResult = await parseVisionLinkFuelReport(supabase, {
+            userId: userResult.data.user_id,
+            importId: importId,
+            rawCsv: rawCsv,
+            filename: attachment.filename || null,
+            receivedAt: receivedAt,
+          });
+          console.log(
+            'email-inbound: VisionLink Fleet Fuel parse complete',
+            attachment.filename,
+            visionFuelResult.recordsUpserted + ' records,',
+            visionFuelResult.skippedNoSplit + ' without fuel split skipped,',
+            visionFuelResult.unmatched + ' unmatched,',
+            'date=' + visionFuelResult.recordDate
+          );
+        } catch (visionFuelErr) {
+          console.error(
+            'email-inbound: VisionLink Fleet Fuel parse failed',
+            attachment.filename,
+            visionFuelErr.message
+          );
+          await sendFailureAlert(
+            attachment.filename,
+            visionFuelErr.message,
+            userResult.data.user_id
+          );
+        }
       } else if (isVisionLinkCsv(rawCsv)) {
         try {
           var visionResult = await parseVisionLinkReport(supabase, {
             userId: userResult.data.user_id,
             importId: importId,
             rawCsv: rawCsv,
+            filename: attachment.filename || null,
+            receivedAt: receivedAt,
           });
           console.log(
             'email-inbound: VisionLink parse complete',

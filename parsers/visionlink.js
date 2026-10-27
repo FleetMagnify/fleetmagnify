@@ -16,6 +16,15 @@
  *   data_quality_notes ← Callouts (OEM data-quality warnings)
  *
  * Overwrites assets.current_hours from Hour Meter (cumulative, not a delta).
+ *
+ * record_date is one calendar day. A Fleet_Utilization filename that names
+ * a single day is used for every row. Otherwise the date is taken from
+ * "Latest Utilization Report" / "Hour Meter Last Reported Time", which are
+ * UTC instants, converted into the row's IANA time zone. Those strings are
+ * not already New Zealand local dates.
+ *
+ * idle_fuel_litres and working_fuel_litres are owned by the Fleet Fuel
+ * parser. This upsert omits them so a merge leaves them untouched.
  */
 
 const {
@@ -24,6 +33,9 @@ const {
   parseNumeric,
   updateImportStatus,
   detectAssetType,
+  parseVisionLinkFilenameRange,
+  utcTimestampToLocalDate,
+  visionLinkOneDayMessage,
 } = require('./parser-utils');
 
 // Distinctive VisionLink utilisation-report columns. Extra columns may appear;
@@ -56,12 +68,16 @@ function isVisionLinkCsv(rawCsv) {
 }
 
 /**
- * Parse a VisionLink report date into YYYY-MM-DD.
+ * Extract a calendar date (YYYY-MM-DD) from a VisionLink date string that
+ * is not a UTC instant: M/D/YYYY, D/M/YYYY, or a date-only token.
  *
- * VisionLink exports always include explicit NZ timezone metadata
- * (+12:00 / Pacific/Auckland / NZT). The calendar date written in
- * "Latest Utilization Report" / "Hour Meter Last Reported Time" is already
- * the NZ local date — do NOT apply any UTC day-shift.
+ * Do not use this for "Latest Utilization Report" or "Hour Meter Last
+ * Reported Time" when they are ISO instants. Those columns are true UTC
+ * timestamps (they end in Z, or carry an explicit offset). The calendar
+ * date written on a Z string is the UTC date and can be one day earlier
+ * than the New Zealand date. Convert those with utcTimestampToLocalDate
+ * and the row's Time Zone column. This helper only reads the date token
+ * that is already written in the string; it does not shift time zones.
  */
 function parseVisionLinkDate(dateStr) {
   var raw = String(dateStr || '').trim();
@@ -176,11 +192,30 @@ function isEmptyActivityRow(row) {
   );
 }
 
+function isUtcInstant(value) {
+  return /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(String(value || '').trim());
+}
+
+/**
+ * Fallback record_date when the filename does not name a single day.
+ * ISO instants are converted into the row's Time Zone (default
+ * Pacific/Auckland). Non-instant strings (US M/D/YYYY exports) keep the
+ * calendar date written in the cell.
+ */
 function rowRecordDate(row) {
-  return (
-    parseVisionLinkDate(row['Latest Utilization Report']) ||
-    parseVisionLinkDate(row['Hour Meter Last Reported Time'])
-  );
+  var zone = row['Time Zone'];
+  var fields = ['Latest Utilization Report', 'Hour Meter Last Reported Time'];
+  for (var i = 0; i < fields.length; i++) {
+    var raw = String(row[fields[i]] || '').trim();
+    if (!raw || /^null$/i.test(raw)) continue;
+    if (isUtcInstant(raw)) {
+      var local = utcTimestampToLocalDate(raw, zone);
+      if (local) return local;
+    }
+    var parsed = parseVisionLinkDate(raw);
+    if (parsed) return parsed;
+  }
+  return null;
 }
 
 async function loadAssetMaps(supabase, userId) {
@@ -233,8 +268,25 @@ async function parseVisionLinkReport(supabase, options) {
   var userId = options.userId;
   var importId = options.importId;
   var rawCsv = options.rawCsv;
+  var filename = options.filename;
+  var receivedAt = options.receivedAt;
 
   try {
+    var fileRange = parseVisionLinkFilenameRange(filename, receivedAt);
+    var forcedDate = null;
+    if (fileRange) {
+      if (fileRange.start !== fileRange.end) {
+        throw new Error(visionLinkOneDayMessage(fileRange.start, fileRange.end));
+      }
+      forcedDate = fileRange.start;
+    } else {
+      console.warn(
+        'visionlink: fallback record_date — filename had no usable one-day range' +
+        (filename ? ' (' + filename + ')' : ' (no filename)') +
+        '; using Latest Utilization Report / Hour Meter Last Reported Time converted to the row Time Zone, not the UTC calendar date'
+      );
+    }
+
     var rows = parseVisionLinkRows(rawCsv);
     if (rows.length === 0) throw new Error('No VisionLink data rows found');
 
@@ -255,7 +307,7 @@ async function parseVisionLinkReport(supabase, options) {
         return;
       }
 
-      var dateStr = rowRecordDate(row);
+      var dateStr = forcedDate || rowRecordDate(row);
       if (!dateStr) {
         skippedNoDate++;
         console.warn(
@@ -300,6 +352,12 @@ async function parseVisionLinkReport(supabase, options) {
 
       if (callouts) calloutsLogged++;
 
+      // Omit idle_fuel_litres and working_fuel_litres. supabase-js
+      // (@supabase/postgrest-js 1.19.2) bulk-upserts with `columns` set to
+      // the union of Object.keys and posts the objects unchanged. A key
+      // that is absent is not updated on conflict. Setting either fuel
+      // column to null would put it in `columns` and wipe the Fleet Fuel
+      // parser's values.
       records.push({
         user_id: userId,
         asset_id: Number(matched.asset.id),
@@ -386,5 +444,6 @@ module.exports = {
   extractBracketAssetId: extractBracketAssetId,
   isEmptyActivityRow: isEmptyActivityRow,
   matchAsset: matchAsset,
+  loadAssetMaps: loadAssetMaps,
   VISIONLINK_SIGNATURE: VISIONLINK_SIGNATURE,
 };
