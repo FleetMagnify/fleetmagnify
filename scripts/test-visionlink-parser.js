@@ -147,6 +147,8 @@ function testEndToEndMock() {
           var chain = {
             eq: function() { return chain; },
             in: function() { return chain; },
+            order: function() { return chain; },
+            limit: function() { return chain; },
             then: function(resolve) {
               resolve({
                 data: table === 'assets' ? ASSETS : [],
@@ -342,14 +344,59 @@ function createMock(assets, options) {
   function mockFrom(table) {
     return {
       select: function() {
+        var filters = [];
+        var orderBy = null;
+        var limitN = null;
         var chain = {
-          eq: function() { return chain; },
-          in: function() { return chain; },
+          eq: function(col, val) {
+            filters.push({ op: 'eq', col: col, val: val });
+            return chain;
+          },
+          in: function(col, val) {
+            filters.push({ op: 'in', col: col, val: val });
+            return chain;
+          },
+          order: function(col, opts) {
+            orderBy = { col: col, ascending: !!(opts && opts.ascending) };
+            return chain;
+          },
+          limit: function(n) {
+            limitN = n;
+            return chain;
+          },
           then: function(resolve) {
             var data = [];
             if (table === 'assets') data = assets;
             else if (table === 'ignored_assets') data = ignored;
-            else if (table === 'telematics_records') data = telematics;
+            else if (table === 'telematics_records') {
+              data = telematics.filter(function(row) {
+                for (var f = 0; f < filters.length; f++) {
+                  var filter = filters[f];
+                  if (filter.col === 'user_id') continue;
+                  if (filter.op === 'eq' && String(row[filter.col]) !== String(filter.val)) return false;
+                  if (filter.op === 'in') {
+                    var allowed = (filter.val || []).map(String);
+                    if (allowed.indexOf(String(row[filter.col])) === -1) return false;
+                  }
+                }
+                return true;
+              });
+              if (orderBy) {
+                var col = orderBy.col;
+                var dir = orderBy.ascending ? 1 : -1;
+                data = data.slice().sort(function(a, b) {
+                  var av = String(a[col] || '');
+                  var bv = String(b[col] || '');
+                  if (av < bv) return -1 * dir;
+                  if (av > bv) return 1 * dir;
+                  return 0;
+                });
+              }
+              // Same default cap as PostgREST. An unordered select of a long
+              // history drops the newest day; order + limit(1) does not.
+              var cap = limitN == null ? 1000 : limitN;
+              if (data.length > cap) data = data.slice(0, cap);
+            }
             resolve({ data: data, error: null });
           },
         };
@@ -886,6 +933,29 @@ function testStageAndHourGuard() {
     assert.strictEqual(out.error, null);
     assert.strictEqual(out.mock.assetUpdates[0].payload.current_hours, 5150);
     console.log('✓ file date equal to the newest stored day still updates current_hours');
+
+    var many = [];
+    var cursor = new Date(Date.UTC(2023, 0, 1));
+    for (var n = 0; n < 1000; n++) {
+      var dayDate = new Date(cursor.getTime() + n * 86400000);
+      many.push({ asset_id: 31, record_date: dayDate.toISOString().slice(0, 10) });
+    }
+    many.push({ asset_id: 31, record_date: '2026-10-27' });
+    assert.strictEqual(many.length, 1001);
+    return runUtil(utilCsv([
+      ',EQ000031,AAA00031,CAT,538LL,5100' + ACTIVITY_TAIL,
+    ]), 'Fleet_Utilization_20-10-2026_20-10-2026_21-10-2026.csv', null, hourAssets, {
+      telematics: many,
+    });
+  }).then(function(out) {
+    assert.strictEqual(out.error, null);
+    assert.strictEqual(telematicsUpsert(out.mock).rows[0].asset_id, 31);
+    assert.strictEqual(telematicsUpsert(out.mock).rows[0].total_engine_hours, 5100);
+    assert.strictEqual(out.mock.assetUpdates.length, 0);
+    assert.ok(out.logs.some(function(l) {
+      return l === 'visionlink: skipping current_hours update for asset 31 (file date 2026-10-20 is older than newest stored 2026-10-27)';
+    }));
+    console.log('✓ more than 1,000 stored rows still compare against the true newest date');
 
     var firstAssets = [known];
     var approveCsv = utilCsv([

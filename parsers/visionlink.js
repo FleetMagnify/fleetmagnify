@@ -436,21 +436,24 @@ async function stageUnmatchedVisionLinkAssets(supabase, userId, rows, source) {
 
 async function newestStoredRecordDates(supabase, userId, assetIds) {
   var newest = {};
-  if (!assetIds.length) return newest;
-  var result = await supabase
-    .from('telematics_records')
-    .select('asset_id, record_date')
-    .in('asset_id', assetIds)
-    .eq('user_id', userId);
-  if (result.error) {
-    throw new Error('Failed to load telematics dates: ' + result.error.message);
+  // One row per asset. A single .in() select is capped at PostgREST's
+  // default 1,000 rows, so a busy asset's newest day can fall off the page.
+  for (var i = 0; i < assetIds.length; i++) {
+    var assetId = assetIds[i];
+    var result = await supabase
+      .from('telematics_records')
+      .select('record_date')
+      .eq('asset_id', assetId)
+      .eq('user_id', userId)
+      .order('record_date', { ascending: false })
+      .limit(1);
+    if (result.error) {
+      throw new Error('Failed to load telematics dates: ' + result.error.message);
+    }
+    var row = (result.data || [])[0];
+    if (!row || !row.record_date) continue;
+    newest[String(assetId)] = String(row.record_date).slice(0, 10);
   }
-  (result.data || []).forEach(function(row) {
-    var id = String(row.asset_id);
-    var date = row.record_date ? String(row.record_date).slice(0, 10) : '';
-    if (!date) return;
-    if (!newest[id] || date > newest[id]) newest[id] = date;
-  });
   return newest;
 }
 
