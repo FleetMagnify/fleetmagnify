@@ -99,7 +99,13 @@ function sequencedDownload(fileResponse) {
     if (host === 'vl.cat.com') throw new Error('fetched the web app page');
     if (n === 1) {
       if (host !== 'api.cat.com') throw new Error('first request host was ' + host);
+      if (!opts || opts.method !== 'POST') throw new Error('API request must be POST');
+      if (opts.body) throw new Error('API request body must be empty');
       return Promise.resolve(jsonResponse({ downloadUrl: S3_URL }));
+    }
+    if (!opts || opts.method !== 'GET') throw new Error('S3 request must be GET');
+    if (opts.headers && (opts.headers.Origin || opts.headers.Referer)) {
+      throw new Error('S3 request must not send Origin or Referer');
     }
     if (opts.headers) throw new Error('S3 request must not send extra headers');
     return Promise.resolve(fileResponse);
@@ -234,16 +240,21 @@ async function testFilenameAndFetch() {
     assert.ok(seen[0].url.indexOf('token=ab%2Bcd%2Fef') !== -1);
     assert.strictEqual(seen[0].url.indexOf('token=ab+') === -1, true);
     assert.strictEqual(seen[0].url.indexOf('lang') === -1, true);
-    assert.strictEqual(seen[0].opts.method, 'GET');
+    assert.strictEqual(seen[0].opts.method, 'POST');
+    assert.strictEqual(seen[0].opts.body, '');
+    assert.strictEqual(seen[0].opts.headers['Content-Length'], '0');
     assert.strictEqual(seen[0].opts.redirect, 'manual');
-    assert.strictEqual(seen[0].opts.headers.Accept, 'application/json');
+    assert.strictEqual(seen[0].opts.headers.Accept, 'application/json, text/plain, */*');
     assert.strictEqual(seen[0].opts.headers.Origin, 'https://vl.cat.com');
     assert.strictEqual(seen[0].opts.headers.Referer, 'https://vl.cat.com/');
     assert.ok(seen[0].opts.headers['User-Agent'].indexOf('Mozilla') !== -1);
     assert.strictEqual(seen[0].opts.headers.Authorization, undefined);
     assert.strictEqual(seen[1].opts.redirect, 'manual');
     assert.strictEqual(seen[1].opts.method, 'GET');
+    assert.strictEqual(seen[1].opts.body, undefined);
     assert.strictEqual(seen[1].opts.headers, undefined);
+    assert.ok(!seen[1].opts.headers || !seen[1].opts.headers.Origin);
+    assert.ok(!seen[1].opts.headers || !seen[1].opts.headers.Referer);
     assert.strictEqual(new URL(seen[1].url).hostname, S3_HOST);
     assert.strictEqual(result.filename, SPACED_NAME);
     assert.strictEqual(result.mimeType, 'text/csv');
@@ -340,18 +351,61 @@ async function testFilenameAndFetch() {
     assert.strictEqual(result.filename, 'report.csv');
     console.log('✓ file redirect stays on cat.com or an S3 bucket host');
 
-    global.fetch = function() {
-      return Promise.resolve(redirectResponse('https://files.cat.com/report.csv'));
+    var apiCalls = 0;
+    global.fetch = function(url, opts) {
+      apiCalls += 1;
+      assert.strictEqual(opts.method, 'POST');
+      assert.strictEqual(opts.body, '');
+      return Promise.resolve(new Response(
+        '<html><head><title>Cat Sign In</title></head><body>HIDDENBODY ' +
+        '<a href="' + S3_URL + '">file</a> token=' + TOKEN + ' X-Amz-Signature=FAKE</body></html>',
+        {
+          status: 302,
+          headers: {
+            location: S3_URL,
+            'content-type': 'text/html; charset=utf-8',
+            server: 'cloudfront',
+            'x-cache': 'Error from cloudfront',
+          },
+        }
+      ));
     };
-    var err = await rejected('redirect host not allowed');
-    assert.ok(err.message.indexOf('files.cat.com') !== -1);
+    var err = await rejected('HTTP 302');
+    assert.strictEqual(apiCalls, 1);
+    assert.ok(err.message.indexOf('Cat Sign In') !== -1);
+    assert.ok(err.message.indexOf('cloudfront') !== -1);
+    assert.ok(err.message.indexOf('text/html') !== -1);
+    assert.ok(err.message.indexOf('Error from cloudfront') !== -1);
+    assert.strictEqual(err.message.indexOf('HIDDENBODY') === -1, true);
+    assertNoSecret(err.message);
 
-    global.fetch = function() {
-      return Promise.resolve(redirectResponse(S3_URL));
+    global.fetch = function(url, opts) {
+      assert.strictEqual(opts.method, 'POST');
+      return Promise.resolve(new Response('<html><body><p>Sign-in <b>required</b></p></body></html>', {
+        status: 200,
+        headers: {
+          'content-type': 'text/html',
+          server: 'cloudfront',
+        },
+      }));
     };
-    err = await rejected('redirect host not allowed');
-    assert.ok(err.message.indexOf(S3_HOST) !== -1);
-    assert.strictEqual(err.message.indexOf('FAKEKEY'), -1);
+    err = await rejected('not JSON');
+    assert.ok(err.message.indexOf('Sign-in required') !== -1);
+    assert.ok(err.message.indexOf('server: cloudfront') !== -1);
+    assert.ok(err.message.indexOf('content-type: text/html') !== -1);
+    assert.ok(err.message.indexOf('x-cache: (none)') !== -1);
+    assert.strictEqual(err.message.indexOf('<b>') === -1, true);
+
+    var filler = 'padding ';
+    global.fetch = function() {
+      return Promise.resolve(new Response('<html><body>' + filler.repeat(80) + '</body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html', server: 'edge', 'x-cache': 'Miss' },
+      }));
+    };
+    err = await rejected('padding');
+    assert.strictEqual(err.message.indexOf(filler.repeat(26)) === -1, true);
+    assert.ok(err.message.indexOf('x-cache: Miss') !== -1);
 
     global.fetch = sequencedDownload(redirectResponse('https://evil.example/report.csv'));
     err = await rejected('evil.example');
@@ -370,14 +424,24 @@ async function testFilenameAndFetch() {
     await rejected('data.caterpillar.com');
 
     var n = 0;
-    global.fetch = function() {
+    global.fetch = function(url, opts) {
       n += 1;
-      if (n > 4) throw new Error('followed a fourth redirect');
-      return Promise.resolve(redirectResponse('https://api.cat.com/again'));
+      var host = new URL(String(url)).hostname;
+      if (host === 'api.cat.com') {
+        assert.strictEqual(opts.method, 'POST');
+        assert.strictEqual(opts.body, '');
+        return Promise.resolve(jsonResponse({
+          downloadUrl: 'https://bucket.s3.amazonaws.com/report.csv',
+        }));
+      }
+      if (n > 5) throw new Error('followed a fourth redirect');
+      assert.strictEqual(opts.method, 'GET');
+      assert.strictEqual(opts.headers, undefined);
+      return Promise.resolve(redirectResponse('https://bucket.s3.amazonaws.com/step'));
     };
     await rejected('too many redirects');
-    assert.strictEqual(n, 4);
-    console.log('✓ refused API redirects off api.cat.com, bad file redirects, and a 4th hop');
+    assert.strictEqual(n, 5);
+    console.log('✓ API redirects are not followed; file redirects stay on allowed hosts');
 
     function apiReturning(downloadUrl) {
       var calls = 0;
@@ -429,16 +493,30 @@ async function testFilenameAndFetch() {
     assert.ok(err.message.indexOf('schedule denied') !== -1);
     assert.strictEqual(err.message.indexOf('DENIED'), -1);
 
-    global.fetch = function() {
-      return Promise.resolve(new Response('<html>NOTAREALPAGE</html>', {
-        status: 200,
-        headers: { 'content-type': 'text/html; charset=utf-8' },
-      }));
+    global.fetch = function(url, opts) {
+      assert.strictEqual(opts.method, 'POST');
+      assert.strictEqual(opts.body, '');
+      return Promise.resolve(new Response(
+        '<html><head><title>Page shell</title></head><body>NOTAREALPAGE token=' + TOKEN +
+        ' <a href="https://evil.example/secret?X-Amz-Signature=FAKE">x</a></body></html>',
+        {
+          status: 200,
+          headers: {
+            'content-type': 'text/html; charset=utf-8',
+            server: 'cloudfront',
+            'x-cache': 'RefreshHit from cloudfront',
+          },
+        }
+      ));
     };
     err = await rejected('HTTP 200');
     assert.ok(err.message.indexOf('text/html') !== -1);
     assert.ok(err.message.indexOf('not JSON') !== -1);
-    assert.strictEqual(err.message.indexOf('NOTAREALPAGE'), -1);
+    assert.ok(err.message.indexOf('Page shell') !== -1);
+    assert.ok(err.message.indexOf('server: cloudfront') !== -1);
+    assert.ok(err.message.indexOf('x-cache: RefreshHit from cloudfront') !== -1);
+    assert.strictEqual(err.message.indexOf('NOTAREALPAGE') === -1, true);
+    assertNoSecret(err.message);
 
     global.fetch = function() {
       return Promise.resolve(jsonResponse({ reportName: 'Utilization Summary', ok: true }));

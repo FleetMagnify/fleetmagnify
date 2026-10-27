@@ -1,7 +1,7 @@
 /**
  * VisionLink scheduled reports arrive as an https download link, not an
- * attachment. The vl.cat.com page is a web app: the CSV comes from Cat's
- * report-download API, which returns a short-lived S3 URL. Never log or
+ * attachment. The vl.cat.com page is a web app: the CSV comes from a POST
+ * to Cat's report-download API, which returns a short-lived S3 URL. Never log or
  * store a full URL, the token, or any X-Amz-* value. Log hosts only.
  */
 
@@ -302,7 +302,43 @@ function bodyLooksLikeHtml(buffer) {
   return head.charAt(0) === '<';
 }
 
-function describeApiFailure(status, contentType, bodyBuffer) {
+function collapseSpace(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function stripTags(value) {
+  return collapseSpace(
+    String(value || '')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;|&apos;/gi, "'")
+  );
+}
+
+function nonJsonBodyText(text) {
+  var raw = String(text || '');
+  var title = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (title) {
+    var titleText = stripTags(title[1]);
+    if (titleText) return titleText.slice(0, 200);
+  }
+  return stripTags(raw).slice(0, 200);
+}
+
+function responseHeader(response, name) {
+  if (!response || !response.headers || typeof response.headers.get !== 'function') return '(none)';
+  var value = response.headers.get(name);
+  if (!value) return '(none)';
+  return collapseSpace(value).slice(0, 120);
+}
+
+function describeApiFailure(status, contentType, bodyBuffer, response) {
   var ctype = contentType || '(none)';
   var text = bodyBuffer ? bodyBuffer.toString('utf8') : '';
   var msg = 'report download API returned HTTP ' + status + ' Content-Type ' + ctype;
@@ -312,6 +348,11 @@ function describeApiFailure(status, contentType, bodyBuffer) {
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     msg += '; not JSON';
+    var snippet = nonJsonBodyText(text);
+    if (snippet) msg += '; body: ' + snippet;
+    msg += '; server: ' + responseHeader(response, 'server');
+    msg += '; content-type: ' + responseHeader(response, 'content-type');
+    msg += '; x-cache: ' + responseHeader(response, 'x-cache');
   } else {
     var keys = Object.keys(parsed);
     msg += '; keys: ' + (keys.length ? keys.join(', ') : '(none)');
@@ -337,13 +378,19 @@ async function fetchWithRedirects(startUrl, options) {
     var parsed = assertSafeUrl(current, options.allowHost);
     console.log('visionlink-link:', options.label, 'host', parsed.hostname);
     var init = {
-      method: 'GET',
+      method: options.method || 'GET',
       redirect: 'manual',
       signal: options.signal,
     };
     if (options.headers) init.headers = options.headers;
+    if (options.body !== undefined) init.body = options.body;
     response = await options.doFetch(current, init);
     if (isRedirectStatus(response.status)) {
+      // A POST must not be followed: the next hop would be a GET and can
+      // return the web page. The API step reports the status instead.
+      if (options.followRedirects === false) {
+        return { response: response, finalUrl: current, finalHost: parsed.hostname };
+      }
       redirects += 1;
       var location = response.headers.get('location');
       await cancelBody(response);
@@ -365,7 +412,7 @@ async function fetchWithRedirects(startUrl, options) {
 
 /**
  * Turn a vl.cat.com/downloadreport link into a CSV. The page itself is not
- * the file: ask api.cat.com for downloadUrl, then GET that S3 object.
+ * the file: POST to api.cat.com for downloadUrl, then GET that S3 object.
  */
 async function fetchReportFromLink(url, options) {
   var timeoutMs = options && options.timeoutMs ? options.timeoutMs : TIMEOUT_MS;
@@ -382,12 +429,16 @@ async function fetchReportFromLink(url, options) {
       doFetch: doFetch,
       signal: controller.signal,
       label: 'api',
+      method: 'POST',
+      body: '',
+      followRedirects: false,
       allowHost: function(host) { return hostOnly(host) === 'api.cat.com'; },
       headers: {
-        Accept: 'application/json',
+        Accept: 'application/json, text/plain, */*',
         Origin: 'https://vl.cat.com',
         Referer: 'https://vl.cat.com/',
         'User-Agent': BROWSER_UA,
+        'Content-Length': '0',
       },
     });
 
@@ -408,7 +459,7 @@ async function fetchReportFromLink(url, options) {
         apiFailed = true;
       }
     }
-    if (apiFailed) throw linkError(describeApiFailure(apiStatus, apiType, apiBody));
+    if (apiFailed) throw linkError(describeApiFailure(apiStatus, apiType, apiBody, apiCall.response));
 
     var download = validateDownloadUrl(payload.downloadUrl.trim());
     var fileCall = await fetchWithRedirects(download.href, {
