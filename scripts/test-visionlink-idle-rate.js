@@ -10,6 +10,101 @@ var path = require('path');
 var idleRates = require('../parsers/visionlink-idle-rate');
 var fuel = require('../parsers/visionlink-fuel');
 var visionlink = require('../parsers/visionlink');
+var FCM = require('../js/fleet-cost-model');
+
+// Columns that exist on public.assets. is_on_road is not one of them:
+// assets.html drops it when PostgREST reports the column missing.
+// usage_profile and gvm_tonnes exist, but FCM.isOnRoad does not read them.
+var ASSET_COLUMNS = {
+  id: true,
+  user_id: true,
+  asset_name: true,
+  asset_type: true,
+  division_id: true,
+  is_ignored: true,
+  created_at: true,
+  fuel_type: true,
+  make: true,
+  model: true,
+  year: true,
+  registration: true,
+  bp_card_number: true,
+  mobil_card_number: true,
+  idle_burn_rate_lph: true,
+  idle_rate_source: true,
+  idle_anomaly_confirmed: true,
+  current_value: true,
+  estimated_end_of_life_value: true,
+  estimated_annual_repair_cost: true,
+  expected_life_hours: true,
+  expected_life_km: true,
+  service_cost_per_hour: true,
+  service_cost_per_km: true,
+  current_hours: true,
+  current_odometer: true,
+  estimated_annual_km: true,
+  available_hours_per_week: true,
+  target_utilisation_percent: true,
+  gvm_tonnes: true,
+  ruc_rate_per_km: true,
+  usage_profile: true,
+  visionlink_serial: true,
+  telematics_provider: true,
+  eroad_machine_id: true,
+  travel_rate_lpk: true,
+  travel_rate_r2: true,
+  last_calibrated_at: true
+};
+
+var TELEMATICS_COLUMNS = {
+  user_id: true,
+  asset_id: true,
+  record_date: true,
+  operating_hours: true,
+  idle_hours: true,
+  total_engine_hours: true,
+  litres_consumed: true,
+  data_quality_notes: true,
+  idle_fuel_litres: true,
+  working_fuel_litres: true,
+  daily_distance_km: true,
+  odometer_km: true
+};
+
+function columnListFor(table) {
+  if (table === 'assets') return ASSET_COLUMNS;
+  if (table === 'telematics_records') return TELEMATICS_COLUMNS;
+  return null;
+}
+
+function parseSelectList(selectArg) {
+  var parts = String(selectArg == null ? '' : selectArg).split(',');
+  var cols = [];
+  parts.forEach(function(part) {
+    var col = part.trim().split(/\s+/)[0];
+    if (col) cols.push(col);
+  });
+  if (!cols.length || cols.indexOf('*') !== -1) {
+    throw new Error('select must name real columns');
+  }
+  return cols;
+}
+
+function assertKnownColumns(table, columns) {
+  var allowed = columnListFor(table);
+  if (!allowed) throw new Error('no column list for ' + table);
+  (columns || []).forEach(function(col) {
+    if (!allowed[col]) throw new Error('unknown ' + table + ' column: ' + col);
+  });
+}
+
+function projectRow(row, columns) {
+  var out = {};
+  columns.forEach(function(col) {
+    if (Object.prototype.hasOwnProperty.call(row, col)) out[col] = row[col];
+  });
+  return out;
+}
 
 var USER = '00000000-0000-4000-8000-0000000000aa';
 var OTHER = '00000000-0000-4000-8000-0000000000bb';
@@ -60,24 +155,33 @@ function createClient(assets, telematics, options) {
   }
   function from(table) {
     return {
-      select: function() {
+      select: function(selectArg) {
+        var columns = parseSelectList(selectArg);
+        assertKnownColumns(table, columns);
         var filters = [];
         var order = null;
         var limitN = null;
+        function useColumn(col) {
+          assertKnownColumns(table, [col]);
+        }
         var chain = {
           eq: function(col, val) {
+            useColumn(col);
             filters.push({ op: 'eq', col: col, val: val });
             return chain;
           },
           not: function(col, op, val) {
+            useColumn(col);
             filters.push({ op: 'not', col: col, notOp: op, val: val });
             return chain;
           },
           gt: function(col, val) {
+            useColumn(col);
             filters.push({ op: 'gt', col: col, val: val });
             return chain;
           },
           order: function(col, opts) {
+            useColumn(col);
             order = { col: col, ascending: !!(opts && opts.ascending) };
             return chain;
           },
@@ -91,18 +195,23 @@ function createClient(assets, telematics, options) {
         };
         function run() {
           if (table === 'assets') {
-            assetQueries.push({ filters: filters.slice() });
-            var assetsFound = applyEq(assets, filters);
+            assetQueries.push({ filters: filters.slice(), columns: columns.slice() });
+            var assetsFound = applyEq(assets, filters).map(function(row) {
+              return projectRow(row, columns);
+            });
             if (limitN != null) assetsFound = assetsFound.slice(0, limitN);
             return { data: assetsFound, error: null };
           }
           if (table === 'telematics_records') {
             telQueries.push({
               filters: filters.slice(),
+              columns: columns.slice(),
               order: order,
               limit: limitN
             });
-            var data = applyEq(telematics, filters);
+            var data = applyEq(telematics, filters).map(function(row) {
+              return projectRow(row, columns);
+            });
             if (order) {
               var col = order.col;
               var dir = order.ascending ? 1 : -1;
@@ -122,9 +231,11 @@ function createClient(assets, telematics, options) {
         return chain;
       },
       update: function(payload) {
+        assertKnownColumns(table, Object.keys(payload || {}));
         var filters = [];
         var chain = {
           eq: function(col, val) {
+            assertKnownColumns(table, [col]);
             filters.push({ col: col, val: val });
             return chain;
           },
@@ -253,6 +364,15 @@ async function testWeighted() {
   assert.strictEqual(out.client.updates[0].payload.idle_rate_source, 'measured');
   assert.strictEqual(out.client.updates[0].userId, USER);
   assert.strictEqual(Number(out.client.updates[0].id), id);
+  assert.deepStrictEqual(out.client.assetQueries[0].columns, [
+    'id', 'asset_type', 'idle_burn_rate_lph', 'idle_rate_source'
+  ]);
+  assert.deepStrictEqual(out.client.telQueries[0].columns, [
+    'record_date', 'idle_fuel_litres', 'idle_hours'
+  ]);
+  assert.deepStrictEqual(Object.keys(out.client.updates[0].payload).sort(), [
+    'idle_burn_rate_lph', 'idle_rate_source'
+  ]);
   assertQueryShape(out.client.telQueries[0], id);
   assertNoName(out.cap, id);
   console.log('✓ weighted SUM/SUM is 3.67, not the average of daily ratios');
@@ -333,22 +453,123 @@ async function testProtectedSources() {
 }
 
 async function testTrucksSkipped() {
-  var truck = 110;
-  var flagged = 111;
-  var machine = 112;
-  var rows = uniform(truck, 4, 6, 1, 50)
-    .concat(uniform(flagged, 4, 6, 1, 50))
-    .concat(uniform(machine, 4, 6, 1, 50));
-  var out = await runCase([
-    asset(truck, { asset_type: 'Rigid Truck', is_on_road: false }),
-    asset(flagged, { asset_type: 'Excavator', is_on_road: true }),
-    asset(machine, { asset_type: 'Dump Truck' })
-  ], rows);
-  assert.strictEqual(out.client.updates.length, 1);
-  assert.strictEqual(Number(out.client.updates[0].id), machine);
-  assert.strictEqual(out.client.updates[0].payload.idle_burn_rate_lph, 6);
-  assert.strictEqual(out.client.telQueries.length, 1);
-  console.log('✓ trucks are skipped and machinery still updates');
+  var types = [
+    ['Light Vehicle', 110],
+    ['Rigid Truck', 111],
+    ['Semi Trailer', 112],
+    ['Truck & Trailer', 113],
+    ['Truck and Trailer / B-Train', 114]
+  ];
+  var excavator = 115;
+  var dump = 116;
+  var assets = types.map(function(pair) {
+    return asset(pair[1], { asset_type: pair[0] });
+  });
+  // The fixture may carry is_on_road, but that column is not selected or stored.
+  assets.push(asset(excavator, { asset_type: 'Excavator', is_on_road: true }));
+  assets.push(asset(dump, { asset_type: 'Dump Truck' }));
+  var rows = [];
+  assets.forEach(function(a) {
+    rows = rows.concat(uniform(a.id, 4, 6, 1, 50));
+  });
+  var out = await runCase(assets, rows);
+  var updated = out.client.updates.map(function(u) { return Number(u.id); });
+  updated.sort(function(a, b) { return a - b; });
+  assert.deepStrictEqual(updated, [excavator, dump]);
+  assert.strictEqual(out.client.telQueries.length, 2);
+  out.client.updates.forEach(function(u) {
+    assert.strictEqual(u.payload.idle_burn_rate_lph, 6);
+  });
+  console.log('✓ on-road types are skipped from asset_type alone');
+}
+
+function testIsOnRoadFromAssetType() {
+  ['Light Vehicle', 'Rigid Truck', 'Semi Trailer', 'Truck & Trailer', 'Truck and Trailer / B-Train'].forEach(function(t) {
+    assert.strictEqual(FCM.isOnRoad({ asset_type: t }), true, t);
+    assert.strictEqual(FCM.isOnRoad({ asset_type: '  ' + t + ' ' }), true, t);
+  });
+  assert.strictEqual(FCM.isOnRoad({ asset_type: 'Excavator' }), false);
+  assert.strictEqual(FCM.isOnRoad({ asset_type: 'Dump Truck' }), false);
+  console.log('✓ FCM.isOnRoad recognises trucks from asset_type alone');
+}
+
+function testSchemaColumnLists() {
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(ASSET_COLUMNS, 'is_on_road'), false);
+  assert.throws(function() {
+    assertKnownColumns('assets', ['id', 'is_on_road']);
+  }, /unknown assets column: is_on_road/);
+  assert.throws(function() {
+    assertKnownColumns('telematics_records', ['record_date', 'not_a_column']);
+  }, /unknown telematics_records column: not_a_column/);
+  assertKnownColumns('assets', ['id', 'asset_type', 'idle_burn_rate_lph', 'idle_rate_source']);
+  assertKnownColumns('telematics_records', ['record_date', 'idle_fuel_litres', 'idle_hours', 'user_id', 'asset_id']);
+
+  var src = fs.readFileSync(path.join(__dirname, '../parsers/visionlink-idle-rate.js'), 'utf8');
+  var selects = 0;
+  var selectRe = /\.from\(\s*'([^']+)'\s*\)[\s\S]*?\.select\(\s*'([^']*)'\s*\)/g;
+  var m;
+  while ((m = selectRe.exec(src))) {
+    selects++;
+    assertKnownColumns(m[1], parseSelectList(m[2]));
+  }
+  assert.strictEqual(selects, 2);
+
+  var updates = 0;
+  var updateRe = /\.from\(\s*'([^']+)'\s*\)[\s\S]*?\.update\(\s*\{([\s\S]*?)\}\s*\)/g;
+  while ((m = updateRe.exec(src))) {
+    updates++;
+    var keys = [];
+    var keyRe = /([A-Za-z_][A-Za-z0-9_]*)\s*:/g;
+    var km;
+    while ((km = keyRe.exec(m[2]))) keys.push(km[1]);
+    assert.deepStrictEqual(keys, ['idle_burn_rate_lph', 'idle_rate_source']);
+    assertKnownColumns(m[1], keys);
+  }
+  assert.strictEqual(updates, 1);
+
+  var table = null;
+  var filters = 0;
+  var callRe = /\.(from|eq|not|gt|order)\(\s*'([^']+)'/g;
+  while ((m = callRe.exec(src))) {
+    if (m[1] === 'from') {
+      table = m[2];
+      assert.ok(columnListFor(table), 'query on unlisted table ' + table);
+      continue;
+    }
+    assert.ok(table, 'filter before from()');
+    assertKnownColumns(table, [m[2]]);
+    filters++;
+  }
+  assert.ok(filters >= 8, 'expected asset and telematics filters, saw ' + filters);
+  console.log('✓ helper queries only name real assets and telematics columns');
+}
+
+async function testMockRejectsUnknownColumns() {
+  var client = createClient([asset(1)], []);
+  var selectErr = null;
+  try {
+    await client.supabase.from('assets').select('id, is_on_road').limit(1);
+  } catch (err) {
+    selectErr = err;
+  }
+  assert.ok(selectErr && selectErr.message.indexOf('unknown assets column: is_on_road') !== -1);
+
+  var telErr = null;
+  try {
+    await client.supabase.from('telematics_records').select('record_date, not_a_column').limit(1);
+  } catch (err) {
+    telErr = err;
+  }
+  assert.ok(telErr && telErr.message.indexOf('unknown telematics_records column: not_a_column') !== -1);
+
+  var updateErr = null;
+  try {
+    await client.supabase.from('assets').update({ is_on_road: true }).eq('id', 1);
+  } catch (err) {
+    updateErr = err;
+  }
+  assert.ok(updateErr && updateErr.message.indexOf('unknown assets column: is_on_road') !== -1);
+  console.log('✓ mock database rejects unknown columns in select and update');
 }
 
 async function testMeasuredUpdateAndSkip() {
@@ -573,6 +794,9 @@ async function main() {
   await testImplausible();
   await testBoundsInclusive();
   await testProtectedSources();
+  testIsOnRoadFromAssetType();
+  testSchemaColumnLists();
+  await testMockRejectsUnknownColumns();
   await testTrucksSkipped();
   await testMeasuredUpdateAndSkip();
   await testIgnoredRowsAndWindow();

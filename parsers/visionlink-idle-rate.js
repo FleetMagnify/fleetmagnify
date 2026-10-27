@@ -5,6 +5,9 @@
  * Rate = SUM(idle_fuel_litres) / SUM(idle_hours) over the newest 120
  * qualifying days. Owner-set and truck-regression rates are left alone.
  * One asset failing does not stop the others, and this helper does not throw.
+ *
+ * Trucks are skipped with FCM.isOnRoad, which treats a recognised
+ * asset_type as on-road by itself. assets has no is_on_road column.
  */
 
 var FCM = require('../js/fleet-cost-model');
@@ -50,7 +53,7 @@ function qualifyingRows(rows) {
 async function recomputeOne(supabase, userId, assetId) {
   var assetResult = await supabase
     .from('assets')
-    .select('id, asset_type, is_on_road, idle_burn_rate_lph, idle_rate_source')
+    .select('id, asset_type, idle_burn_rate_lph, idle_rate_source')
     .eq('id', assetId)
     .eq('user_id', userId)
     .limit(1);
