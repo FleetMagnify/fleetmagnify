@@ -56,6 +56,43 @@ check(
   JSON.stringify(setOnAsset)
 );
 
+var measured = FCM.resolvedIdleRate({
+  asset_type: 'Excavator',
+  idle_burn_rate_lph: 4.25,
+  idle_rate_source: 'measured'
+});
+check(
+  'Machinery measured rate keeps the stored value and Measured (VisionLink)',
+  measured.source === 'measured' &&
+    measured.label === 'Measured (VisionLink)' &&
+    measured.rate === 4.25,
+  JSON.stringify(measured)
+);
+
+var measuredTrimmed = FCM.resolvedIdleRate({
+  asset_type: 'Excavator',
+  idle_burn_rate_lph: 4.25,
+  idle_rate_source: ' Measured '
+});
+check(
+  'Measured source is matched case-insensitively',
+  measuredTrimmed.source === 'measured' && measuredTrimmed.label === 'Measured (VisionLink)',
+  JSON.stringify(measuredTrimmed)
+);
+
+var measuredOutOfBand = FCM.resolvedIdleRate({
+  asset_type: 'Excavator',
+  idle_burn_rate_lph: 20,
+  idle_rate_source: 'measured'
+});
+check(
+  'Measured rate outside the existing machinery band falls back to the class default',
+  measuredOutOfBand.source === 'default' &&
+    measuredOutOfBand.label === 'Default estimate' &&
+    measuredOutOfBand.rate === 4,
+  JSON.stringify(measuredOutOfBand)
+);
+
 var implausible = FCM.resolvedIdleRate(Object.assign({}, argosy, {
   idle_burn_rate_lph: 0.059,
   last_calibrated_at: '2026-08-28T00:00:00Z'

@@ -38,6 +38,7 @@ const {
   utcTimestampToLocalDate,
   visionLinkOneDayMessage,
 } = require('./parser-utils');
+const idleRates = require('./visionlink-idle-rate');
 
 // Distinctive VisionLink utilisation-report columns. Extra columns may appear;
 // detection only requires these header names to be present.
@@ -656,6 +657,19 @@ async function parseVisionLinkReport(supabase, options) {
       } else {
         hoursUpdated++;
       }
+    }
+
+    try {
+      var idleAssetIds = [];
+      records.forEach(function(r) {
+        if (idleAssetIds.indexOf(r.asset_id) === -1) idleAssetIds.push(r.asset_id);
+      });
+      await idleRates.recomputeMeasuredIdleRates(supabase, userId, idleAssetIds);
+    } catch (rateErr) {
+      console.warn(
+        'visionlink: idle rate recompute failed: ' +
+        (rateErr && rateErr.message ? rateErr.message : 'error')
+      );
     }
 
     await updateImportStatus(supabase, importId, 'processed', null, 'visionlink');

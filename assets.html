@@ -485,7 +485,7 @@
 
       <div class="method-note">
         <div class="method-note-icon">💡</div>
-        <p><strong>Idle Burn Rate:</strong> Litres per hour each asset burns while idling. Used by Fuel Analyst and Idle Cost Analyst to split invoiced fuel into operating vs. idle cost. If left blank, a sensible default is used based on asset type — set your own value once you have real-world data for more accurate results.</p>
+        <p><strong>Idle Burn Rate:</strong> Litres per hour each asset burns while idling. Used by Fuel Analyst and Idle Cost Analyst to split invoiced fuel into operating vs. idle cost. If left blank, a sensible default is used based on asset type — set your own value once you have real-world data for more accurate results. Measured from VisionLink fuel and idle-hour data.</p>
       </div>
 
       <div class="upload-card" id="excel-section" style="display:none; flex-direction: column;">
@@ -723,7 +723,7 @@
     <div class="form-group">
       <label for="asset-idle-rate">Idle Burn Rate (litres per hour)</label>
       <input type="number" id="asset-idle-rate" placeholder="e.g. 4.0" step="0.01" min="0">
-      <div class="form-hint" id="hint-idle-rate">Leave blank to use a default estimate based on asset type. You can update this anytime once you know your actual idle fuel usage.</div>
+      <div class="form-hint" id="hint-idle-rate">Leave blank to use a default estimate based on asset type. You can update this anytime once you know your actual idle fuel usage. Measured from VisionLink fuel and idle-hour data.</div>
     </div>
     <div class="form-group field-shared-cost field-hidden" id="field-current-value">
       <label for="asset-current-value">Current Value ($)</label>
@@ -1040,6 +1040,18 @@
     patch[field] = value === '' ? null : parseFloat(value);
     if (value !== '' && isNaN(patch[field])) return;
 
+    if (field === 'idle_burn_rate_lph') {
+      var current = (allAssets || []).filter(function(a) {
+        return Number(a.id) === Number(assetId);
+      })[0];
+      var decision = idleRateSourceForSave(
+        current ? current.idle_burn_rate_lph : null,
+        current ? current.idle_rate_source : null,
+        patch.idle_burn_rate_lph
+      );
+      if (decision !== undefined) patch.idle_rate_source = decision;
+    }
+
     var result = await supabase
       .from('assets')
       .update(patch)
@@ -1054,7 +1066,12 @@
       statusEl.textContent = '✓ Saved';
       statusEl.style.color = '#0EA57A';
       var asset = allAssets.find(function(a) { return Number(a.id) === Number(assetId); });
-      if (asset) asset[field] = patch[field];
+      if (asset) {
+        asset[field] = patch[field];
+        if (Object.prototype.hasOwnProperty.call(patch, 'idle_rate_source')) {
+          asset.idle_rate_source = patch.idle_rate_source;
+        }
+      }
     }
     statusEl.classList.add('visible');
     setTimeout(function() { statusEl.classList.remove('visible'); }, 1500);
@@ -2402,12 +2419,30 @@
       document.getElementById('label-rego').textContent = 'Registration / ID';
       regoInput.placeholder = 'e.g. site ID or rego (optional)';
       document.getElementById('hint-rego').textContent = 'Optional internal or site identifier. Less critical than for on-road vehicles.';
-      document.getElementById('hint-idle-rate').innerHTML = '<span class="emphasis">Critical for construction assets.</span> Litres per idle hour — drives Fuel Analyst and Idle Cost Analyst split between travelling and idle fuel. Leave blank to use a default by asset type.';
+      document.getElementById('hint-idle-rate').innerHTML = '<span class="emphasis">Critical for construction assets.</span> Litres per idle hour — drives Fuel Analyst and Idle Cost Analyst split between travelling and idle fuel. Leave blank to use a default by asset type. Measured from VisionLink fuel and idle-hour data.';
       document.getElementById('hint-life-hours').innerHTML = '<span class="emphasis">Key for depreciation.</span> Total operating hours over the asset\'s useful life — depreciation per hour is (current value − end of life value) ÷ this figure.';
       document.getElementById('hint-service-cost').innerHTML = '<span class="emphasis">Scheduled servicing only.</span> Routine service cost per operating hour — separate from annual repair cost above.';
       document.getElementById('hint-available-hours').textContent = 'Hours per week the asset is available to work. Leave blank to default to 40 in True Utilisation Analyst.';
       document.getElementById('hint-target-utilisation').textContent = 'Target operating utilisation percentage — compared against actual hours in True Utilisation Analyst.';
     }
+  }
+
+  // undefined = leave the stored idle_rate_source untouched.
+  // 'measured' is kept when the owner saves without changing the number.
+  // A changed number becomes 'set'. Clearing the field becomes null.
+  function idleRateSourceForSave(previousRate, previousSource, nextRate) {
+    function num(v) {
+      if (v === null || v === undefined || v === '') return null;
+      var n = parseFloat(v);
+      return isNaN(n) ? null : n;
+    }
+    var prev = num(previousRate);
+    var next = num(nextRate);
+    var unchanged = (next == null && prev == null) ||
+      (next != null && prev != null && Math.abs(next - prev) < 1e-6);
+    var src = String(previousSource || '').toLowerCase().trim();
+    if (unchanged) return src === 'measured' ? 'measured' : undefined;
+    return next != null ? 'set' : null;
   }
 
   function buildAssetPayload() {
@@ -2460,17 +2495,18 @@
     var usageEl = document.getElementById('asset-usage-profile');
     if (usageEl) payload.usage_profile = usageEl.value || 'regular';
     var idleRate = payload.idle_burn_rate_lph;
-    var prevIdle = null;
-    if (editingAssetId != null) {
+    if (editingAssetId == null) {
+      payload.idle_rate_source = idleRate != null ? 'set' : null;
+    } else {
       var existing = (allAssets || []).filter(function(a) {
         return Number(a.id) === Number(editingAssetId);
       })[0];
-      prevIdle = existing ? parseOptionalFloat(existing.idle_burn_rate_lph) : null;
-    }
-    var idleUnchanged = (idleRate == null && prevIdle == null) ||
-      (idleRate != null && prevIdle != null && Math.abs(idleRate - prevIdle) < 1e-6);
-    if (editingAssetId == null || !idleUnchanged) {
-      payload.idle_rate_source = idleRate != null ? 'set' : null;
+      var decision = idleRateSourceForSave(
+        existing ? existing.idle_burn_rate_lph : null,
+        existing ? existing.idle_rate_source : null,
+        idleRate
+      );
+      if (decision !== undefined) payload.idle_rate_source = decision;
     }
     return payload;
   }

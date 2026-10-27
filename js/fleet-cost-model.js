@@ -361,6 +361,9 @@
     if (src === 'calibrated') {
       return { rate: stored, source: 'calibrated', label: 'Calibrated' };
     }
+    if (src === 'measured') {
+      return { rate: stored, source: 'measured', label: 'Measured (VisionLink)' };
+    }
     return { rate: stored, source: 'set', label: 'Set on asset' };
   }
 
