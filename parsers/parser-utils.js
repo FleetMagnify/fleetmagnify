@@ -383,10 +383,12 @@ function visionLinkOneDayMessage(start, end) {
 }
 
 /**
- * Fleet_Utilization_<start>_<end>_<generated>.csv / .xlsx
+ * Fleet Utilization <start> <end> <generated>.csv / .xlsx
  *
- * Case-insensitive. Optional trailing _<digits> before the extension
- * (VisionLink sometimes appends _1). Date order follows the account
+ * Case-insensitive. The name and the three dates may be separated by
+ * underscores, spaces, or a hyphen with spaces (" - "). Optional trailing
+ * _<digits> or (digits) before the extension (VisionLink sometimes appends
+ * _1, and a download may append (1)). Date order follows the account
  * locale (DD-MM-YYYY or MM-DD-YYYY); see resolveVisionLinkDateReading.
  * Returns { start, end, generated } as YYYY-MM-DD, or null when the
  * name does not match or the locale cannot be resolved.
@@ -394,9 +396,15 @@ function visionLinkOneDayMessage(start, end) {
 function parseVisionLinkFilenameRange(filename, receivedAt) {
   if (!filename) return null;
   var base = String(filename).split(/[/\\]/).pop();
-  var match = base.match(
-    /^fleet_utilization_(\d{2})-(\d{2})-(\d{4})_(\d{2})-(\d{2})-(\d{4})_(\d{2})-(\d{2})-(\d{4})(?:_\d+)?\.(csv|xlsx)$/i
-  );
+  // Separator between the title and each date. A bare hyphen is not a
+  // separator: the dates themselves are DD-MM-YYYY or MM-DD-YYYY.
+  var sep = '(?:_|\\s+-\\s+|\\s+)';
+  var date = '(\\d{2})-(\\d{2})-(\\d{4})';
+  var match = base.match(new RegExp(
+    '^fleet(?:_|\\s+)utilization' + sep + date + sep + date + sep + date +
+    '(?:_\\d+|\\s*\\(\\d+\\))?\\.(csv|xlsx)$',
+    'i'
+  ));
   if (!match) return null;
   var tokens = [
     { a: parseInt(match[1], 10), b: parseInt(match[2], 10), year: parseInt(match[3], 10) },

@@ -322,6 +322,20 @@ function testEndToEnd() {
     assert.strictEqual(out.mock.upserted.length, 0);
     console.log('✓ multi-day filename rejected even when the report body is one day');
 
+    return runFuel(SAMPLE, 'Fleet Utilization 27-10-2026 27-10-2026 28-10-2026.csv');
+  }).then(function(out) {
+    assert.strictEqual(out.error, null);
+    assert.strictEqual(out.result.recordDate, '2026-10-27');
+    console.log('✓ spaced filename that matches the report is accepted');
+
+    return runFuel(SAMPLE, 'Fleet Utilization 27-10-2026 29-10-2026 30-10-2026.csv');
+  }).then(function(out) {
+    assert.ok(out.error);
+    assert.strictEqual(out.error.message, ONE_DAY_3);
+    assert.strictEqual(out.mock.upserted.length, 0);
+    assert.strictEqual(out.mock.importUpdates[0].payload.status, 'failed');
+    console.log('✓ multi-day filename with spaces rejected even when the report body is one day');
+
     return runFuel(
       fuelCsv('02/03/2026 00:00 - 02/03/2026 23:59'),
       null,
