@@ -14,6 +14,11 @@ const { isNavmanIdleCsv, parseNavmanIdleReport } = require('../parsers/navman-id
 const { isVisionLinkCsv, parseVisionLinkReport } = require('../parsers/visionlink');
 const { isVisionLinkFuelCsv, parseVisionLinkFuelReport } = require('../parsers/visionlink-fuel');
 const { isEroadCsv, parseEroadReport } = require('../parsers/eroad');
+const {
+  extractVisionLinkReportLinks,
+  fetchReportFromLink,
+  scrubLinkError,
+} = require('../parsers/email-report-link');
 
 function classifyUnknownCsv(rawCsv) {
   var lines = String(rawCsv).split(/\r?\n/);
@@ -241,32 +246,24 @@ function authorizeInbound(req, res) {
   return true;
 }
 
-module.exports = async function handler(req, res) {
-  if (!authorizeInbound(req, res)) return;
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  var receivedAt = new Date().toISOString();
+async function processInboundEmail(supabase, input) {
+  var receivedAt = input.receivedAt;
+  var fields = input.fields || {};
+  var files = input.files || [];
 
   try {
-    var parsed = await parseMultipart(req);
-    var fields = parsed.fields;
-    var files = parsed.files;
-
     var toEmail = resolveToEmail(fields);
     var fromEmail = extractEmailAddress(getField(fields, 'from'));
 
     if (!toEmail) {
       console.error('email-inbound: missing to address in webhook payload');
-      return res.status(200).json({ ok: true, message: 'Received — no to address' });
+      return { ok: true, message: 'Received — no to address' };
     }
 
     var uploadPrefix = extractLocalPart(toEmail);
     console.log('email-inbound: received mail for', toEmail, 'from', fromEmail || '(unknown)');
 
-    var supabase = createSupabaseClient();
+    if (!supabase) supabase = createSupabaseClient();
 
     var userResult = await supabase
       .from('user_settings')
@@ -276,12 +273,12 @@ module.exports = async function handler(req, res) {
 
     if (userResult.error) {
       console.error('email-inbound: user lookup failed', userResult.error.message);
-      return res.status(200).json({ ok: true, message: 'Received — user lookup error logged' });
+      return { ok: true, message: 'Received — user lookup error logged' };
     }
 
     if (!userResult.data) {
       console.error('email-inbound: no user_settings row for upload_email prefix', uploadPrefix);
-      return res.status(200).json({ ok: true, message: 'Received — unknown upload address' });
+      return { ok: true, message: 'Received — unknown upload address' };
     }
 
     // Now includes XLS/XLSX attachments alongside CSV — BP is the only
@@ -294,8 +291,50 @@ module.exports = async function handler(req, res) {
     });
 
     if (csvFiles.length === 0) {
-      console.warn('email-inbound: no CSV attachments for', toEmail);
-      return res.status(200).json({ ok: true, message: 'Received — no CSV attachments' });
+      var reportLinks = extractVisionLinkReportLinks(getField(fields, 'html'), getField(fields, 'text'));
+      if (!reportLinks.length) {
+        console.warn('email-inbound: no CSV attachments for', toEmail);
+        return { ok: true, message: 'Received — no CSV attachments' };
+      }
+      console.log('email-inbound: fetching', reportLinks.length, 'VisionLink report link(s)');
+      for (var linkIndex = 0; linkIndex < reportLinks.length; linkIndex++) {
+        try {
+          var downloaded = await fetchReportFromLink(reportLinks[linkIndex]);
+          csvFiles.push({
+            filename: downloaded.filename,
+            mimeType: downloaded.mimeType,
+            buffer: downloaded.buffer,
+          });
+        } catch (linkErr) {
+          var failName = (linkErr && linkErr.reportFilename) || 'VisionLink report link';
+          var reason = scrubLinkError(linkErr && linkErr.message);
+          var errorMessage = 'VisionLink download link could not be fetched: ' + reason +
+            '; try Download Report manually and email the file';
+          console.error('email-inbound: VisionLink download link failed', reason);
+          var failInsert = await supabase.from('email_imports').insert({
+            user_id: userResult.data.user_id,
+            received_at: receivedAt,
+            from_email: fromEmail || null,
+            to_email: toEmail,
+            filename: failName,
+            raw_csv: '',
+            status: 'failed',
+            error_message: errorMessage,
+          }).select('id').single();
+          if (failInsert.error) {
+            console.error('email-inbound: failed to record link failure', failInsert.error.message);
+          }
+          await sendFailureAlert(failName, errorMessage, userResult.data.user_id);
+        }
+      }
+      if (csvFiles.length === 0) {
+        return {
+          ok: true,
+          message: 'Received',
+          saved: [],
+          user_id: userResult.data.user_id,
+        };
+      }
     }
 
     var saved = [];
@@ -630,17 +669,43 @@ module.exports = async function handler(req, res) {
       console.log('email-inbound: saved CSV import', attachment.filename, 'for user', userResult.data.user_id);
     }
 
-    return res.status(200).json({
+    return {
       ok: true,
       message: 'Received',
       saved: saved,
       user_id: userResult.data.user_id,
+    };
+  } catch (err) {
+    console.error('email-inbound: unhandled error', err.message, err.stack);
+    return { ok: true, message: 'Received — error logged' };
+  }
+}
+
+async function handler(req, res) {
+  if (!authorizeInbound(req, res)) return;
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  var receivedAt = new Date().toISOString();
+
+  try {
+    var parsed = await parseMultipart(req);
+    var result = await processInboundEmail(null, {
+      fields: parsed.fields,
+      files: parsed.files,
+      receivedAt: receivedAt,
     });
+    return res.status(200).json(result);
   } catch (err) {
     console.error('email-inbound: unhandled error', err.message, err.stack);
     return res.status(200).json({ ok: true, message: 'Received — error logged' });
   }
-};
+}
+
+module.exports = handler;
+module.exports.processInboundEmail = processInboundEmail;
 
 module.exports.config = {
   api: {
