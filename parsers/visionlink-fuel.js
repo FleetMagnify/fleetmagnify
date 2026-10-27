@@ -27,6 +27,7 @@ const {
   visionLinkOneDayMessage,
 } = require('./parser-utils');
 const { loadAssetMaps, matchAsset, stageUnmatchedVisionLinkAssets, visionLinkWaitingNote } = require('./visionlink');
+const idleRates = require('./visionlink-idle-rate');
 
 var FUEL_SIGNATURE = [
   'Asset ID',
@@ -267,6 +268,19 @@ async function parseVisionLinkFuelReport(supabase, options) {
       .upsert(records, { onConflict: 'asset_id,record_date' });
     if (upsertResult.error) {
       throw new Error('Failed to upsert VisionLink Fleet Fuel records: ' + upsertResult.error.message);
+    }
+
+    try {
+      var idleAssetIds = [];
+      records.forEach(function(r) {
+        if (idleAssetIds.indexOf(r.asset_id) === -1) idleAssetIds.push(r.asset_id);
+      });
+      await idleRates.recomputeMeasuredIdleRates(supabase, userId, idleAssetIds);
+    } catch (rateErr) {
+      console.warn(
+        'visionlink-fuel: idle rate recompute failed: ' +
+        (rateErr && rateErr.message ? rateErr.message : 'error')
+      );
     }
 
     await updateImportStatus(supabase, importId, 'processed', null, 'visionlink-fuel');

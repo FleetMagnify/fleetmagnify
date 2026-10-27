@@ -201,7 +201,7 @@
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this is calculated:</strong> Total litres come directly from your fuel invoices, which is always accurate. Idle fuel is estimated using each asset's idle burn rate (litres/hour) multiplied by idle hours from telematics. Travel fuel is the remainder. Set or adjust the idle burn rate per asset on the <a href="assets.html">Assets page</a>.</p>
+      <p><strong>How this is calculated:</strong> Total litres come directly from your fuel invoices, which is always accurate. Idle fuel is estimated using each asset's idle burn rate (litres/hour) multiplied by idle hours from telematics. Travel fuel is the remainder. Set or adjust the idle burn rate per asset on the <a href="assets.html">Assets page</a>. Measured from VisionLink fuel and idle-hour data.</p>
     </div>
 
     <!-- FILTER BAR -->
@@ -717,7 +717,7 @@
   async function loadAssets() {
     var { data, error } = await supabase
       .from('assets')
-      .select('id, asset_name, asset_type, division_id, idle_burn_rate_lph, last_calibrated_at')
+      .select('id, asset_name, asset_type, division_id, idle_burn_rate_lph, idle_rate_source, last_calibrated_at')
       .eq('user_id', effectiveAccountId)
       .eq('is_ignored', false)
       .order('asset_name');
@@ -742,10 +742,14 @@
     var display = document.getElementById('idle-rate-display');
     if (!selectedAsset) {
       display.textContent = '— select an asset —';
+      display.title = '';
       return;
     }
     var idle = FCM.resolvedIdleRate(selectedAsset);
     display.textContent = FCM.formatIdleRate(idle.rate) + ' L/hr (' + idle.label.toLowerCase() + ')';
+    display.title = idle.source === 'measured'
+      ? 'Measured from VisionLink fuel and idle-hour data'
+      : '';
   }
 
   document.getElementById('asset-select').addEventListener('change', function() {
@@ -755,6 +759,7 @@
     var applyBtn = document.getElementById('apply-filters-btn');
     if (!selectedAsset) {
       display.textContent = '— select an asset —';
+      display.title = '';
       applyBtn.disabled = true;
       setViewMode(false);
       resetKpis(false);

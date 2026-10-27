@@ -176,7 +176,7 @@
 
     <div class="method-note">
       <div class="method-note-icon">💡</div>
-      <p><strong>How this is calculated:</strong> Total litres come from your fuel records. Idle fuel is estimated using each asset's idle burn rate multiplied by idle hours from telematics — the same method as Fuel Analyst. Operating fuel is the remainder. CO₂ is converted using NZ MfE combustion factors (Diesel 2.68 kg CO₂-e/L, Petrol 2.31). A litre of diesel emits the same regardless of drivetrain. Set fuel type and idle burn rate on the <a href="assets.html">Assets page</a>.</p>
+      <p><strong>How this is calculated:</strong> Total litres come from your fuel records. Idle fuel is estimated using each asset's idle burn rate multiplied by idle hours from telematics — the same method as Fuel Analyst. Operating fuel is the remainder. CO₂ is converted using NZ MfE combustion factors (Diesel 2.68 kg CO₂-e/L, Petrol 2.31). A litre of diesel emits the same regardless of drivetrain. Set fuel type and idle burn rate on the <a href="assets.html">Assets page</a>. Measured from VisionLink fuel and idle-hour data.</p>
     </div>
 
     <div class="filter-bar">
@@ -334,7 +334,7 @@
   async function loadAssets() {
     var result = await supabase
       .from('assets')
-      .select('id, asset_name, asset_type, division_id, fuel_type, idle_burn_rate_lph')
+      .select('id, asset_name, asset_type, division_id, fuel_type, idle_burn_rate_lph, idle_rate_source')
       .eq('user_id', effectiveAccountId)
       .eq('is_ignored', false)
       .order('asset_name');
