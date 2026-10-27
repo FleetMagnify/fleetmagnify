@@ -502,7 +502,42 @@ function testFilenameRange() {
   );
   assert.strictEqual(parseVisionLinkFilenameRange('manual-upload.csv'), null);
   assert.strictEqual(parseVisionLinkFilenameRange(null), null);
+
+  var spaced = parseVisionLinkFilenameRange(
+    'Fleet Utilization 27-10-2026 27-10-2026 27-10-2026.csv'
+  );
+  assert.deepStrictEqual(spaced, {
+    start: '2026-10-27',
+    end: '2026-10-27',
+    generated: '2026-10-27',
+  });
+  assert.deepStrictEqual(
+    parseVisionLinkFilenameRange('inbox/FLEET UTILIZATION 27-10-2026 27-10-2026 28-10-2026.CSV'),
+    dmy
+  );
+  assert.deepStrictEqual(
+    parseVisionLinkFilenameRange('Fleet Utilization - 27-10-2026 - 27-10-2026 - 28-10-2026.csv'),
+    dmy
+  );
+  assert.deepStrictEqual(
+    parseVisionLinkFilenameRange('Fleet Utilization 27-10-2026 27-10-2026 28-10-2026 (1).csv'),
+    dmy
+  );
+  assert.deepStrictEqual(
+    parseVisionLinkFilenameRange('Fleet Utilization 08-17-2026 08-17-2026 08-18-2026_1.xlsx'),
+    trailing
+  );
+  var spacedMulti = parseVisionLinkFilenameRange(
+    'Fleet Utilization 08-17-2026 08-23-2026 08-24-2026.csv'
+  );
+  assert.deepStrictEqual(spacedMulti, {
+    start: '2026-08-17',
+    end: '2026-08-23',
+    generated: '2026-08-24',
+  });
+  assert.notStrictEqual(spacedMulti.start, spacedMulti.end);
   console.log('✓ DD-MM, MM-DD, trailing _1, ambiguous receivedAt, and non-matches');
+  console.log('✓ spaces and " - " separators, trailing (1), multi-day name with spaces');
 }
 
 function testUtcToNzDate() {
@@ -594,6 +629,16 @@ function testOneDayGuardAndNzDates() {
     assert.strictEqual(out.mock.importUpdates[0].payload.status, 'failed');
     assert.strictEqual(out.mock.importUpdates[0].payload.error_message, ONE_DAY_MESSAGE_7);
     console.log('✓ multi-day filename rejected with no writes');
+
+    return runNzReport('Fleet Utilization 08-17-2026 08-23-2026 08-24-2026.csv');
+  }).then(function(out) {
+    assert.ok(out.error);
+    assert.strictEqual(out.error.message, ONE_DAY_MESSAGE_7);
+    assert.strictEqual(out.mock.upserted.length, 0, 'spaced multi-day file must not write');
+    assert.strictEqual(out.mock.assetUpdates.length, 0);
+    assert.strictEqual(out.mock.importUpdates[0].payload.status, 'failed');
+    assert.strictEqual(out.mock.importUpdates[0].payload.error_message, ONE_DAY_MESSAGE_7);
+    console.log('✓ multi-day filename with spaces rejected with no writes');
 
     return runNzReport(
       'Fleet_Utilization_02-03-2026_02-03-2026_02-04-2026.csv',
