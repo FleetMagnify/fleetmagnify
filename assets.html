@@ -1889,6 +1889,9 @@
     if (raw && typeof raw === 'object' && raw.cardNumber) {
       payload.bp_card_number = String(raw.cardNumber).trim() || null;
     }
+    if (raw && typeof raw === 'object' && typeof raw.serial === 'string' && raw.serial.trim()) {
+      payload.visionlink_serial = String(raw.serial).trim();
+    }
     return payload;
   }
 

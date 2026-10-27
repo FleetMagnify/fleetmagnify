@@ -26,7 +26,7 @@ const {
   resolveVisionLinkDateReading,
   visionLinkOneDayMessage,
 } = require('./parser-utils');
-const { loadAssetMaps, matchAsset } = require('./visionlink');
+const { loadAssetMaps, matchAsset, stageUnmatchedVisionLinkAssets, visionLinkWaitingNote } = require('./visionlink');
 
 var FUEL_SIGNATURE = [
   'Asset ID',
@@ -158,6 +158,16 @@ async function parseVisionLinkFuelReport(supabase, options) {
     var recordDate = bodyRange.start;
     var rows = parseVisionLinkFuelRows(rawCsv);
     var maps = await loadAssetMaps(supabase, userId);
+    // Stage unknown machines, including ones with no idle/working split.
+    // The Total row is not a machine.
+    var toStage = [];
+    rows.forEach(function(row) {
+      if (isFuelTotalRow(row)) return;
+      if (matchAsset(row, maps)) return;
+      toStage.push(row);
+    });
+    var stageResult = await stageUnmatchedVisionLinkAssets(supabase, userId, toStage, 'visionlink-fuel');
+
     var records = [];
     var skippedNoSplit = 0;
     var skippedTotal = 0;
@@ -213,6 +223,24 @@ async function parseVisionLinkFuelReport(supabase, options) {
     });
 
     if (records.length === 0) {
+      // Processed plus a note does not throw, so the inbound failure alert
+      // (which runs only from the catch) is not sent.
+      if (stageResult.staged > 0 || stageResult.skippedIgnored > 0) {
+        var waitingNote = visionLinkWaitingNote(stageResult.staged);
+        await updateImportStatus(supabase, importId, 'processed', waitingNote, 'visionlink-fuel');
+        return {
+          ok: true,
+          recordsUpserted: 0,
+          skippedNoSplit: skippedNoSplit,
+          skippedTotal: skippedTotal,
+          unmatched: unmatched.length,
+          unmatchedDetails: unmatched,
+          recordDate: recordDate,
+          pendingStaged: stageResult.staged,
+          pendingIgnored: stageResult.skippedIgnored,
+          importNote: waitingNote,
+        };
+      }
       if (unmatched.length === 0) {
         await updateImportStatus(supabase, importId, 'processed', null, 'visionlink-fuel');
         return {
@@ -223,6 +251,8 @@ async function parseVisionLinkFuelReport(supabase, options) {
           unmatched: 0,
           unmatchedDetails: [],
           recordDate: recordDate,
+          pendingStaged: 0,
+          pendingIgnored: 0,
         };
       }
       throw new Error(
@@ -249,6 +279,8 @@ async function parseVisionLinkFuelReport(supabase, options) {
       unmatched: unmatched.length,
       unmatchedDetails: unmatched,
       recordDate: recordDate,
+      pendingStaged: stageResult.staged,
+      pendingIgnored: stageResult.skippedIgnored,
     };
   } catch (err) {
     await updateImportStatus(supabase, importId, 'failed', err.message, 'visionlink-fuel');

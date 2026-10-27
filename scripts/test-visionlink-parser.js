@@ -144,14 +144,19 @@ function testEndToEndMock() {
     function mockFrom(table) {
       return {
         select: function() {
-          return {
-            eq: function() {
-              return Promise.resolve({
+          var chain = {
+            eq: function() { return chain; },
+            in: function() { return chain; },
+            order: function() { return chain; },
+            limit: function() { return chain; },
+            then: function(resolve) {
+              resolve({
                 data: table === 'assets' ? ASSETS : [],
                 error: null,
               });
             },
           };
+          return chain;
         },
         upsert: function(rows, opts) {
           upserted.push({ table: table, rows: rows, opts: opts });
@@ -329,21 +334,73 @@ var NZ_ASSETS = [
 var ONE_DAY_MESSAGE_7 =
   "VisionLink report covers 7 days (2026-08-17 to 2026-08-23). FleetMagnify needs a one-day report: schedule it Daily with Report Duration 'Previous day'.";
 
-function createMock(assets) {
+function createMock(assets, options) {
+  options = options || {};
+  var ignored = options.ignored || [];
+  var telematics = options.telematics || [];
   var upserted = [];
   var assetUpdates = [];
   var importUpdates = [];
   function mockFrom(table) {
     return {
       select: function() {
-        return {
-          eq: function() {
-            return Promise.resolve({
-              data: table === 'assets' ? assets : [],
-              error: null,
-            });
+        var filters = [];
+        var orderBy = null;
+        var limitN = null;
+        var chain = {
+          eq: function(col, val) {
+            filters.push({ op: 'eq', col: col, val: val });
+            return chain;
+          },
+          in: function(col, val) {
+            filters.push({ op: 'in', col: col, val: val });
+            return chain;
+          },
+          order: function(col, opts) {
+            orderBy = { col: col, ascending: !!(opts && opts.ascending) };
+            return chain;
+          },
+          limit: function(n) {
+            limitN = n;
+            return chain;
+          },
+          then: function(resolve) {
+            var data = [];
+            if (table === 'assets') data = assets;
+            else if (table === 'ignored_assets') data = ignored;
+            else if (table === 'telematics_records') {
+              data = telematics.filter(function(row) {
+                for (var f = 0; f < filters.length; f++) {
+                  var filter = filters[f];
+                  if (filter.col === 'user_id') continue;
+                  if (filter.op === 'eq' && String(row[filter.col]) !== String(filter.val)) return false;
+                  if (filter.op === 'in') {
+                    var allowed = (filter.val || []).map(String);
+                    if (allowed.indexOf(String(row[filter.col])) === -1) return false;
+                  }
+                }
+                return true;
+              });
+              if (orderBy) {
+                var col = orderBy.col;
+                var dir = orderBy.ascending ? 1 : -1;
+                data = data.slice().sort(function(a, b) {
+                  var av = String(a[col] || '');
+                  var bv = String(b[col] || '');
+                  if (av < bv) return -1 * dir;
+                  if (av > bv) return 1 * dir;
+                  return 0;
+                });
+              }
+              // Same default cap as PostgREST. An unordered select of a long
+              // history drops the newest day; order + limit(1) does not.
+              var cap = limitN == null ? 1000 : limitN;
+              if (data.length > cap) data = data.slice(0, cap);
+            }
+            resolve({ data: data, error: null });
           },
         };
+        return chain;
       },
       upsert: function(rows, opts) {
         upserted.push({ table: table, rows: rows, opts: opts });
@@ -562,13 +619,406 @@ function testOneDayGuardAndNzDates() {
   });
 }
 
+function utilCsv(lines) {
+  return [HEADER].concat(lines).join('\n');
+}
+
+var ACTIVITY_TAIL = ',2026-10-27T10:00:00Z,2026-10-27T10:00:00Z,+13:00,Pacific/Auckland,NZDT,9,1,8,10,20,2';
+var EMPTY_TAIL = ',2026-10-27T10:00:00Z,2026-10-27T10:00:00Z,+13:00,Pacific/Auckland,NZDT,,,,,';
+
+function runUtil(csv, filename, receivedAt, assets, options) {
+  var warnings = [];
+  var logs = [];
+  var origWarn = console.warn;
+  var origLog = console.log;
+  console.warn = function() {
+    warnings.push(Array.prototype.slice.call(arguments).join(' '));
+    origWarn.apply(console, arguments);
+  };
+  console.log = function() {
+    logs.push(Array.prototype.slice.call(arguments).join(' '));
+    origLog.apply(console, arguments);
+  };
+  var mock = createMock(assets, options);
+  return visionlink.parseVisionLinkReport(mock.supabase, {
+    userId: MONRO_USER,
+    importId: 'imp-vl-stage',
+    rawCsv: csv,
+    filename: filename,
+    receivedAt: receivedAt,
+  }).then(function(result) {
+    console.warn = origWarn;
+    console.log = origLog;
+    return { result: result, warnings: warnings, logs: logs, mock: mock, error: null };
+  }, function(err) {
+    console.warn = origWarn;
+    console.log = origLog;
+    return { result: null, warnings: warnings, logs: logs, mock: mock, error: err };
+  });
+}
+
+function pendingUpserts(mock) {
+  return mock.upserted.filter(function(u) { return u.table === 'pending_assets'; });
+}
+
+function telematicsUpsert(mock) {
+  return mock.upserted.filter(function(u) { return u.table === 'telematics_records'; })[0] || null;
+}
+
+function assertPendingShape(entry, expected) {
+  assert.strictEqual(entry.opts.onConflict, 'user_id,asset_name');
+  assert.strictEqual(entry.opts.ignoreDuplicates, true);
+  var row = entry.rows;
+  assert.strictEqual(row.user_id, MONRO_USER);
+  assert.strictEqual(row.asset_name, expected.name);
+  assert.strictEqual(row.asset_type, expected.type);
+  assert.strictEqual(row.registration, null);
+  assert.strictEqual(row.source, 'visionlink');
+  assert.deepStrictEqual(row.raw_data, {
+    assetId: expected.assetId,
+    serial: expected.serial,
+    make: expected.make,
+    model: expected.model,
+    productFamily: null,
+    source: 'visionlink',
+  });
+}
+
+function testAssetTypeMapping() {
+  console.log('\n=== visionLinkAssetType ===');
+  var cases = [
+    ['Forestry Excavator', '', 'Excavator'],
+    ['Medium Hydraulic Excavator', '326FL', 'Excavator'],
+    ['Wheel Loader', '', 'Wheel Loader'],
+    ['Skidder', '', 'Skidder'],
+    ['Dozer', '', 'Bulldozer'],
+    ['Track-Type Tractor', '', 'Bulldozer'],
+    ['Motor Grader', '', 'Motor Grader'],
+    ['Cat Compact', 'C7.1', 'Compactor'],
+    ['Compactor', '', 'Compactor'],
+    ['Forklift', '', 'Forklift'],
+    ['Telehandler', '', 'Forklift'],
+    ['Crane', '', 'Crane'],
+    ['Articulated Truck', '', 'Dump Truck'],
+    ['Dump Truck', '', 'Dump Truck'],
+    ['Generator', 'C7.1', 'Other'],
+    ['', '326FL', 'Other'],
+    ['', 'C7.1', 'Other'],
+    ['', 'Excavator', 'Excavator'],
+    [null, null, 'Other'],
+  ];
+  cases.forEach(function(c) {
+    assert.strictEqual(visionlink.visionLinkAssetType(c[0], c[1]), c[2], JSON.stringify(c));
+  });
+  assert.strictEqual(
+    visionlink.visionLinkMachineName({
+      Make: 'CAT  ',
+      Model: '  558GF',
+      'Asset ID': 'EQ000002',
+      'Asset Serial Number': 'AAA00002',
+    }),
+    'CAT 558GF (EQ000002)'
+  );
+  assert.strictEqual(
+    visionlink.visionLinkMachineName({
+      'Make Display Name': 'CAT',
+      Model: '558GF',
+      'Asset ID': 'EQ000002',
+      'Asset Serial Number': 'AAA00002',
+    }),
+    'CAT 558GF (EQ000002)'
+  );
+  assert.strictEqual(
+    visionlink.visionLinkMachineName({
+      Make: 'CAT',
+      Model: '326FL',
+      'Asset ID': '',
+      'Asset Serial Number': 'AAA00008',
+    }),
+    'CAT 326FL (AAA00008)'
+  );
+  console.log('✓ product family mappings, unknown → Other, shared name format');
+}
+
+function testStageAndHourGuard() {
+  console.log('\n=== Stage unknown machines + hour meter guard ===');
+  var known = { id: 11, asset_name: 'CAT 538LL (EQ000001)', visionlink_serial: 'AAA00001', current_hours: 100 };
+  var day = 'Fleet_Utilization_27-10-2026_27-10-2026_28-10-2026.csv';
+  var hourAssets = [
+    { id: 31, asset_name: 'CAT 538LL (EQ000031)', visionlink_serial: 'AAA00031', current_hours: 5000 },
+    { id: 32, asset_name: 'CAT 558GF (EQ000032)', visionlink_serial: 'AAA00032', current_hours: 6000 },
+    { id: 33, asset_name: 'CAT 326FL (EQ000033)', visionlink_serial: 'AAA00033', current_hours: 1000 },
+  ];
+  var stored = [
+    { asset_id: 31, record_date: '2026-10-27' },
+    { asset_id: 32, record_date: '2026-10-01' },
+    { asset_id: 32, record_date: '2026-10-27' },
+  ];
+  var mixed = utilCsv([
+    ',EQ000001,AAA00001,CAT,538LL,8000' + ACTIVITY_TAIL,
+    ',EQ000002,AAA00002,CAT,558GF,9000' + ACTIVITY_TAIL,
+    ',EQ000003,AAA00003,CAT,326FL,4800' + ACTIVITY_TAIL,
+  ]);
+  return runUtil(mixed, day, null, [known]).then(function(out) {
+    assert.strictEqual(out.error, null);
+    assert.strictEqual(out.result.recordsUpserted, 1);
+    assert.strictEqual(out.result.pendingStaged, 2);
+    assert.strictEqual(out.mock.importUpdates[0].payload.status, 'processed');
+    assert.strictEqual(out.mock.importUpdates[0].payload.error_message, null);
+    var tel = telematicsUpsert(out.mock);
+    assert.ok(tel);
+    assert.strictEqual(tel.rows.length, 1);
+    assert.strictEqual(tel.rows[0].asset_id, 11);
+    var pending = pendingUpserts(out.mock);
+    assert.strictEqual(pending.length, 2);
+    var byName = {};
+    pending.forEach(function(p) { byName[p.rows.asset_name] = p; });
+    assertPendingShape(byName['CAT 558GF (EQ000002)'], {
+      name: 'CAT 558GF (EQ000002)',
+      type: 'Other',
+      assetId: 'EQ000002',
+      serial: 'AAA00002',
+      make: 'CAT',
+      model: '558GF',
+    });
+    assertPendingShape(byName['CAT 326FL (EQ000003)'], {
+      name: 'CAT 326FL (EQ000003)',
+      type: 'Other',
+      assetId: 'EQ000003',
+      serial: 'AAA00003',
+      make: 'CAT',
+      model: '326FL',
+    });
+    assert.ok(out.logs.some(function(l) {
+      return l.indexOf('staged pending asset "CAT 558GF (EQ000002)"') !== -1;
+    }));
+    assert.ok(out.logs.some(function(l) { return l.indexOf('staged 2 machine(s) for approval') !== -1; }));
+    console.log('✓ known machine written, two unknown machines staged');
+
+    return runUtil(utilCsv([
+      ',EQ000002,AAA00002,CAT,558GF,9000' + ACTIVITY_TAIL,
+      ',EQ000003,AAA00003,CAT,326FL,4800' + ACTIVITY_TAIL,
+    ]), day, null, []);
+  }).then(function(out) {
+    assert.strictEqual(out.error, null, 'all-unknown must not throw (no failure alert)');
+    assert.strictEqual(out.result.recordsUpserted, 0);
+    assert.strictEqual(out.result.pendingStaged, 2);
+    assert.strictEqual(telematicsUpsert(out.mock), null);
+    assert.strictEqual(out.mock.importUpdates[0].payload.status, 'processed');
+    assert.strictEqual(
+      out.mock.importUpdates[0].payload.error_message,
+      'No known machines yet: 2 machine(s) waiting for approval on the Assets page.'
+    );
+    console.log('✓ all unknown: processed with the waiting note, nothing thrown');
+
+    return runUtil(utilCsv([
+      ',EQ000001,AAA00001,CAT,538LL,8000' + ACTIVITY_TAIL,
+      ',EQ000099,AAA00099,CAT,999,100' + ACTIVITY_TAIL,
+    ]), day, null, [known], {
+      ignored: [{ asset_name: 'CAT 999 (EQ000099)' }],
+    });
+  }).then(function(out) {
+    assert.strictEqual(out.error, null);
+    assert.strictEqual(out.result.recordsUpserted, 1);
+    assert.strictEqual(out.result.pendingStaged, 0);
+    assert.strictEqual(out.result.pendingIgnored, 1);
+    assert.strictEqual(pendingUpserts(out.mock).length, 0);
+    console.log('✓ ignored name is not staged');
+
+    return runUtil(utilCsv([
+      ',EQ000099,AAA00099,CAT,999,100' + ACTIVITY_TAIL,
+    ]), day, null, [], {
+      ignored: [{ asset_name: 'CAT 999 (EQ000099)' }],
+    });
+  }).then(function(out) {
+    assert.strictEqual(out.error, null, 'ignored-only file must not throw');
+    assert.strictEqual(out.result.recordsUpserted, 0);
+    assert.strictEqual(out.result.pendingStaged, 0);
+    assert.strictEqual(out.result.pendingIgnored, 1);
+    assert.strictEqual(pendingUpserts(out.mock).length, 0);
+    assert.strictEqual(out.mock.importUpdates[0].payload.status, 'processed');
+    assert.strictEqual(
+      out.mock.importUpdates[0].payload.error_message,
+      'No known machines yet: 0 machine(s) waiting for approval on the Assets page.'
+    );
+    console.log('✓ ignored-only file is processed, not failed');
+
+    return runUtil(utilCsv([
+      ',EQ000001,AAA00001,CAT,538LL,8000' + ACTIVITY_TAIL,
+      ',EQ000008,AAA00008,CAT,320,100' + EMPTY_TAIL,
+    ]), day, null, [known]);
+  }).then(function(out) {
+    assert.strictEqual(out.error, null);
+    assert.strictEqual(out.result.skippedEmpty, 1);
+    assert.strictEqual(out.result.pendingStaged, 1);
+    assert.strictEqual(pendingUpserts(out.mock)[0].rows.asset_name, 'CAT 320 (EQ000008)');
+    assert.strictEqual(telematicsUpsert(out.mock).rows.length, 1);
+    assert.strictEqual(telematicsUpsert(out.mock).rows[0].asset_id, 11);
+    console.log('✓ empty-activity unknown machine is staged and not written');
+
+    return runUtil(utilCsv([
+      ',EQ000001,AAA00001,CAT,538LL,8000' + ACTIVITY_TAIL,
+      ',,AAA00008,CAT,326FL,100' + ACTIVITY_TAIL,
+      ',,,CAT,Mystery,100' + ACTIVITY_TAIL,
+    ]), day, null, [known]);
+  }).then(function(out) {
+    assert.strictEqual(out.error, null);
+    var names = pendingUpserts(out.mock).map(function(p) { return p.rows.asset_name; });
+    assert.deepStrictEqual(names, ['CAT 326FL (AAA00008)']);
+    assert.ok(out.warnings.some(function(w) {
+      return w.indexOf('no Asset ID and no serial') !== -1;
+    }));
+    console.log('✓ serial-only name uses the serial; blank id and serial is skipped');
+
+    return runUtil(utilCsv([
+      ',EQ000002,AAA00002,CAT,558GF,9000' + ACTIVITY_TAIL,
+    ]), 'Fleet_Utilization_08-17-2026_08-23-2026_08-24-2026_1.xlsx', null, []);
+  }).then(function(out) {
+    assert.ok(out.error);
+    assert.strictEqual(out.error.message, ONE_DAY_MESSAGE_7);
+    assert.strictEqual(out.mock.upserted.length, 0);
+    assert.strictEqual(out.mock.importUpdates[0].payload.status, 'failed');
+    console.log('✓ multi-day file fails and stages nothing');
+
+    return runUtil(utilCsv([
+      ',EQ000031,AAA00031,CAT,538LL,5100' + ACTIVITY_TAIL,
+      ',EQ000033,AAA00033,CAT,326FL,1100' + ACTIVITY_TAIL,
+    ]), 'Fleet_Utilization_20-10-2026_20-10-2026_21-10-2026.csv', null, hourAssets, {
+      telematics: stored,
+    });
+  }).then(function(out) {
+    assert.strictEqual(out.error, null);
+    var tel = telematicsUpsert(out.mock);
+    assert.strictEqual(tel.rows.length, 2);
+    var byId = {};
+    tel.rows.forEach(function(r) { byId[r.asset_id] = r; });
+    assert.strictEqual(byId[31].record_date, '2026-10-20');
+    assert.strictEqual(byId[31].total_engine_hours, 5100);
+    assert.strictEqual(byId[33].total_engine_hours, 1100);
+    var hours = {};
+    out.mock.assetUpdates.forEach(function(u) {
+      var idFilter = u.filters.filter(function(f) { return f.col === 'id'; })[0];
+      hours[idFilter.val] = u.payload.current_hours;
+    });
+    assert.strictEqual(hours[31], undefined);
+    assert.strictEqual(hours[33], 1100);
+    assert.ok(out.logs.some(function(l) {
+      return l === 'visionlink: skipping current_hours update for asset 31 (file date 2026-10-20 is older than newest stored 2026-10-27)';
+    }));
+    console.log('✓ older file keeps current_hours and still upserts telematics');
+
+    return runUtil(utilCsv([
+      ',EQ000032,AAA00032,CAT,558GF,6100' + ACTIVITY_TAIL,
+      ',EQ000031,AAA00031,CAT,538LL,5200' + ACTIVITY_TAIL,
+    ]), 'Fleet_Utilization_28-10-2026_28-10-2026_29-10-2026.csv', null, hourAssets, {
+      telematics: stored,
+    });
+  }).then(function(out) {
+    assert.strictEqual(out.error, null);
+    var hours = {};
+    out.mock.assetUpdates.forEach(function(u) {
+      var idFilter = u.filters.filter(function(f) { return f.col === 'id'; })[0];
+      hours[idFilter.val] = u.payload.current_hours;
+    });
+    assert.strictEqual(hours[32], 6100);
+    assert.strictEqual(hours[31], 5200);
+    console.log('✓ newer file updates current_hours');
+
+    return runUtil(utilCsv([
+      ',EQ000031,AAA00031,CAT,538LL,5150' + ACTIVITY_TAIL,
+    ]), 'Fleet_Utilization_27-10-2026_27-10-2026_28-10-2026.csv', null, hourAssets, {
+      telematics: stored,
+    });
+  }).then(function(out) {
+    assert.strictEqual(out.error, null);
+    assert.strictEqual(out.mock.assetUpdates[0].payload.current_hours, 5150);
+    console.log('✓ file date equal to the newest stored day still updates current_hours');
+
+    var many = [];
+    var cursor = new Date(Date.UTC(2023, 0, 1));
+    for (var n = 0; n < 1000; n++) {
+      var dayDate = new Date(cursor.getTime() + n * 86400000);
+      many.push({ asset_id: 31, record_date: dayDate.toISOString().slice(0, 10) });
+    }
+    many.push({ asset_id: 31, record_date: '2026-10-27' });
+    assert.strictEqual(many.length, 1001);
+    return runUtil(utilCsv([
+      ',EQ000031,AAA00031,CAT,538LL,5100' + ACTIVITY_TAIL,
+    ]), 'Fleet_Utilization_20-10-2026_20-10-2026_21-10-2026.csv', null, hourAssets, {
+      telematics: many,
+    });
+  }).then(function(out) {
+    assert.strictEqual(out.error, null);
+    assert.strictEqual(telematicsUpsert(out.mock).rows[0].asset_id, 31);
+    assert.strictEqual(telematicsUpsert(out.mock).rows[0].total_engine_hours, 5100);
+    assert.strictEqual(out.mock.assetUpdates.length, 0);
+    assert.ok(out.logs.some(function(l) {
+      return l === 'visionlink: skipping current_hours update for asset 31 (file date 2026-10-20 is older than newest stored 2026-10-27)';
+    }));
+    console.log('✓ more than 1,000 stored rows still compare against the true newest date');
+
+    var firstAssets = [known];
+    var approveCsv = utilCsv([
+      ',EQ000010,AAA00010,CAT,320,50' + ACTIVITY_TAIL,
+    ]);
+    return runUtil(approveCsv, day, null, firstAssets).then(function(first) {
+      assert.strictEqual(first.result.pendingStaged, 1);
+      assert.strictEqual(pendingUpserts(first.mock)[0].rows.asset_name, 'CAT 320 (EQ000010)');
+      var approved = firstAssets.concat([{
+        id: 40,
+        asset_name: 'CAT 320 (EQ000010)',
+        visionlink_serial: 'AAA00010',
+        current_hours: 40,
+      }]);
+      return runUtil(approveCsv, day, null, approved);
+    });
+  }).then(function(out) {
+    assert.strictEqual(out.error, null);
+    assert.strictEqual(out.result.pendingStaged, 0);
+    assert.strictEqual(pendingUpserts(out.mock).length, 0);
+    assert.strictEqual(telematicsUpsert(out.mock).rows[0].asset_id, 40);
+    assert.strictEqual(visionlink.extractBracketAssetId('CAT 320 (EQ000010)'), 'EQ000010');
+    console.log('✓ approved bracket id matches on the next file and is not staged');
+  });
+}
+
+function testConfirmedPayloadCarriesSerial() {
+  console.log('\n=== Approval payload carries visionlink_serial ===');
+  var fs = require('fs');
+  var path = require('path');
+  var html = fs.readFileSync(path.join(__dirname, '../assets.html'), 'utf8');
+  var start = html.indexOf('function buildConfirmedAssetPayload');
+  var end = html.indexOf('async function confirmPendingAsset');
+  assert.ok(start !== -1 && end > start);
+  var src = html.slice(start, end);
+  var build = new Function('effectiveAccountId', src + '\nreturn buildConfirmedAssetPayload;')(
+    '00000000-0000-4000-8000-0000000000c1'
+  );
+  var payload = build({
+    registration: 'ABC123',
+    raw_data: { serial: ' AAA00001 ', cardNumber: ' 999 ', assetId: 'EQ000001' },
+  }, 'CAT 558GF (EQ000001)', 'Excavator');
+  assert.strictEqual(payload.visionlink_serial, 'AAA00001');
+  assert.strictEqual(payload.bp_card_number, '999');
+  assert.strictEqual(payload.registration, 'ABC123');
+  assert.strictEqual(payload.asset_name, 'CAT 558GF (EQ000001)');
+  var blank = build({ raw_data: { serial: '   ' } }, 'CAT 320 (EQ000010)', 'Other');
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(blank, 'visionlink_serial'), false);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(blank, 'bp_card_number'), false);
+  console.log('✓ visionlink_serial is copied from raw_data.serial; blank serial is omitted');
+}
+
 testDateParsing();
 testDetectionAndRows();
 testMatching();
 testFilenameRange();
 testUtcToNzDate();
+testAssetTypeMapping();
+testConfirmedPayloadCarriesSerial();
 testEndToEndMock().then(function() {
   return testOneDayGuardAndNzDates();
+}).then(function() {
+  return testStageAndHourGuard();
 }).then(function() {
   console.log('\n════════════════════════════════════════');
   console.log('All VisionLink parser tests passed.');
@@ -576,6 +1026,7 @@ testEndToEndMock().then(function() {
   console.log('Callouts → telematics_records.data_quality_notes');
   console.log('Fuel → telematics_records.litres_consumed');
   console.log('One-day filename guard + NZ-local fallback dates');
+  console.log('Unknown machines staged in pending_assets; hour meter guarded');
 }).catch(function(err) {
   console.error('\nFAILED:', err);
   process.exit(1);

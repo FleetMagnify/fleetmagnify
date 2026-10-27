@@ -72,21 +72,27 @@ var FUEL_KEYS = [
 var ONE_DAY_3 =
   "VisionLink report covers 3 days (2026-10-27 to 2026-10-29). FleetMagnify needs a one-day report: schedule it Daily with Report Duration 'Previous day'.";
 
-function createMock() {
+function createMock(extra) {
+  extra = extra || {};
+  var assets = extra.assets || ASSETS;
+  var ignored = extra.ignored || [];
   var upserted = [];
   var assetUpdates = [];
   var importUpdates = [];
   function mockFrom(table) {
     return {
       select: function() {
-        return {
-          eq: function() {
-            return Promise.resolve({
-              data: table === 'assets' ? ASSETS : [],
-              error: null,
-            });
+        var chain = {
+          eq: function() { return chain; },
+          in: function() { return chain; },
+          then: function(resolve) {
+            var data = [];
+            if (table === 'assets') data = assets;
+            else if (table === 'ignored_assets') data = ignored;
+            resolve({ data: data, error: null });
           },
         };
+        return chain;
       },
       upsert: function(rows, opts) {
         upserted.push({ table: table, rows: rows, opts: opts });
@@ -118,14 +124,20 @@ function createMock() {
   };
 }
 
-function runFuel(csv, filename, receivedAt) {
+function runFuel(csv, filename, receivedAt, extra) {
   var warnings = [];
+  var logs = [];
   var origWarn = console.warn;
+  var origLog = console.log;
   console.warn = function() {
     warnings.push(Array.prototype.slice.call(arguments).join(' '));
     origWarn.apply(console, arguments);
   };
-  var mock = createMock();
+  console.log = function() {
+    logs.push(Array.prototype.slice.call(arguments).join(' '));
+    origLog.apply(console, arguments);
+  };
+  var mock = createMock(extra);
   return fuel.parseVisionLinkFuelReport(mock.supabase, {
     userId: USER,
     importId: 'imp-vl-fuel',
@@ -134,10 +146,12 @@ function runFuel(csv, filename, receivedAt) {
     receivedAt: receivedAt,
   }).then(function(result) {
     console.warn = origWarn;
-    return { result: result, warnings: warnings, mock: mock, error: null };
+    console.log = origLog;
+    return { result: result, warnings: warnings, logs: logs, mock: mock, error: null };
   }, function(err) {
     console.warn = origWarn;
-    return { result: null, warnings: warnings, mock: mock, error: err };
+    console.log = origLog;
+    return { result: null, warnings: warnings, logs: logs, mock: mock, error: err };
   });
 }
 
@@ -335,9 +349,88 @@ function testDashOnlyIsNotAnError() {
     assert.strictEqual(out.error, null);
     assert.strictEqual(out.result.recordsUpserted, 0);
     assert.strictEqual(out.result.skippedNoSplit, 1);
-    assert.strictEqual(out.mock.upserted.length, 0);
+    assert.strictEqual(out.result.pendingStaged, 1);
+    var tel = out.mock.upserted.filter(function(u) { return u.table === 'telematics_records'; });
+    assert.strictEqual(tel.length, 0);
+    var pending = out.mock.upserted.filter(function(u) { return u.table === 'pending_assets'; });
+    assert.strictEqual(pending.length, 1);
+    assert.strictEqual(pending[0].rows.asset_name, 'CAT C7.1 (EQ000004)');
+    assert.strictEqual(pending[0].rows.asset_type, 'Compactor');
     assert.strictEqual(out.mock.importUpdates[0].payload.status, 'processed');
-    console.log('✓ all-dash file writes nothing and stays processed');
+    assert.strictEqual(
+      out.mock.importUpdates[0].payload.error_message,
+      'No known machines yet: 1 machine(s) waiting for approval on the Assets page.'
+    );
+    console.log('✓ all-dash file stages the machine, writes no telematics row, and stays processed');
+  });
+}
+
+function testFuelStaging() {
+  console.log('\n=== Fleet Fuel stages unknown machines ===');
+  assert.strictEqual(
+    visionlink.visionLinkMachineName({
+      Make: 'CAT',
+      Model: '538LL',
+      'Asset ID': 'EQ000002',
+      'Asset Serial Number': 'AAA00002',
+    }),
+    visionlink.visionLinkMachineName({
+      'Make Display Name': 'CAT',
+      Model: '538LL',
+      'Asset ID': 'EQ000002',
+      'Asset Serial Number': 'AAA00002',
+    })
+  );
+
+  var csv = [
+    'Fleet Fuel Report',
+    'Report Date Range',
+    '27/10/2026 00:00 - 27/10/2026 23:59',
+    HEADER,
+    'EQ000001,AAA00001,2017,CAT,558GF,Forestry Excavator,5.2,1.2,4.5,357.2,9.9,35.9,362.5,11.1,32.7,89.6%',
+    'EQ000002,AAA00002,2019,CAT,538LL,Forestry Excavator,3.3,0.8,4.1,217.7,8.9,24.4,221.0,9.7,22.7,91.8%',
+    'EQ000003,AAA00003,2019,CAT,326FL,Medium Hydraulic Excavator,9.0,2.4,3.8,210.1,7.8,27.0,219.1,10.1,21.6,76.8%',
+    'EQ000004,AAA00004,2020,CAT,C7.1,Cat Compact,-,-,-,-,-,-,-,-,-,-',
+    '"",,,,,Total,17.5,4.4,4.0,785.0,26.6,29.5,802.6,30.9,26.0,86.1%',
+  ].join('\n');
+  var knownOnly = [ASSETS[0]];
+  return runFuel(csv, null, '2026-10-28T18:00:00Z', { assets: knownOnly }).then(function(out) {
+    assert.strictEqual(out.error, null);
+    assert.strictEqual(out.result.recordsUpserted, 1);
+    assert.strictEqual(out.result.pendingStaged, 3);
+    assert.strictEqual(out.result.skippedNoSplit, 1);
+    assert.strictEqual(out.result.skippedTotal, 1);
+    var tel = rowsByAsset(out.mock);
+    assert.deepStrictEqual(Object.keys(tel.byId), ['201']);
+    var pending = out.mock.upserted.filter(function(u) { return u.table === 'pending_assets'; });
+    assert.strictEqual(pending.length, 3);
+    var byName = {};
+    pending.forEach(function(p) {
+      assert.strictEqual(p.opts.onConflict, 'user_id,asset_name');
+      assert.strictEqual(p.opts.ignoreDuplicates, true);
+      assert.strictEqual(p.rows.source, 'visionlink-fuel');
+      assert.strictEqual(p.rows.registration, null);
+      assert.strictEqual(p.rows.user_id, USER);
+      byName[p.rows.asset_name] = p.rows;
+    });
+    assert.strictEqual(byName['CAT 538LL (EQ000002)'].asset_type, 'Excavator');
+    assert.strictEqual(byName['CAT 538LL (EQ000002)'].raw_data.productFamily, 'Forestry Excavator');
+    assert.strictEqual(byName['CAT 538LL (EQ000002)'].raw_data.assetId, 'EQ000002');
+    assert.strictEqual(byName['CAT 538LL (EQ000002)'].raw_data.serial, 'AAA00002');
+    assert.strictEqual(byName['CAT 538LL (EQ000002)'].raw_data.make, 'CAT');
+    assert.strictEqual(byName['CAT 538LL (EQ000002)'].raw_data.model, '538LL');
+    assert.strictEqual(byName['CAT 538LL (EQ000002)'].raw_data.source, 'visionlink-fuel');
+    assert.strictEqual(byName['CAT 326FL (EQ000003)'].asset_type, 'Excavator');
+    assert.strictEqual(byName['CAT 326FL (EQ000003)'].raw_data.productFamily, 'Medium Hydraulic Excavator');
+    assert.strictEqual(byName['CAT C7.1 (EQ000004)'].asset_type, 'Compactor');
+    assert.strictEqual(byName['CAT C7.1 (EQ000004)'].raw_data.productFamily, 'Cat Compact');
+    Object.keys(byName).forEach(function(name) {
+      var keys = Object.keys(byName[name].raw_data).sort();
+      assert.deepStrictEqual(keys, ['assetId', 'make', 'model', 'productFamily', 'serial', 'source']);
+    });
+    assert.strictEqual(byName.Total, undefined);
+    assert.ok(out.logs.some(function(l) { return l.indexOf('staged 3 machine(s) for approval') !== -1; }));
+    console.log('✓ fuel unknowns staged by product family; no-split staged; Total not staged');
   });
 }
 
@@ -345,6 +438,8 @@ testDetection();
 testDateParsing();
 testEndToEnd().then(function() {
   return testDashOnlyIsNotAnError();
+}).then(function() {
+  return testFuelStaging();
 }).then(function() {
   console.log('\n════════════════════════════════════════');
   console.log('All VisionLink Fleet Fuel parser tests passed.');

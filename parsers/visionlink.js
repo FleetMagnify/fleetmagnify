@@ -15,7 +15,9 @@
  *   litres_consumed ← Total Fuel Burned (L)  [feeds machinery Fuel Analyst]
  *   data_quality_notes ← Callouts (OEM data-quality warnings)
  *
- * Overwrites assets.current_hours from Hour Meter (cumulative, not a delta).
+ * assets.current_hours takes the max Hour Meter in this file, and only when
+ * the file's record_date is at least as new as the asset's newest stored
+ * telematics day. An older file still upserts its telematics row.
  *
  * record_date is one calendar day. A Fleet_Utilization filename that names
  * a single day is used for every row. Otherwise the date is taken from
@@ -32,7 +34,6 @@ const {
   normalizeHeader,
   parseNumeric,
   updateImportStatus,
-  detectAssetType,
   parseVisionLinkFilenameRange,
   utcTimestampToLocalDate,
   visionLinkOneDayMessage,
@@ -264,6 +265,198 @@ function matchAsset(row, maps) {
   return null;
 }
 
+var VISIONLINK_ASSET_TYPES = {
+  Excavator: true,
+  'Dump Truck': true,
+  'Wheel Loader': true,
+  'Motor Grader': true,
+  Bulldozer: true,
+  Skidder: true,
+  Compactor: true,
+  Crane: true,
+  Forklift: true,
+  'Light Vehicle': true,
+  'Rigid Truck': true,
+  'Semi Trailer': true,
+  'Truck & Trailer': true,
+  'Water Truck': true,
+  Other: true,
+};
+
+function cleanVisionLinkToken(value) {
+  var s = String(value == null ? '' : value).trim();
+  if (!s || /^null$/i.test(s)) return '';
+  return s;
+}
+
+/**
+ * "<Make> <Model> (<Asset ID>)". The bracketed id is the last group so
+ * extractBracketAssetId() finds it after the owner approves the name.
+ * A blank Asset ID uses the serial in the brackets. Blank id and serial
+ * returns null (nothing to match later).
+ */
+function visionLinkMachineName(row) {
+  var make = cleanVisionLinkToken(row.Make || row['Make Display Name']);
+  var model = cleanVisionLinkToken(row.Model);
+  var assetId = cleanVisionLinkToken(row['Asset ID']);
+  var serial = cleanVisionLinkToken(row['Asset Serial Number']);
+  var bracket = assetId || serial;
+  if (!bracket) return null;
+  var head = (make + ' ' + model).replace(/\s+/g, ' ').trim();
+  if (!head) return '(' + bracket + ')';
+  return head + ' (' + bracket + ')';
+}
+
+/**
+ * Default type for a pending machine. Product Family wins when the Fleet
+ * Fuel report has one. Utilization has no family, so the model is used
+ * only when it contains a type word — model numbers such as 326FL stay
+ * 'Other'. Does not call detectAssetType (that fallback is Rigid Truck).
+ */
+function visionLinkAssetType(productFamily, model) {
+  var family = String(productFamily || '').trim().toLowerCase();
+  var fromFamily = family ? typeFromText(family) : null;
+  if (fromFamily) return fromFamily;
+  if (family) return 'Other';
+  var fromModel = typeFromText(String(model || '').trim().toLowerCase());
+  return fromModel || 'Other';
+}
+
+function typeFromText(text) {
+  if (!text) return null;
+  if (text.indexOf('excavator') !== -1) return 'Excavator';
+  if (text.indexOf('wheel loader') !== -1) return 'Wheel Loader';
+  if (text.indexOf('skidder') !== -1) return 'Skidder';
+  if (text.indexOf('track-type tractor') !== -1 || text.indexOf('dozer') !== -1) return 'Bulldozer';
+  if (text.indexOf('grader') !== -1) return 'Motor Grader';
+  if (text.indexOf('compactor') !== -1 || text.indexOf('compact') !== -1) return 'Compactor';
+  if (text.indexOf('telehandler') !== -1 || text.indexOf('forklift') !== -1) return 'Forklift';
+  if (text.indexOf('crane') !== -1) return 'Crane';
+  if (text.indexOf('articulated truck') !== -1 || text.indexOf('dump') !== -1) return 'Dump Truck';
+  return null;
+}
+
+function visionLinkWaitingNote(stagedCount) {
+  return 'No known machines yet: ' + stagedCount +
+    ' machine(s) waiting for approval on the Assets page.';
+}
+
+async function loadIgnoredAssetNames(supabase, userId) {
+  var ignoredResult = await supabase
+    .from('ignored_assets')
+    .select('asset_name')
+    .eq('user_id', userId);
+  if (ignoredResult.error) {
+    throw new Error('Failed to load ignored assets: ' + ignoredResult.error.message);
+  }
+  var ignoredSet = {};
+  (ignoredResult.data || []).forEach(function(row) {
+    if (row && row.asset_name) ignoredSet[String(row.asset_name).trim()] = true;
+  });
+  return ignoredSet;
+}
+
+/**
+ * Stage machines that are not on the asset list yet. Same name from
+ * Utilization and Fleet Fuel so the pending_assets upsert dedupes them.
+ * ignored_assets names are skipped. ignoreDuplicates leaves an existing
+ * pending row untouched.
+ */
+async function stageUnmatchedVisionLinkAssets(supabase, userId, rows, source) {
+  var ignoredSet = await loadIgnoredAssetNames(supabase, userId);
+  var seen = {};
+  var staged = [];
+  var skippedIgnored = 0;
+  var skippedNoId = 0;
+
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var name = visionLinkMachineName(row);
+    if (!name) {
+      skippedNoId++;
+      console.warn(
+        source + ': skipping row with no Asset ID and no serial — not staged'
+      );
+      continue;
+    }
+    if (seen[name]) continue;
+    seen[name] = true;
+    if (ignoredSet[name]) {
+      skippedIgnored++;
+      console.log(source + ': not staging ignored asset ' + JSON.stringify(name));
+      continue;
+    }
+
+    var assetId = cleanVisionLinkToken(row['Asset ID']);
+    var serial = cleanVisionLinkToken(row['Asset Serial Number']);
+    var make = cleanVisionLinkToken(row.Make || row['Make Display Name']);
+    var model = cleanVisionLinkToken(row.Model);
+    var productFamily = cleanVisionLinkToken(row['Product Family']);
+    var assetType = visionLinkAssetType(productFamily, model);
+    if (!VISIONLINK_ASSET_TYPES[assetType]) assetType = 'Other';
+
+    var pendingResult = await supabase.from('pending_assets').upsert({
+      user_id: userId,
+      asset_name: name,
+      asset_type: assetType,
+      registration: null,
+      source: source,
+      raw_data: {
+        assetId: assetId || null,
+        serial: serial || null,
+        make: make || null,
+        model: model || null,
+        productFamily: productFamily || null,
+        source: source,
+      },
+    }, { onConflict: 'user_id,asset_name', ignoreDuplicates: true });
+
+    if (pendingResult.error) {
+      console.warn(source + ': failed to stage ' + JSON.stringify(name) + ': ' + pendingResult.error.message);
+      continue;
+    }
+    staged.push(name);
+    console.log(source + ': staged pending asset ' + JSON.stringify(name));
+  }
+
+  if (staged.length || skippedIgnored) {
+    console.log(
+      source + ': staged ' + staged.length + ' machine(s) for approval' +
+      (skippedIgnored ? ' (' + skippedIgnored + ' ignored)' : '')
+    );
+  }
+
+  return {
+    staged: staged.length,
+    stagedNames: staged,
+    skippedIgnored: skippedIgnored,
+    skippedNoId: skippedNoId,
+  };
+}
+
+async function newestStoredRecordDates(supabase, userId, assetIds) {
+  var newest = {};
+  // One row per asset. A single .in() select is capped at PostgREST's
+  // default 1,000 rows, so a busy asset's newest day can fall off the page.
+  for (var i = 0; i < assetIds.length; i++) {
+    var assetId = assetIds[i];
+    var result = await supabase
+      .from('telematics_records')
+      .select('record_date')
+      .eq('asset_id', assetId)
+      .eq('user_id', userId)
+      .order('record_date', { ascending: false })
+      .limit(1);
+    if (result.error) {
+      throw new Error('Failed to load telematics dates: ' + result.error.message);
+    }
+    var row = (result.data || [])[0];
+    if (!row || !row.record_date) continue;
+    newest[String(assetId)] = String(row.record_date).slice(0, 10);
+  }
+  return newest;
+}
+
 async function parseVisionLinkReport(supabase, options) {
   var userId = options.userId;
   var importId = options.importId;
@@ -291,8 +484,18 @@ async function parseVisionLinkReport(supabase, options) {
     if (rows.length === 0) throw new Error('No VisionLink data rows found');
 
     var maps = await loadAssetMaps(supabase, userId);
+    // Unknown machines are offered for approval even when they did not run
+    // today. This runs before the empty-activity skip below, which only
+    // decides whether a telematics row is written.
+    var toStage = [];
+    rows.forEach(function(row) {
+      if (matchAsset(row, maps)) return;
+      toStage.push(row);
+    });
+    var stageResult = await stageUnmatchedVisionLinkAssets(supabase, userId, toStage, 'visionlink');
+
     var records = [];
-    var hoursUpdates = []; // { assetId, hours }
+    var hoursUpdates = []; // { assetId, hours, recordDate }
     var skippedEmpty = 0;
     var skippedNoDate = 0;
     var unmatched = [];
@@ -373,12 +576,31 @@ async function parseVisionLinkReport(supabase, options) {
         hoursUpdates.push({
           assetId: matched.asset.id,
           hours: hourMeter,
-          matchMethod: matched.method,
+          recordDate: dateStr,
         });
       }
     });
 
+    // A processed import with a note does not throw, so email-inbound does
+    // not send the failure alert (that alert runs only from the catch).
     if (records.length === 0) {
+      if (stageResult.staged > 0 || stageResult.skippedIgnored > 0) {
+        var waitingNote = visionLinkWaitingNote(stageResult.staged);
+        await updateImportStatus(supabase, importId, 'processed', waitingNote, 'visionlink');
+        return {
+          ok: true,
+          recordsUpserted: 0,
+          skippedEmpty: skippedEmpty,
+          skippedNoDate: skippedNoDate,
+          unmatched: unmatched.length,
+          unmatchedDetails: unmatched,
+          calloutsLogged: calloutsLogged,
+          hoursUpdated: 0,
+          pendingStaged: stageResult.staged,
+          pendingIgnored: stageResult.skippedIgnored,
+          importNote: waitingNote,
+        };
+      }
       throw new Error(
         'No valid VisionLink records to import' +
         ' (emptyActivity=' + skippedEmpty +
@@ -387,6 +609,20 @@ async function parseVisionLinkReport(supabase, options) {
       );
     }
 
+    var latestHoursByAsset = {};
+    hoursUpdates.forEach(function(u) {
+      var current = latestHoursByAsset[u.assetId];
+      if (!current || u.hours > current.hours) {
+        latestHoursByAsset[u.assetId] = { hours: u.hours, recordDate: u.recordDate };
+      }
+    });
+    var hourAssetIds = Object.keys(latestHoursByAsset);
+    var newestDates = await newestStoredRecordDates(
+      supabase,
+      userId,
+      hourAssetIds.map(function(id) { return Number(id); })
+    );
+
     var upsertResult = await supabase
       .from('telematics_records')
       .upsert(records, { onConflict: 'asset_id,record_date' });
@@ -394,26 +630,31 @@ async function parseVisionLinkReport(supabase, options) {
       throw new Error('Failed to upsert VisionLink records: ' + upsertResult.error.message);
     }
 
-    // Overwrite assets.current_hours with latest Hour Meter (cumulative, not add).
-    // Deduplicate to the max hour meter per asset in this file.
-    var latestHoursByAsset = {};
-    hoursUpdates.forEach(function(u) {
-      if (latestHoursByAsset[u.assetId] == null || u.hours > latestHoursByAsset[u.assetId]) {
-        latestHoursByAsset[u.assetId] = u.hours;
-      }
-    });
-    var hourAssetIds = Object.keys(latestHoursByAsset);
+    // Max hour meter in this file, and only when the file is not older
+    // than the newest day already stored for that asset.
+    var hoursUpdated = 0;
     for (var h = 0; h < hourAssetIds.length; h++) {
       var aid = hourAssetIds[h];
+      var entry = latestHoursByAsset[aid];
+      var storedDate = newestDates[String(aid)];
+      if (storedDate && entry.recordDate < storedDate) {
+        console.log(
+          'visionlink: skipping current_hours update for asset ' + aid +
+          ' (file date ' + entry.recordDate + ' is older than newest stored ' + storedDate + ')'
+        );
+        continue;
+      }
       var upd = await supabase
         .from('assets')
-        .update({ current_hours: latestHoursByAsset[aid] })
+        .update({ current_hours: entry.hours })
         .eq('id', Number(aid))
         .eq('user_id', userId);
       if (upd.error) {
         console.warn(
           'visionlink: failed to update current_hours for asset ' + aid + ': ' + upd.error.message
         );
+      } else {
+        hoursUpdated++;
       }
     }
 
@@ -427,7 +668,9 @@ async function parseVisionLinkReport(supabase, options) {
       unmatched: unmatched.length,
       unmatchedDetails: unmatched,
       calloutsLogged: calloutsLogged,
-      hoursUpdated: hourAssetIds.length,
+      hoursUpdated: hoursUpdated,
+      pendingStaged: stageResult.staged,
+      pendingIgnored: stageResult.skippedIgnored,
     };
   } catch (err) {
     await updateImportStatus(supabase, importId, 'failed', err.message, 'visionlink');
@@ -445,5 +688,9 @@ module.exports = {
   isEmptyActivityRow: isEmptyActivityRow,
   matchAsset: matchAsset,
   loadAssetMaps: loadAssetMaps,
+  stageUnmatchedVisionLinkAssets: stageUnmatchedVisionLinkAssets,
+  visionLinkAssetType: visionLinkAssetType,
+  visionLinkMachineName: visionLinkMachineName,
+  visionLinkWaitingNote: visionLinkWaitingNote,
   VISIONLINK_SIGNATURE: VISIONLINK_SIGNATURE,
 };
