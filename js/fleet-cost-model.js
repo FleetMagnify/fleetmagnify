@@ -251,6 +251,57 @@
     return result;
   }
 
+  // Per-idle-hour cost. Same components as calcIdleHourCosts, without
+  // multiplying by idle hours, so a quiet period still has a rate.
+  // value × idleHours equals calcIdleHourCosts(...).total for the same inputs.
+  function calcIdleCostPerHour(asset, avgCostPerLitre, idleRate, totalEngineHours, fuelPricingAvailable) {
+    var missing = {
+      fuelMissing: null,
+      depreciationMissing: null,
+      depreciationLifeExceeded: false,
+      depreciationLifeNearLimit: false,
+      servicingMissing: null,
+      maintenanceMissing: null
+    };
+    if (!asset || isOnRoad(asset)) {
+      return { value: null, hasMissing: false, missing: missing };
+    }
+
+    fuelPricingAvailable = fuelPricingAvailable !== false;
+    idleRate = idleRate || 0;
+    avgCostPerLitre = avgCostPerLitre || 0;
+
+    var parts = [];
+    if (!fuelPricingAvailable) {
+      missing.fuelMissing = ['Fuel records for selected period'];
+    } else {
+      parts.push(idleRate * avgCostPerLitre);
+    }
+
+    var deprHr = calcDepreciationPerHour(asset, totalEngineHours);
+    missing.depreciationLifeExceeded = !!deprHr.lifeExceeded;
+    missing.depreciationLifeNearLimit = !!deprHr.lifeNearLimit;
+    missing.depreciationMissing = deprHr.ok ? null : (deprHr.lifeExceeded ? null : deprHr.missing);
+    if (deprHr.ok) parts.push(deprHr.value);
+
+    var servHr = getServicingPerHour(asset);
+    missing.servicingMissing = servHr.ok ? null : servHr.missing;
+    if (servHr.ok) parts.push(servHr.value);
+
+    var maintHr = calcMaintenancePerHour(asset);
+    missing.maintenanceMissing = maintHr.ok ? null : maintHr.missing;
+    if (maintHr.ok) parts.push(maintHr.value);
+
+    var hasMissing = !!(missing.fuelMissing || missing.depreciationMissing || missing.depreciationLifeExceeded ||
+      missing.servicingMissing || missing.maintenanceMissing);
+    var value = null;
+    if (parts.length) {
+      value = 0;
+      parts.forEach(function(part) { value += part; });
+    }
+    return { value: value, hasMissing: hasMissing, missing: missing };
+  }
+
   /** Per-km running cost components for on-road vehicles. */
   function calcRunningCostPerKm(asset, fuelCostPerKm, currentOdometer) {
     var out = {
@@ -506,6 +557,7 @@
     getServicingPerKm: getServicingPerKm,
     calcAnnualUsageHours: calcAnnualUsageHours,
     calcIdleHourCosts: calcIdleHourCosts,
+    calcIdleCostPerHour: calcIdleCostPerHour,
     calcRunningCostPerKm: calcRunningCostPerKm,
     getLatestEngineHours: getLatestEngineHours,
     costOrMissing: costOrMissing,

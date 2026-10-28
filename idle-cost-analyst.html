@@ -98,7 +98,8 @@
   .asset-meta-value .warn { color: #EF9F27; }
 
   /* ── KPI ROW ── */
-  .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 28px; }
+  .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 14px; }
+  .kpi-row-components { grid-template-columns: repeat(4, 1fr); margin-bottom: 28px; }
   .kpi-value.missing { font-size: 11px; font-weight: 600; color: #EF9F27; line-height: 1.35; letter-spacing: 0; }
   .kpi-value.unavailable { color: #EF9F27; cursor: help; }
   .cell-missing { font-size: 11px; color: #EF9F27; line-height: 1.35; max-width: 180px; }
@@ -161,6 +162,7 @@
 
   @media (max-width: 1200px) {
     .kpi-row { grid-template-columns: repeat(3, 1fr); }
+    .kpi-row.kpi-row-components { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
 </head>
@@ -222,6 +224,18 @@
         <div class="kpi-sub">for selected period</div>
       </div>
       <div class="kpi-card">
+        <div class="kpi-label">Cost per idle hour</div>
+        <div class="kpi-value white" id="kpi-per-hour">—</div>
+        <div class="kpi-sub">fuel + depreciation + servicing + maintenance</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Cost of Idling</div>
+        <div class="kpi-value red" id="kpi-total-cost">—</div>
+        <div class="kpi-sub" id="kpi-total-cost-sub">combined impact</div>
+      </div>
+    </div>
+    <div class="kpi-row kpi-row-components">
+      <div class="kpi-card">
         <div class="kpi-label">Fuel Cost of Idling</div>
         <div class="kpi-value amber" id="kpi-fuel-cost">—</div>
         <div class="kpi-sub">fuel cost of idle burn</div>
@@ -240,11 +254,6 @@
         <div class="kpi-label">Maintenance Cost of Idling</div>
         <div class="kpi-value amber" id="kpi-maintenance-cost">—</div>
         <div class="kpi-sub">repair &amp; wear on idle hours</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Total Cost of Idling</div>
-        <div class="kpi-value red" id="kpi-total-cost">—</div>
-        <div class="kpi-sub" id="kpi-total-cost-sub">combined impact</div>
       </div>
     </div>
 
@@ -530,6 +539,40 @@
     return '$' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   }
 
+  function fmtMoney2(n) {
+    return '$' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function setKpiPerHour(result) {
+    var el = document.getElementById('kpi-per-hour');
+    var missing = result && result.missing;
+    var unavailable = missing ? unavailableComponents(
+      missing.fuelMissing,
+      missing.depreciationMissing,
+      missing.depreciationLifeExceeded,
+      missing.depreciationLifeNearLimit,
+      missing.servicingMissing,
+      missing.maintenanceMissing
+    ) : [];
+    if (!result || result.value == null) {
+      el.className = 'kpi-value unavailable';
+      el.textContent = '—';
+      if (unavailable.length) el.setAttribute('title', partialTotalTooltip(unavailable));
+      else el.removeAttribute('title');
+      return;
+    }
+    if (result.hasMissing && unavailable.length) {
+      el.className = 'kpi-value partial-total';
+      el.innerHTML = fmtMoney2(result.value) + ' /hr <span class="kpi-partial-suffix">' +
+        esc(partialTotalSuffix(unavailable)) + '</span>';
+      el.setAttribute('title', partialTotalTooltip(unavailable));
+      return;
+    }
+    el.className = 'kpi-value white';
+    el.textContent = fmtMoney2(result.value) + ' /hr';
+    el.removeAttribute('title');
+  }
+
   function setKpiTotalCost(partialSum, fuelMissing, deprMissing, deprLifeExceeded, deprLifeNearLimit, servMissing, maintMissing) {
     var el = document.getElementById('kpi-total-cost');
     var unavailable = unavailableComponents(fuelMissing, deprMissing, deprLifeExceeded, deprLifeNearLimit, servMissing, maintMissing);
@@ -622,11 +665,6 @@
     var totalEngineHours = latestTel.data && latestTel.data.length
       ? FCM.num(latestTel.data[0].total_engine_hours) : FCM.getLatestEngineHours(telRows, selectedAsset.id);
 
-    if (telRows.length === 0) {
-      showEmpty();
-      return;
-    }
-
     var totalLitres = 0, totalFuelCost = 0;
     fuelRows.forEach(function(r) {
       totalLitres += parseFloat(r.litres) || 0;
@@ -634,6 +672,13 @@
     });
     var avgCostPerLitre = totalLitres > 0 ? (totalFuelCost / totalLitres) : (defaultMachineryFuelCostPerLitre || 0);
     var fuelPricingAvailable = (fuelRows.length > 0 && totalLitres > 0) || (defaultMachineryFuelCostPerLitre > 0);
+    var perHour = FCM.calcIdleCostPerHour(selectedAsset, avgCostPerLitre, idleRate, totalEngineHours, fuelPricingAvailable);
+
+    if (telRows.length === 0) {
+      showEmpty();
+      setKpiPerHour(perHour);
+      return;
+    }
 
     var byDate = {};
     telRows.forEach(function(r) {
@@ -680,6 +725,7 @@
     setKpiMoneyOrMissing('kpi-service-cost', sumServiceCost, aggServMissing);
     setKpiMoneyOrMissing('kpi-maintenance-cost', sumMaintCost, aggMaintMissing);
     setKpiTotalCost(grandTotal, aggFuelMissing, aggDeprMissing, aggDeprLifeExceeded, aggDeprLifeNearLimit, aggServMissing, aggMaintMissing);
+    setKpiPerHour(perHour);
     document.getElementById('kpi-total-cost-sub').textContent = 'over ' + sumIdleHours.toFixed(0) + ' idle hours';
     updateAssetMetaDisplay(selectedAsset, {
       fuelMissing: aggFuelMissing,
@@ -783,6 +829,10 @@
     document.getElementById('kpi-total-cost').textContent = '—';
     document.getElementById('kpi-total-cost').removeAttribute('title');
     document.getElementById('kpi-total-cost-sub').textContent = 'combined impact';
+    var perEl = document.getElementById('kpi-per-hour');
+    perEl.className = 'kpi-value white';
+    perEl.textContent = '—';
+    perEl.removeAttribute('title');
     document.getElementById('chart-empty').style.display = 'block';
     if (idleChart) { idleChart.destroy(); idleChart = null; }
     document.getElementById('data-tbody').innerHTML = '<tr><td colspan="7"><div class="empty-state"><span class="icon">⏱</span>No telematics data found for this asset in the selected date range.</div></td></tr>';
