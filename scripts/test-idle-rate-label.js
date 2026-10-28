@@ -3,6 +3,8 @@
  *
  *   node scripts/test-idle-rate-label.js
  */
+var fs = require('fs');
+var path = require('path');
 var FCM = require('../js/fleet-cost-model');
 var fuelReg = require('../lib/fuel-regression');
 
@@ -62,11 +64,36 @@ var measured = FCM.resolvedIdleRate({
   idle_rate_source: 'measured'
 });
 check(
-  'Machinery measured rate keeps the stored value and Measured (VisionLink)',
+  'Machinery measured rate keeps the stored value and Measured from VisionLink',
   measured.source === 'measured' &&
-    measured.label === 'Measured (VisionLink)' &&
+    measured.label === 'Measured from VisionLink' &&
     measured.rate === 4.25,
   JSON.stringify(measured)
+);
+check(
+  'Measured label renders as 3.50 L/hr (measured from VisionLink)',
+  FCM.formatIdleRate(3.5) + ' L/hr (' + FCM.formatIdleRateLabel(measured.label) + ')' ===
+    '3.50 L/hr (measured from VisionLink)',
+  FCM.formatIdleRateLabel(measured.label)
+);
+check(
+  'Other idle labels still lowercase inside the rate parentheses',
+  FCM.formatIdleRateLabel('Set on asset') === 'set on asset' &&
+    FCM.formatIdleRateLabel('Calibrated') === 'calibrated' &&
+    FCM.formatIdleRateLabel('Default estimate') === 'default estimate'
+);
+
+var fuelPage = fs.readFileSync(path.join(__dirname, '../fuel-analyst.html'), 'utf8');
+var truckFuelPage = fs.readFileSync(path.join(__dirname, '../truck-fuel-analyst.html'), 'utf8');
+check(
+  'Fuel Analyst does not lowercase the whole idle label',
+  fuelPage.indexOf('idle.label.toLowerCase') === -1 &&
+    fuelPage.indexOf('FCM.formatIdleRateLabel(idle.label)') !== -1
+);
+check(
+  'Truck Fuel Analyst keeps VisionLink capitalised when it shows a measured rate',
+  truckFuelPage.indexOf('idle.label.toLowerCase') === -1 &&
+    truckFuelPage.indexOf('FCM.formatIdleRateLabel(idle.label)') !== -1
 );
 
 var measuredTrimmed = FCM.resolvedIdleRate({
@@ -76,7 +103,7 @@ var measuredTrimmed = FCM.resolvedIdleRate({
 });
 check(
   'Measured source is matched case-insensitively',
-  measuredTrimmed.source === 'measured' && measuredTrimmed.label === 'Measured (VisionLink)',
+  measuredTrimmed.source === 'measured' && measuredTrimmed.label === 'Measured from VisionLink',
   JSON.stringify(measuredTrimmed)
 );
 
