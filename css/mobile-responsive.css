@@ -165,8 +165,11 @@
     gap: 4px;
   }
   .landing-nav-panel .nav-links a {
-    display: block;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
     width: 100%;
+    min-height: 44px;
     padding: 12px 10px;
     font-size: 15px;
     border-radius: 8px;
@@ -182,7 +185,11 @@
   }
   .landing-nav-panel .nav-actions a,
   .landing-nav-panel .nav-actions button {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
     width: 100%;
+    min-height: 44px;
     text-align: center;
     justify-content: center;
   }
