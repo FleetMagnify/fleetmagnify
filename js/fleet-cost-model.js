@@ -481,6 +481,65 @@
     return { show: sentences.length > 0, sentences: sentences };
   }
 
+  function runHoursOrNull(hours) {
+    var value = num(hours);
+    return value !== null && value > 0 ? value : null;
+  }
+
+  // Litres per operating hour. Zero or missing run hours is unknown, not zero.
+  function fuelPerRunHour(litres, operatingHours) {
+    var fuel = num(litres);
+    var hours = runHoursOrNull(operatingHours);
+    if (fuel === null || hours === null) return null;
+    return fuel / hours;
+  }
+
+  // Idle hours / operating hours, as a fraction. Null when run hours are not positive.
+  function idleShareOfRunTime(idleHours, operatingHours) {
+    var idle = num(idleHours);
+    var hours = runHoursOrNull(operatingHours);
+    if (idle === null || hours === null) return null;
+    return idle / hours;
+  }
+
+  // Target hours minus run hours. state is none, unknown, short, or ahead.
+  function hoursAgainstTarget(runHours, availableHours, targetPercent) {
+    var target = num(targetPercent);
+    if (target === null) return { state: 'none', hours: null };
+    var run = num(runHours);
+    var available = num(availableHours);
+    if (run === null || available === null) return { state: 'unknown', hours: null };
+    var delta = (target / 100) * available - run;
+    if (Math.abs(delta) < 1e-9) return { state: 'ahead', hours: 0 };
+    return { state: delta > 0 ? 'short' : 'ahead', hours: Math.abs(delta) };
+  }
+
+  function co2ForPeriod(litres, fuelType, operatingHours) {
+    var fuel = num(litres);
+    if (fuel === null) return { tonnes: null, kgPerRunHour: null };
+    var factor = EMISSION_FACTORS[(fuelType || '').trim()];
+    if (factor == null) factor = EMISSION_FACTORS.Diesel;
+    if (factor == null) return { tonnes: null, kgPerRunHour: null };
+    var kg = fuel * factor;
+    var hours = runHoursOrNull(operatingHours);
+    return { tonnes: kg / 1000, kgPerRunHour: hours === null ? null : kg / hours };
+  }
+
+  function costPerRunHour(totalCost, operatingHours) {
+    var total = num(totalCost);
+    var hours = runHoursOrNull(operatingHours);
+    if (total === null || hours === null) return null;
+    return total / hours;
+  }
+
+  // Fuel card cost: the two fuel rows of the operating-cost breakdown.
+  function breakdownFuelCost(workingFuel, idleFuel) {
+    var working = num(workingFuel);
+    var idle = num(idleFuel);
+    if (working === null || idle === null) return null;
+    return working + idle;
+  }
+
   /** Per-km running cost components for on-road vehicles. */
   function calcRunningCostPerKm(asset, fuelCostPerKm, currentOdometer) {
     var out = {
@@ -741,6 +800,12 @@
     calcWorkingCostPerHour: calcWorkingCostPerHour,
     calcOperatingHourCosts: calcOperatingHourCosts,
     assetOverviewCallout: assetOverviewCallout,
+    fuelPerRunHour: fuelPerRunHour,
+    idleShareOfRunTime: idleShareOfRunTime,
+    hoursAgainstTarget: hoursAgainstTarget,
+    co2ForPeriod: co2ForPeriod,
+    costPerRunHour: costPerRunHour,
+    breakdownFuelCost: breakdownFuelCost,
     calcRunningCostPerKm: calcRunningCostPerKm,
     getLatestEngineHours: getLatestEngineHours,
     costOrMissing: costOrMissing,

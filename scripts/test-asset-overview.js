@@ -174,6 +174,71 @@ check('partial data hides the callout', function() {
   assert.strictEqual(neither.show, false);
 });
 
+check('module ratios are null when run hours are zero, never NaN or Infinity', function() {
+  assert.strictEqual(FCM.fuelPerRunHour(100, 0), null);
+  assert.strictEqual(FCM.fuelPerRunHour(100, null), null);
+  assert.strictEqual(FCM.fuelPerRunHour(0, 10), 0);
+  assert.strictEqual(FCM.idleShareOfRunTime(24, 0), null);
+  assert.strictEqual(FCM.idleShareOfRunTime(24, 120), 0.2);
+  assert.strictEqual(FCM.costPerRunHour(1440, 0), null);
+  assert.strictEqual(FCM.costPerRunHour(null, 12), null);
+  var co2None = FCM.co2ForPeriod(100, 'Diesel', 0);
+  assert.strictEqual(co2None.kgPerRunHour, null);
+  assert.ok(Number.isFinite(co2None.tonnes));
+  [FCM.fuelPerRunHour(10, 4), FCM.costPerRunHour(80, 4), FCM.co2ForPeriod(10, 'Diesel', 4).kgPerRunHour].forEach(function(value) {
+    assert.ok(Number.isFinite(value));
+  });
+});
+
+check('hours against target is short, ahead, or no target', function() {
+  assert.deepStrictEqual(FCM.hoursAgainstTarget(120, 154, null), { state: 'none', hours: null });
+  var short = FCM.hoursAgainstTarget(120, 154, 80);
+  assert.strictEqual(short.state, 'short');
+  assert.ok(Math.abs(short.hours - 3.2) < 1e-9);
+  var ahead = FCM.hoursAgainstTarget(130, 154, 80);
+  assert.strictEqual(ahead.state, 'ahead');
+  assert.ok(Math.abs(ahead.hours - 6.8) < 1e-9);
+  assert.strictEqual(FCM.hoursAgainstTarget(0, 40, 50).state, 'short');
+  assert.ok(Number.isFinite(FCM.hoursAgainstTarget(0, 40, 50).hours));
+});
+
+check('CO2 uses the fuel factor, and an unknown fuel type uses diesel', function() {
+  var diesel = FCM.co2ForPeriod(1000, 'Diesel', 10);
+  assert.strictEqual(diesel.tonnes, 2.68);
+  assert.strictEqual(diesel.kgPerRunHour, 268);
+  var petrol = FCM.co2ForPeriod(1000, 'Petrol', 10);
+  assert.strictEqual(petrol.tonnes, 2.31);
+  assert.strictEqual(FCM.co2ForPeriod(1000, 'Unknown', 10).tonnes, 2.68);
+  assert.deepStrictEqual(FCM.co2ForPeriod(null, 'Diesel', 10), { tonnes: null, kgPerRunHour: null });
+});
+
+check('fuel cost equals the two breakdown fuel rows, and cost per run hour scales back to the total', function() {
+  var workingFuel = 10287;
+  var idleFuel = 240;
+  assert.strictEqual(FCM.breakdownFuelCost(workingFuel, idleFuel), workingFuel + idleFuel);
+  assert.strictEqual(FCM.breakdownFuelCost(null, idleFuel), null);
+
+  var price = 2.5;
+  var idleRate = 4;
+  var idleHours = 24;
+  var litres = 1800;
+  var totalFuel = litres * price;
+  var idlePart = idleHours * idleRate * price;
+  var workingPart = Math.max(0, totalFuel - idlePart);
+  assert.strictEqual(FCM.breakdownFuelCost(workingPart, idlePart), totalFuel);
+
+  var operatingHours = 120;
+  var operating = FCM.calcOperatingHourCosts(excavator, operatingHours, 1000);
+  var breakdownTotal = workingPart + idlePart + operating.depreciation + operating.servicing + operating.maintenance;
+  var perHour = FCM.costPerRunHour(breakdownTotal, operatingHours);
+  assert.ok(Math.abs(perHour * operatingHours - breakdownTotal) < 1e-6);
+
+  var idleCost = FCM.calcIdleHourCosts(excavator, idleHours, price, idleRate, 1000, true);
+  assert.strictEqual(idleCost.hasMissing, false);
+  assert.ok(idleCost.total != null);
+  assert.ok(Math.abs(idleCost.total - ((idleCost.fuel || 0) + (idleCost.depreciation || 0) + (idleCost.servicing || 0) + (idleCost.maintenance || 0))) < 1e-6);
+});
+
 var page = fs.readFileSync(path.join(__dirname, '..', 'asset-overview.html'), 'utf8');
 var sidebar = fs.readFileSync(path.join(__dirname, '..', 'js', 'sidebar-nav.js'), 'utf8');
 var sidebarCss = fs.readFileSync(path.join(__dirname, '..', 'css', 'sidebar.css'), 'utf8');
@@ -215,6 +280,18 @@ check('the page applies the division filter and scopes every query by user_id', 
   assert.ok(page.indexOf('Asset overview is for machinery for now') !== -1);
   assert.ok(page.indexOf('FCM.isOnRoad') !== -1);
   assert.ok(page.indexOf('.range(') !== -1);
+  assert.ok(page.indexOf('Operating cost, month to date') !== -1);
+  assert.ok(page.indexOf('Module summaries') !== -1);
+  assert.ok(page.indexOf('Fuel burn') === -1);
+  assert.ok(page.indexOf('Go deeper') === -1);
+  assert.ok(page.indexOf('job-cost-analyst.html?asset') === -1);
+  assert.ok(page.indexOf("moduleCard('job-cost-analyst.html'") !== -1);
+  assert.ok(page.indexOf('if (jobRows.length)') !== -1);
+  assert.ok(page.indexOf(".from('job_assets')") !== -1);
+  assert.ok(page.indexOf(".eq('asset_id', assetId)") !== -1);
+  assert.ok(page.indexOf(".gte('work_date', from)") !== -1);
+  assert.ok(page.indexOf(".lte('work_date', to)") !== -1);
+  assert.ok(page.indexOf('Idle hours only. The breakdown above charges fixed costs on all run hours.') !== -1);
 });
 
 var analysts = ['idle-cost-analyst.html', 'fuel-analyst.html', 'utilisation-analyst.html', 'emissions-intelligence.html'];
