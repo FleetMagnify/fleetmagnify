@@ -76,6 +76,8 @@
   tbody tr:hover { background: #111827; }
   tbody td { padding: 12px 16px; font-size: 13px; color: #E2E8F0; }
   .cell-strong { color: #D8DFE8; font-weight: 600; }
+  a.machine-link { color: #0EA57A; text-decoration: none; }
+  a.machine-link:hover { color: #0BC48E; }
   .cell-teal { color: #0EA57A; font-weight: 700; }
 
   .empty-state { text-align: center; padding: 64px 32px; background: #111827; border: 1px solid #2D3748; border-radius: 16px; }
@@ -515,7 +517,8 @@
         avgCpl: avgCpl,
         idleRate: idleRate,
         totalEngineHours: totalEngineHours,
-        fuelPricingAvailable: fuelPricingAvailable
+        fuelPricingAvailable: fuelPricingAvailable,
+        onRoad: FCM.isOnRoad(asset)
       };
     });
 
@@ -863,6 +866,7 @@
       if (!metric) return;
       var measured = FCM.measuredWorkingRate(rowSets[index]);
       rows.push({
+        id: asset.id,
         name: asset.asset_name || 'Unnamed machine',
         measured: measured,
         idleRate: metric.idleRate,
@@ -883,7 +887,7 @@
     var shown = rows.slice(0, 10);
     var extra = rows.length - shown.length;
     tbody.innerHTML = shown.map(function(row) {
-      return '<tr><td class="cell-strong">' + esc(row.name) + '</td>' +
+      return '<tr>' + machineNameCell(row.id, row.name, false) +
         perHourCell(row.idleCost) +
         perHourCell(row.workingCost) +
         '<td>' + esc(fuelBurnBasis(row.measured, row.idleRate)) + '</td></tr>';
@@ -907,8 +911,13 @@
       return;
     }
     tbody.innerHTML = sorted.map(function(a) {
-      return '<tr><td class="cell-strong">' + esc(a.name) + '</td><td>' + fmtMoney(a.fuelCost) + '</td><td>' + fmtMoney(a.idleTotal) + '</td><td class="cell-teal">' + fmtMoney(a.totalCost) + '</td></tr>';
+      return '<tr>' + machineNameCell(a.id, a.name, a.onRoad) + '<td>' + fmtMoney(a.fuelCost) + '</td><td>' + fmtMoney(a.idleTotal) + '</td><td class="cell-teal">' + fmtMoney(a.totalCost) + '</td></tr>';
     }).join('');
+  }
+
+  function machineNameCell(id, name, onRoad) {
+    if (onRoad) return '<td class="cell-strong">' + esc(name) + '</td>';
+    return '<td class="cell-strong"><a class="machine-link" href="asset-overview.html?asset=' + encodeURIComponent(id) + '">' + esc(name) + '</a></td>';
   }
 
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }

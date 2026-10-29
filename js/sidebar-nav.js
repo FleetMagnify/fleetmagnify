@@ -4,6 +4,7 @@ window.FleetMagnifySidebar = (function() {
 
   var NAV_ITEMS = [
     { type: 'link', href: 'home.html', icon: '🏠', text: 'Overview' },
+    { type: 'link', href: 'asset-overview.html', icon: '🔎', text: 'Asset overview', child: true, requiresMachinery: true },
     { type: 'label', text: 'Machinery Modules' },
     { type: 'link', href: 'fuel-analyst.html', icon: '⛽', text: 'Fuel Analyst' },
     { type: 'link', href: 'idle-cost-analyst.html', icon: '⏱', text: 'Idle Cost Analyst' },
@@ -31,10 +32,14 @@ window.FleetMagnifySidebar = (function() {
       if (item.type === 'label') {
         return '<div class="nav-label">' + item.text + '</div>';
       }
-      var cls = (item.href === activePage) ? 'nav-item active' : 'nav-item';
+      var cls = 'nav-item';
+      if (item.child) cls += ' nav-child';
+      if (item.href === activePage) cls += ' active';
+      else if (item.href === 'home.html' && activePage === 'asset-overview.html') cls += ' parent-active';
       var attrs = '';
       if (item.requiresWorkOrderReport) attrs = ' data-work-order-report="true" style="display:none"';
       if (item.requiresDivisions) attrs = ' data-divisions-nav="true" style="display:none"';
+      if (item.requiresMachinery) attrs = ' data-machinery-nav="true" style="display:none"';
       if (item.managerHidden) attrs += ' data-manager-hidden="true"';
       return '<a class="' + cls + '" href="' + item.href + '"' + attrs + '><span class="nav-icon">' + item.icon + '</span> ' + item.text + '</a>';
     }).join('\n    ');
@@ -198,6 +203,10 @@ window.FleetMagnifySidebar = (function() {
 
     var composition = await detectFleetComposition(supabase, effectiveAccountId);
     var nav = document.querySelector('.sidebar-nav');
+    if (nav && composition.hasMachinery) {
+      var machineNav = nav.querySelectorAll('[data-machinery-nav="true"]');
+      for (var m = 0; m < machineNav.length; m++) machineNav[m].style.display = '';
+    }
     if (nav && (composition.hasTrucks || composition.hasMachinery)) {
       if (!composition.hasMachinery) setSectionVisibility(nav, 'Machinery Modules', false);
       if (!composition.hasTrucks) setSectionVisibility(nav, 'Truck Modules', false);

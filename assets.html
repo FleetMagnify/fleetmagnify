@@ -110,6 +110,8 @@
   #assets-table .col-name,
   #assets-table .col-make-model { white-space: normal; overflow: visible; text-overflow: clip; }
   .asset-name-cell { font-weight: 600; color: #D8DFE8; white-space: normal; overflow: visible; text-overflow: clip; }
+  .asset-overview-link { display: inline-block; margin-top: 2px; font-size: 12px; font-weight: 600; color: #0EA57A; text-decoration: none; }
+  .asset-overview-link:hover { color: #0BC48E; }
   .asset-type-badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 100px; background: rgba(255,255,255,0.05); border: 1px solid #2D3748; color: #6B7785; white-space: nowrap; }
   .actions-cell { display: flex; align-items: center; gap: 4px; white-space: nowrap; flex-shrink: 0; }
   .actions-cell .btn-edit { background: none; border: 1px solid transparent; color: #3A4A5C; font-size: 11px; font-weight: 500; padding: 4px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: inherit; flex-shrink: 0; white-space: nowrap; }
@@ -2066,6 +2068,7 @@
         selectCell +
         '<td class="asset-name-cell col-name"><div class="asset-name-wrap">' +
           '<div class="asset-name-row">' + esc(a.asset_name || '—') + renderIncompleteProfileBadge(a) + renderTelematicsBadge(a.telematics_provider) + '</div>' +
+          (FCM.isOnRoad(a) ? '' : '<a class="asset-overview-link" href="asset-overview.html?asset=' + a.id + '">Overview</a>') +
           renderApproachingLifeBadge(a) +
         '</div></td>' +
         '<td class="col-type"><span class="asset-type-badge">' + esc(a.asset_type || '—') + '</span></td>' +
