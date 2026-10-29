@@ -137,7 +137,9 @@ var calloutInput = {
   idlePerHour: 43,
   workingRate: 10,
   idleRate: 4,
-  pricePerLitre: 2
+  pricePerLitre: 2,
+  idleFuelPerHour: 10,
+  fixedPerHour: 33
 };
 
 check('the callout is shown only when every input exists', function() {
@@ -165,6 +167,53 @@ check('sentence 2 is absent when a working hour does not cost more than an idle 
   var result = FCM.assetOverviewCallout(Object.assign({}, calloutInput, { workingPerHour: 43 }));
   assert.strictEqual(result.sentences.length, 1);
   assert.ok(result.sentences[0].indexOf('Idle time is') === 0);
+});
+
+check('a fixed-heavy idle hour keeps the fixed-cost sentence', function() {
+  var result = FCM.assetOverviewCallout(Object.assign({}, calloutInput, { fixedPerHour: 33, idleFuelPerHour: 10 }));
+  assert.strictEqual(
+    result.sentences[0],
+    'Idle time is 20% of this machine\'s run hours but only 7% of its cost, because most of an idle hour\'s cost is fixed (depreciation, servicing, maintenance), not fuel.'
+  );
+});
+
+check('a fuel-heavy idle hour uses the variant and does not claim the cost is fixed', function() {
+  var result = FCM.assetOverviewCallout(Object.assign({}, calloutInput, { fixedPerHour: 8, idleFuelPerHour: 20 }));
+  assert.strictEqual(
+    result.sentences[0],
+    'Idle time is 20% of this machine\'s run hours but only 7% of its cost, because a working hour costs more than an idle hour.'
+  );
+  assert.ok(result.sentences[0].indexOf('fixed') === -1);
+  assert.ok(result.sentences[1].indexOf('A working hour costs') === 0);
+});
+
+check('a missing fixed or idle-fuel rate drops sentence 1 and leaves sentence 2 to its own rule', function() {
+  var noFixed = FCM.assetOverviewCallout(Object.assign({}, calloutInput, { fixedPerHour: null }));
+  assert.strictEqual(noFixed.sentences.length, 1);
+  assert.ok(noFixed.sentences[0].indexOf('A working hour costs') === 0);
+  var noFuel = FCM.assetOverviewCallout(Object.assign({}, calloutInput, { idleFuelPerHour: null }));
+  assert.strictEqual(noFuel.sentences.length, 1);
+  assert.ok(noFuel.sentences[0].indexOf('A working hour costs') === 0);
+  var neitherRate = FCM.assetOverviewCallout(Object.assign({}, calloutInput, { fixedPerHour: null, workingPerHour: 40 }));
+  assert.deepStrictEqual(neitherRate, { show: false, sentences: [] });
+});
+
+check('a fuel-heavy idle hour with no working-hour gap has no sentence 1', function() {
+  var result = FCM.assetOverviewCallout(Object.assign({}, calloutInput, {
+    fixedPerHour: 8,
+    idleFuelPerHour: 20,
+    workingPerHour: 43
+  }));
+  assert.deepStrictEqual(result, { show: false, sentences: [] });
+});
+
+check('equal fixed and fuel parts are not treated as mostly fixed', function() {
+  var result = FCM.assetOverviewCallout(Object.assign({}, calloutInput, { fixedPerHour: 15, idleFuelPerHour: 15 }));
+  assert.strictEqual(
+    result.sentences[0],
+    'Idle time is 20% of this machine\'s run hours but only 7% of its cost, because a working hour costs more than an idle hour.'
+  );
+  assert.ok(result.sentences[0].indexOf('fixed') === -1);
 });
 
 check('partial data hides the callout', function() {

@@ -809,6 +809,12 @@
     if (!idleCosts.hasMissing) {
       idleCostValue = (idleCosts.fuel || 0) + (idleCosts.depreciation || 0) + (idleCosts.servicing || 0) + (idleCosts.maintenance || 0);
     }
+    // Idle fuel is the tile's idle rate × price. Fixed is the rest of that
+    // same per-hour tile (depreciation + servicing + maintenance).
+    var idleFuelPerHour = fuelPricingAvailable ? idleResolved.rate * avgCpl : null;
+    var fixedPerHour = (idleFuelPerHour != null && idlePerHour.value != null && !idlePerHour.hasMissing)
+      ? idlePerHour.value - idleFuelPerHour
+      : null;
     var callout = FCM.assetOverviewCallout({
       partial: !!(workingPerHour.hasMissing || workingPerHour.value == null || idlePerHour.hasMissing || idlePerHour.value == null || operatingCosts.hasMissing || idleCosts.hasMissing || !fuelPricingAvailable),
       idleHours: idleHours,
@@ -819,7 +825,9 @@
       idlePerHour: idlePerHour.value,
       workingRate: measured.rate,
       idleRate: idleResolved.rate,
-      pricePerLitre: fuelPricingAvailable ? avgCpl : null
+      pricePerLitre: fuelPricingAvailable ? avgCpl : null,
+      idleFuelPerHour: idleFuelPerHour,
+      fixedPerHour: fixedPerHour
     });
     var calloutEl = document.getElementById('callout');
     if (callout.show) {
