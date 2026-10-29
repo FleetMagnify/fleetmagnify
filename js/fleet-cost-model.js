@@ -439,8 +439,9 @@
   }
 
   // Sentences for the Asset overview "What stands out" callout.
-  // partial or a missing input hides the callout. Each sentence is included
-  // only when its comparison holds.
+  // partial or a missing core input hides the callout. Sentence 1 also needs
+  // idleFuelPerHour and fixedPerHour. The fixed-cost claim is used only when
+  // fixed costs are the larger part of an idle hour.
   function assetOverviewCallout(input) {
     var empty = { show: false, sentences: [] };
     input = input || {};
@@ -460,15 +461,21 @@
       if (required[i] === null) return empty;
     }
 
+    var idleFuelPerHour = num(input.idleFuelPerHour);
+    var fixedPerHour = num(input.fixedPerHour);
+
     var sentences = [];
-    if (operatingHours > 0 && totalCost > 0) {
+    if (operatingHours > 0 && totalCost > 0 && idleFuelPerHour !== null && fixedPerHour !== null) {
       var hourShare = idleHours / operatingHours;
       var costShare = idleCost / totalCost;
       if (costShare < hourShare) {
-        sentences.push(
-          'Idle time is ' + calloutPercent(hourShare) + ' of this machine\'s run hours but only ' +
-          calloutPercent(costShare) + ' of its cost, because most of an idle hour\'s cost is fixed (depreciation, servicing, maintenance), not fuel.'
-        );
+        var shareText = 'Idle time is ' + calloutPercent(hourShare) + ' of this machine\'s run hours but only ' +
+          calloutPercent(costShare) + ' of its cost, because ';
+        if (fixedPerHour > idleFuelPerHour) {
+          sentences.push(shareText + 'most of an idle hour\'s cost is fixed (depreciation, servicing, maintenance), not fuel.');
+        } else if (workingPerHour > idlePerHour) {
+          sentences.push(shareText + 'a working hour costs more than an idle hour.');
+        }
       }
     }
     if (workingPerHour > idlePerHour) {
