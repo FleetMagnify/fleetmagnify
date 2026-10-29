@@ -2,7 +2,7 @@
   "name": "fleetmagnify",
   "private": true,
   "scripts": {
-    "test": "node scripts/test-navman-parsers.js && node scripts/test-visionlink-parser.js && node scripts/test-visionlink-fuel-parser.js && node scripts/test-email-report-link.js && node scripts/test-visionlink-idle-rate.js && node scripts/test-idle-cost-per-hour.js",
+    "test": "node scripts/test-navman-parsers.js && node scripts/test-visionlink-parser.js && node scripts/test-visionlink-fuel-parser.js && node scripts/test-email-report-link.js && node scripts/test-visionlink-idle-rate.js && node scripts/test-idle-cost-per-hour.js && node scripts/test-working-cost-per-hour.js",
     "fuel-regression": "node lib/fuel-regression.js"
   },
   "dependencies": {
