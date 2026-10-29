@@ -368,10 +368,13 @@
       select.innerHTML = '<option value="">No assets found</option>';
       return;
     }
-    select.innerHTML = assetsList.map(function(a, i) {
-      return '<option value="' + a.id + '"' + (i === 0 ? ' selected' : '') + '>' + esc(a.asset_name) + '</option>';
+    select.innerHTML = assetsList.map(function(a) {
+      return '<option value="' + a.id + '">' + esc(a.asset_name) + '</option>';
     }).join('');
-    selectedAsset = assetsList[0];
+    var requestedId = null;
+    try { requestedId = new URLSearchParams(window.location.search).get('asset'); } catch (e) { requestedId = null; }
+    selectedAsset = (requestedId && assetsList.find(function(a) { return String(a.id) === String(requestedId); })) || assetsList[0];
+    select.value = String(selectedAsset.id);
     document.getElementById('apply-filters-btn').disabled = false;
     updateAssetSettingsDisplay();
     runAnalysis();

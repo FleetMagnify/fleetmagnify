@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asset overview | FleetMagnify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/mobile-responsive.css">
+<link rel="stylesheet" href="css/sidebar.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #E2E8F0; min-height: 100vh; display: flex; }
+  .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; }
+  .topbar {
+    padding: 20px 36px; border-bottom: 1px solid #2D3748;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: rgba(8,12,18,0.80); backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 40;
+  }
+  .breadcrumb { font-size: 13px; color: #3A4A5C; margin-bottom: 2px; }
+  .breadcrumb a { color: #3A4A5C; text-decoration: none; }
+  .breadcrumb a:hover { color: #6B7785; }
+  .topbar-title { font-size: 18px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.4px; }
+  .user-pill {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.04); border: 1px solid #2D3748;
+    border-radius: 100px; padding: 6px 14px 6px 8px; flex-shrink: 0;
+  }
+  .user-avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: rgba(14,165,122,0.20); border: 1px solid rgba(14,165,122,0.30);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #0EA57A;
+  }
+  .user-name { font-size: 12.5px; font-weight: 500; color: #9BA4B0; }
+  .page-content { padding: 28px 36px 56px; flex: 1; max-width: 1280px; min-width: 0; }
+  .switch-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: flex-end; margin-bottom: 18px; }
+  .switch-row select, .period-chip {
+    background: #111827; border: 1px solid #2D3748; color: #F0F2F5;
+    border-radius: 10px; padding: 10px 14px; font-size: 14px; font-family: inherit;
+    min-height: 44px;
+  }
+  .switch-row select { min-width: 220px; max-width: 100%; }
+  .period-chip { color: #C5CDD9; display: flex; align-items: center; }
+  .header-card, .panel {
+    background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 22px 24px; min-width: 0; max-width: 100%;
+  }
+  .header-card { display: flex; flex-wrap: wrap; gap: 20px; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .asset-title { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; color: #F0F2F5; }
+  .asset-meta { font-size: 14px; color: #93A0B2; margin-top: 6px; }
+  .header-stats { display: flex; flex-wrap: wrap; gap: 22px; align-items: center; }
+  .stat-label { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #93A0B2; }
+  .stat-value { font-size: 20px; font-weight: 700; margin-top: 4px; color: #F0F2F5; }
+  .freshness { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; }
+  .freshness .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .freshness.ok { border: 1px solid #14604A; background: #0B2A22; color: #6FE0BC; }
+  .freshness.stale { border: 1px solid rgba(239,159,39,0.45); background: rgba(239,159,39,0.10); color: #EF9F27; }
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
+  .kpi-card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 18px 20px; min-width: 0; }
+  .kpi-label { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #93A0B2; line-height: 1.3; }
+  .kpi-value { font-size: 28px; font-weight: 800; letter-spacing: -0.8px; margin-top: 10px; line-height: 1.1; color: #E6EAF0; overflow-wrap: anywhere; }
+  .kpi-value.amber { color: #EF9F27; }
+  .kpi-value.green { color: #0EA57A; }
+  .kpi-value.red { color: #E2554A; }
+  .kpi-value.partial-total { color: #EF9F27; font-size: 22px; cursor: help; }
+  .kpi-value.unavailable { color: #EF9F27; cursor: help; }
+  .kpi-partial-suffix { font-size: 11px; font-weight: 600; letter-spacing: 0; }
+  .kpi-sub { font-size: 13px; color: #93A0B2; margin-top: 8px; line-height: 1.4; }
+  .callout {
+    background: rgba(14,165,122,0.08); border: 1px solid rgba(14,165,122,0.35);
+    border-radius: 14px; padding: 16px 20px; font-size: 15px; line-height: 1.5; color: #C9F0E1; margin-bottom: 20px;
+  }
+  .callout strong { color: #E6FBF3; }
+  .overview-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr); gap: 20px; align-items: start; }
+  .breakdown-panel { grid-column: 1; grid-row: 1; }
+  .chart-panel { grid-column: 1; grid-row: 2; }
+  .checklist-panel { grid-column: 2; grid-row: 1 / span 2; }
+  .module-section { grid-column: 1 / -1; min-width: 0; }
+  .module-heading { font-size: 18px; font-weight: 700; color: #F0F2F5; }
+  .module-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; margin-top: 14px; }
+  .module-card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 18px 22px; min-width: 0; }
+  .module-link { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; text-decoration: none; color: #E6EAF0; font-size: 15px; font-weight: 700; }
+  .module-link:hover { color: #0EA57A; }
+  .module-open { color: #0EA57A; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .module-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin-top: 8px; }
+  .module-stat-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #93A0B2; line-height: 1.3; }
+  .module-stat-value { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; margin-top: 4px; color: #E6EAF0; overflow-wrap: anywhere; }
+  .module-stat-value.amber { color: #EF9F27; }
+  .module-stat-value.red { color: #E2554A; }
+  .module-stat-value.green { color: #0EA57A; }
+  .module-stat-value.muted { color: #6B7785; cursor: help; }
+  .panel-title { font-size: 15px; font-weight: 700; color: #C8D0DB; }
+  .cost-bar { display: flex; height: 22px; border-radius: 6px; overflow: hidden; margin-top: 16px; gap: 2px; }
+  .cost-bar span { min-width: 3px; display: block; }
+  .cost-table-wrap { margin-top: 14px; overflow-x: auto; max-width: 100%; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td:first-child { white-space: normal; }
+  th { text-align: left; font-weight: 600; padding: 8px 0; color: #93A0B2; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+  td { padding: 10px 0; border-top: 1px solid #1F2937; color: #E2E8F0; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.num.muted { color: #6B7785; }
+  td.num.muted[title] { cursor: help; }
+  tr.total td { border-top: 1px solid #3A4658; font-weight: 700; padding-top: 12px; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 10px; }
+  .chart-head { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
+  .legend { display: flex; gap: 16px; font-size: 13px; color: #C5CDD9; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+  .chart-wrap { height: 200px; margin-top: 16px; position: relative; overflow: hidden; max-width: 100%; }
+  .check-list { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+  .check-item { display: flex; gap: 12px; align-items: flex-start; font-size: 14px; line-height: 1.4; }
+  .check-mark { flex: 0 0 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; }
+  .check-mark.ok { background: #0B2A22; color: #6FE0BC; }
+  .check-mark.todo { background: #3A2A0B; color: #F4C15D; }
+  .check-note { color: #93A0B2; font-size: 13px; }
+  .edit-link { display: inline-flex; align-items: center; min-height: 44px; margin-top: 10px; font-size: 14px; font-weight: 600; color: #0EA57A; text-decoration: none; }
+  .edit-link:hover { color: #0BC48E; }
+  .panel-sub { font-size: 13px; color: #93A0B2; margin-top: 4px; }
+  .empty-state { text-align: center; padding: 64px 24px; background: #111827; border: 1px solid #2D3748; border-radius: 16px; }
+  .empty-state h2 { font-size: 20px; font-weight: 700; color: #C8D0DB; margin-bottom: 10px; }
+  .empty-state p { font-size: 14px; color: #5A6474; line-height: 1.65; max-width: 440px; margin: 0 auto 18px; }
+  .btn-teal { background: #0EA57A; border: none; color: #080C12; font-size: 13px; font-weight: 700; padding: 10px 20px; border-radius: 8px; text-decoration: none; display: inline-block; }
+  .btn-teal:hover { background: #0BC48E; }
+  [hidden] { display: none !important; }
+  @media (max-width: 1100px) {
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .overview-layout { grid-template-columns: 1fr; }
+    .breakdown-panel, .chart-panel, .checklist-panel, .module-section { grid-column: 1; grid-row: auto; }
+  }
+  @media (max-width: 768px) {
+    .kpi-row { grid-template-columns: repeat(2, 1fr) !important; }
+    .overview-layout { display: flex; flex-direction: column; }
+    .breakdown-panel { order: 1; }
+    .chart-panel { order: 2; }
+    .module-section { order: 3; }
+    .checklist-panel { order: 4; }
+    .module-grid { grid-template-columns: 1fr; }
+    .module-stat-value { font-size: 17px; }
+    .page-content { padding: 20px 16px 40px !important; }
+    .switch-row { flex-direction: column; align-items: stretch; }
+    .switch-row select, .period-chip { width: 100%; }
+    .header-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .asset-title { font-size: 22px; }
+    .kpi-value { font-size: 22px !important; }
+    table { font-size: 13px; }
+    th, td { padding-right: 6px; }
+  }
+</style>
+</head>
+<body>
+<div id="sidebar-placeholder"></div>
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="breadcrumb"><a href="home.html">Overview</a> / <span id="crumb-name">Asset overview</span></div>
+      <div class="topbar-title">Asset overview</div>
+    </div>
+    <div class="user-pill">
+      <div class="user-avatar" id="user-avatar">?</div>
+      <span class="user-name" id="user-name">Loading...</span>
+    </div>
+  </div>
+  <div class="page-content">
+    <div id="truck-state" class="empty-state" hidden>
+      <h2>Asset overview is for machinery for now</h2>
+      <p>Trucks will get their own overview later.</p>
+      <a class="btn-teal" href="home.html">Back to Overview</a>
+    </div>
+    <div id="empty-state" class="empty-state" hidden>
+      <h2>No machinery yet</h2>
+      <p>Add a machine on the Assets page and its month-to-date costs, hours, and fuel will show here.</p>
+      <a class="btn-teal" href="assets.html">Go to Assets</a>
+    </div>
+    <div id="dashboard" hidden>
+      <div class="switch-row">
+        <select id="asset-select" aria-label="Machine"></select>
+        <div class="period-chip" id="period-label">Month to date</div>
+      </div>
+      <div class="header-card">
+        <div>
+          <div class="asset-title" id="asset-title">—</div>
+          <div class="asset-meta" id="asset-meta">—</div>
+        </div>
+        <div class="header-stats">
+          <div><div class="stat-label">Hour meter</div><div class="stat-value" id="hour-meter">—</div></div>
+          <div><div class="stat-label">Last report</div><div class="stat-value" id="last-report">—</div></div>
+          <div><div class="stat-label">Data source</div><div class="stat-value" id="data-source">—</div></div>
+          <div class="freshness stale" id="freshness"><span class="dot"></span><span id="freshness-text">No data yet</span></div>
+        </div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi-card" title="Measured over the machine's latest days with Fleet Fuel data, not limited to this month">
+          <div class="kpi-label">Cost per working hour</div>
+          <div class="kpi-value" id="kpi-working">—</div>
+          <div class="kpi-sub" id="kpi-working-sub">needs 3 days of Fleet Fuel data</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Cost per idle hour</div>
+          <div class="kpi-value" id="kpi-idle">—</div>
+          <div class="kpi-sub" id="kpi-idle-sub">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Idle share of run time</div>
+          <div class="kpi-value" id="kpi-share">—</div>
+          <div class="kpi-sub" id="kpi-share-sub">this month</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Utilisation vs target</div>
+          <div class="kpi-value" id="kpi-util">—</div>
+          <div class="kpi-sub" id="kpi-util-sub">no target set</div>
+        </div>
+      </div>
+      <div class="callout" id="callout" hidden></div>
+      <div class="overview-layout">
+          <div class="panel breakdown-panel">
+            <div class="panel-title">Operating cost, month to date</div>
+            <div class="cost-bar" id="cost-bar"></div>
+            <div class="cost-table-wrap">
+              <table>
+                <thead><tr><th>Cost</th><th class="num">Month to date</th><th class="num">Share</th></tr></thead>
+                <tbody id="cost-tbody"></tbody>
+                <tfoot>
+                  <tr class="total"><td>Total</td><td class="num" id="cost-total">—</td><td class="num" id="cost-share">—</td></tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+          <div class="panel chart-panel">
+            <div class="chart-head">
+              <div class="panel-title">Daily run hours</div>
+              <div class="legend"><span><i style="background:#0EA57A"></i>Working</span><span><i style="background:#EF9F27"></i>Idle</span></div>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="daily-chart"></canvas>
+            </div>
+            <p class="panel-sub" id="chart-empty" hidden>No run hours recorded this month.</p>
+          </div>
+          <div class="panel checklist-panel">
+            <div class="panel-title">Setup checklist</div>
+            <div class="panel-sub">Missing settings are listed here instead of as warnings on each page.</div>
+            <div class="check-list" id="checklist"></div>
+            <a class="edit-link" href="assets.html">Edit on the Assets page</a>
+          </div>
+          <section class="module-section">
+            <h2 class="module-heading">Module summaries</h2>
+            <p class="panel-sub">Month to date. Each card links to the full analyst for this machine.</p>
+            <div class="module-grid" id="module-grid"></div>
+          </section>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="js/supabase-config.js"></script>
+<script src="js/subscription-guard.js"></script>
+<script src="js/account-context.js"></script>
+<script src="js/division-filter.js"></script>
+<script src="js/account-settings.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="js/fleet-cost-model.js"></script>
+<script src="js/sidebar-nav.js"></script>
+<script>
+(function() {
+  var FCM = window.FleetCostModel;
+  var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  var LAST_KEY = 'fm_asset_overview_last';
+  var DEFAULT_HOURS_PER_WEEK = 40;
+  var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var currentUser = null;
+  var accountContext = null;
+  var effectiveAccountId = null;
+  var defaultMachineryFuelCostPerLitre = null;
+  var machines = [];
+  var dailyChart = null;
+  var renderToken = 0;
+
+  function readLast() {
+    try { return localStorage.getItem(LAST_KEY); } catch (e) { return null; }
+  }
+  function writeLast(id) {
+    try { localStorage.setItem(LAST_KEY, String(id)); } catch (e) {}
+  }
+  function esc(str) {
+    return String(str == null ? '' : str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function fmtMoney(n) {
+    return '$' + Number(n || 0).toLocaleString('en-NZ', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+  function fmtMoney2(n) {
+    return '$' + Number(n || 0).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function fmtHours(n) {
+    var rounded = Math.round(Number(n) * 10) / 10;
+    var text = Math.abs(rounded - Math.round(rounded)) < 0.05 ? String(Math.round(rounded)) : rounded.toFixed(1);
+    return text + ' h';
+  }
+  function dayMonth(iso) {
+    var p = String(iso).slice(0, 10).split('-').map(Number);
+    if (p.length !== 3 || !p[0]) return String(iso);
+    return p[2] + ' ' + MONTHS[p[1] - 1];
+  }
+  function periodLabel(from, to) {
+    return dayMonth(from) + ' to ' + dayMonth(to) + ' (month to date)';
+  }
+  function getMTDRange() {
+    var today = FCM.nzTodayISO();
+    var parts = today.split('-').map(Number);
+    var from = parts[0] + '-' + String(parts[1]).padStart(2, '0') + '-01';
+    return { from: from, to: today };
+  }
+  function daysInRange(fromStr, toStr) {
+    var start = new Date(fromStr + 'T00:00:00');
+    var end = new Date(toStr + 'T00:00:00');
+    return Math.round((end - start) / 86400000) + 1;
+  }
+  function daySpan(older, newer) {
+    var a = String(older).slice(0, 10).split('-').map(Number);
+    var b = String(newer).slice(0, 10).split('-').map(Number);
+    return Math.round((Date.UTC(b[0], b[1] - 1, b[2]) - Date.UTC(a[0], a[1] - 1, a[2])) / 86400000);
+  }
+  function hoursPerWeek(asset) {
+    var h = asset.available_hours_per_week != null ? parseFloat(asset.available_hours_per_week) : DEFAULT_HOURS_PER_WEEK;
+    return isNaN(h) ? DEFAULT_HOURS_PER_WEEK : h;
+  }
+  function queryAsset() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      return params.get('asset');
+    } catch (e) { return null; }
+  }
+  function replaceAssetUrl(id) {
+    var url = 'asset-overview.html?asset=' + encodeURIComponent(id);
+    try { history.replaceState({ asset: String(id) }, '', url); } catch (e) {}
+  }
+
+  function unavailableTitle(missing) {
+    if (!missing) return '';
+    var parts = [];
+    if (missing.fuelMissing && missing.fuelMissing.length) parts.push(FCM.formatMissingMessage(missing.fuelMissing));
+    if (missing.depreciationLifeExceeded) parts.push(FCM.formatLifeExceededMessage(missing.depreciationLifeNearLimit));
+    else if (missing.depreciationMissing && missing.depreciationMissing.length) parts.push(FCM.formatMissingMessage(missing.depreciationMissing));
+    if (missing.servicingMissing && missing.servicingMissing.length) parts.push(FCM.formatMissingMessage(missing.servicingMissing));
+    if (missing.maintenanceMissing && missing.maintenanceMissing.length) parts.push(FCM.formatMissingMessage(missing.maintenanceMissing));
+    return parts.join(' ');
+  }
+  function partialLabels(missing) {
+    if (!missing) return [];
+    var labels = [];
+    if (missing.fuelMissing && missing.fuelMissing.length) labels.push('fuel cost');
+    if (missing.depreciationLifeExceeded || (missing.depreciationMissing && missing.depreciationMissing.length)) labels.push('depreciation cost');
+    if (missing.servicingMissing && missing.servicingMissing.length) labels.push('servicing cost');
+    if (missing.maintenanceMissing && missing.maintenanceMissing.length) labels.push('maintenance cost');
+    return labels;
+  }
+  function paintPerHour(id, result) {
+    var el = document.getElementById(id);
+    var title = unavailableTitle(result && result.missing);
+    var labels = partialLabels(result && result.missing);
+    if (!result || result.value == null) {
+      el.className = 'kpi-value unavailable';
+      el.textContent = '—';
+      if (title) el.setAttribute('title', title); else el.removeAttribute('title');
+      return;
+    }
+    if (result.hasMissing && labels.length) {
+      el.className = 'kpi-value partial-total';
+      el.innerHTML = fmtMoney2(result.value) + ' /hr <span class="kpi-partial-suffix">(partial — ' + esc(labels.join(', ')) + ' unavailable)</span>';
+      el.setAttribute('title', title);
+      return;
+    }
+    el.className = 'kpi-value';
+    el.textContent = fmtMoney2(result.value) + ' /hr';
+    el.removeAttribute('title');
+  }
+
+  function statHtml(text, tone, title) {
+    var cls = 'module-stat-value' + (tone ? ' ' + tone : '');
+    return '<div class="' + cls + '"' + (title ? ' title="' + esc(title) + '"' : '') + '>' + text + '</div>';
+  }
+  function statBlock(label, text, tone, title) {
+    return '<div><div class="module-stat-label">' + esc(label) + '</div>' + statHtml(text, tone, title) + '</div>';
+  }
+  function unknownStat(label, title) {
+    return statBlock(label, '—', 'muted', title);
+  }
+  function moneyStat(label, value, tone, title, partial) {
+    if (value == null) return unknownStat(label, title);
+    var text = (tone === 'rate' ? fmtMoney2(value) : fmtMoney(value)) +
+      (partial ? ' <span class="kpi-partial-suffix">(partial)</span>' : '');
+    return statBlock(label, text, tone === 'rate' ? '' : tone, title);
+  }
+  function moduleCard(href, name, stats) {
+    return '<article class="module-card"><a class="module-link" href="' + esc(href) + '"><span>' + esc(name) +
+      '</span><span class="module-open">Open →</span></a><div class="module-stats">' + stats + '</div></article>';
+  }
+
+  async function loadJobRows(assetId, from, to) {
+    var all = [];
+    var start = 0;
+    var pageSize = 1000;
+    while (start <= 5000) {
+      var result = await supabase.from('job_assets')
+        .select('job_id, work_date')
+        .eq('asset_id', assetId)
+        .eq('user_id', effectiveAccountId)
+        .gte('work_date', from)
+        .lte('work_date', to)
+        .order('work_date', { ascending: true })
+        .range(start, start + pageSize - 1);
+      if (result.error) return [];
+      var rows = result.data || [];
+      all = all.concat(rows);
+      if (rows.length < pageSize) break;
+      start += pageSize;
+    }
+    return all;
+  }
+
+  function divisionLabel(asset) {
+    if (!accountContext || !accountContext.hasDivisions) return null;
+    if (asset.division_id == null || asset.division_id === '') return 'not assigned';
+    var divisions = accountContext.divisions || [];
+    for (var i = 0; i < divisions.length; i++) {
+      if (divisions[i] && String(divisions[i].id) === String(asset.division_id)) {
+        return divisions[i].name || 'Division';
+      }
+    }
+    return 'Division';
+  }
+
+  function checklistItem(name, ok, note) {
+    return '<div class="check-item"><span class="check-mark ' + (ok ? 'ok' : 'todo') + '" aria-hidden="true">' +
+      (ok ? '✓' : '!') + '</span><span><span style="font-weight:600">' + esc(name) +
+      '</span><br><span class="check-note">' + esc(note) + '</span></span></div>';
+  }
+
+  function renderChecklist(asset, life) {
+    var items = [];
+    var deprMissing = FCM.getMissingDepreciationFields(asset);
+    if (life && life.depreciationLifeExceeded) {
+      items.push(checklistItem('Depreciation', false, FCM.formatLifeExceededMessage(life.depreciationLifeNearLimit)));
+    } else if (deprMissing.length) {
+      items.push(checklistItem('Depreciation', false, FCM.formatMissingMessage(deprMissing)));
+    } else {
+      items.push(checklistItem('Depreciation', true, 'Depreciation is calculated'));
+    }
+    var servMissing = FCM.getMissingServicingFields(asset);
+    items.push(servMissing.length
+      ? checklistItem('Servicing', false, FCM.formatMissingMessage(servMissing))
+      : checklistItem('Servicing', true, 'Servicing is calculated'));
+    var maintMissing = FCM.getMissingMaintenanceFields(asset);
+    items.push(maintMissing.length
+      ? checklistItem('Maintenance', false, FCM.formatMissingMessage(maintMissing))
+      : checklistItem('Maintenance', true, 'Maintenance is calculated'));
+    var idle = FCM.resolvedIdleRate(asset);
+    if (idle.source === 'default') {
+      items.push(checklistItem('Idle burn rate', false, 'using a default estimate'));
+    } else {
+      items.push(checklistItem('Idle burn rate', true, idle.label));
+    }
+    if (accountContext && accountContext.hasDivisions) {
+      var division = divisionLabel(asset);
+      if (division && division !== 'not assigned') {
+        items.push(checklistItem('Division', true, division));
+      } else {
+        items.push(checklistItem('Division', false, 'Not assigned yet. Optional.'));
+      }
+    }
+    document.getElementById('checklist').innerHTML = items.join('');
+  }
+
+  async function pageMonthTelematics(assetIds, from, to) {
+    var all = [];
+    var start = 0;
+    var pageSize = 1000;
+    while (start <= 20000) {
+      var query = supabase.from('telematics_records')
+        .select('id, asset_id, idle_hours, operating_hours, litres_consumed, record_date')
+        .eq('user_id', effectiveAccountId)
+        .gte('record_date', from)
+        .lte('record_date', to)
+        .order('id', { ascending: true })
+        .range(start, start + pageSize - 1);
+      if (assetIds.length && assetIds.length <= 150) query = query.in('asset_id', assetIds);
+      var result = await query;
+      if (result.error) throw result.error;
+      var rows = result.data || [];
+      all = all.concat(rows);
+      if (rows.length < pageSize) break;
+      start += pageSize;
+    }
+    return all;
+  }
+
+  function periodCost(asset, rows) {
+    var fuel = FCM.assetFuelTotals(asset, { telRows: rows, machineryCpl: defaultMachineryFuelCostPerLitre });
+    var idleHours = 0;
+    (rows || []).forEach(function(row) { idleHours += parseFloat(row.idle_hours) || 0; });
+    var avgCpl = fuel.litres > 0 ? fuel.cost / fuel.litres : (defaultMachineryFuelCostPerLitre || 0);
+    var fuelPricingAvailable = fuel.litres > 0 || defaultMachineryFuelCostPerLitre > 0;
+    var idle = FCM.resolvedIdleRate(asset);
+    var idleCosts = FCM.calcIdleHourCosts(asset, idleHours, avgCpl, idle.rate, null, fuelPricingAvailable);
+    var idlePartial = 0;
+    if (idleCosts.fuel !== null) idlePartial += idleCosts.fuel;
+    if (idleCosts.depreciation !== null) idlePartial += idleCosts.depreciation;
+    if (idleCosts.servicing !== null) idlePartial += idleCosts.servicing;
+    if (idleCosts.maintenance !== null) idlePartial += idleCosts.maintenance;
+    return fuel.cost + idlePartial - (idleCosts.fuel || 0);
+  }
+
+  async function machineWithHighestCost(mtd) {
+    try {
+      var ids = machines.map(function(asset) { return asset.id; });
+      var rows = await pageMonthTelematics(ids, mtd.from, mtd.to);
+      var byId = {};
+      rows.forEach(function(row) {
+        var id = Number(row.asset_id);
+        if (!byId[id]) byId[id] = [];
+        byId[id].push(row);
+      });
+      var best = null;
+      var bestCost = -1;
+      machines.forEach(function(asset) {
+        var cost = periodCost(asset, byId[Number(asset.id)] || []);
+        var name = String(asset.asset_name || '');
+        if (!best || cost > bestCost || (cost === bestCost && name.localeCompare(String(best.asset_name || '')) < 0)) {
+          best = asset;
+          bestCost = cost;
+        }
+      });
+      return best;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function findMachine(id) {
+    if (id == null || id === '') return null;
+    for (var i = 0; i < machines.length; i++) {
+      if (String(machines[i].id) === String(id)) return machines[i];
+    }
+    return null;
+  }
+
+  async function chooseMachine(allAssets) {
+    var requested = queryAsset();
+    if (requested) {
+      var match = null;
+      for (var i = 0; i < allAssets.length; i++) {
+        if (String(allAssets[i].id) === String(requested)) { match = allAssets[i]; break; }
+      }
+      if (match && FCM.isOnRoad(match)) return { truck: true };
+      if (match) return { asset: match };
+    }
+    var last = findMachine(readLast());
+    if (last) return { asset: last };
+    var ranked = await machineWithHighestCost(getMTDRange());
+    if (ranked) return { asset: ranked };
+    return { asset: machines[0] };
+  }
+
+  function renderDailyChart(labels, working, idle) {
+    var canvas = document.getElementById('daily-chart');
+    var empty = document.getElementById('chart-empty');
+    var any = false;
+    for (var i = 0; i < working.length; i++) {
+      if (working[i] || idle[i]) { any = true; break; }
+    }
+    if (!any) {
+      empty.hidden = false;
+      canvas.style.display = 'none';
+      if (dailyChart) { dailyChart.destroy(); dailyChart = null; }
+      return;
+    }
+    empty.hidden = true;
+    canvas.style.display = 'block';
+    if (dailyChart) dailyChart.destroy();
+    dailyChart = new Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Working', data: working, backgroundColor: '#0EA57A', stack: 'hours' },
+          { label: 'Idle', data: idle, backgroundColor: '#EF9F27', stack: 'hours' }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function(item) { return item.dataset.label + ': ' + Number(item.parsed.y).toFixed(1) + ' h'; }
+            }
+          }
+        },
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { color: '#93A0B2', maxTicksLimit: 4, maxRotation: 0 } },
+          y: { stacked: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#93A0B2' } }
+        }
+      }
+    });
+  }
+
+  async function showMachine(asset) {
+    var token = ++renderToken;
+    writeLast(asset.id);
+    replaceAssetUrl(asset.id);
+    document.getElementById('asset-select').value = String(asset.id);
+    document.getElementById('crumb-name').textContent = asset.asset_name || 'Asset overview';
+    var mtd = getMTDRange();
+    document.getElementById('period-label').textContent = periodLabel(mtd.from, mtd.to);
+
+    var fetched = await Promise.all([
+      supabase.from('telematics_records')
+        .select('record_date, operating_hours, idle_hours, litres_consumed, total_engine_hours')
+        .eq('asset_id', asset.id)
+        .eq('user_id', effectiveAccountId)
+        .gte('record_date', mtd.from)
+        .lte('record_date', mtd.to)
+        .order('record_date'),
+      supabase.from('telematics_records')
+        .select('record_date, operating_hours, idle_hours, working_fuel_litres')
+        .eq('asset_id', asset.id)
+        .eq('user_id', effectiveAccountId)
+        .not('working_fuel_litres', 'is', null)
+        .order('record_date', { ascending: false })
+        .limit(120),
+      supabase.from('telematics_records')
+        .select('record_date, total_engine_hours')
+        .eq('asset_id', asset.id)
+        .eq('user_id', effectiveAccountId)
+        .order('record_date', { ascending: false })
+        .limit(1),
+      loadJobRows(asset.id, mtd.from, mtd.to)
+    ]);
+    if (token !== renderToken) return;
+
+    var telRows = (fetched[0] && fetched[0].data) || [];
+    var workingRows = (fetched[1] && fetched[1].data) || [];
+    var latest = fetched[2] && fetched[2].data && fetched[2].data[0];
+    var jobRows = fetched[3] || [];
+    var totalEngineHours = latest ? FCM.num(latest.total_engine_hours) : null;
+    var latestDate = latest && latest.record_date ? String(latest.record_date).slice(0, 10) : '';
+
+    var fuel = FCM.assetFuelTotals(asset, { telRows: telRows, machineryCpl: defaultMachineryFuelCostPerLitre });
+    var avgCpl = fuel.litres > 0 ? fuel.cost / fuel.litres : (defaultMachineryFuelCostPerLitre || 0);
+    var fuelPricingAvailable = fuel.litres > 0 || defaultMachineryFuelCostPerLitre > 0;
+    var idleResolved = FCM.resolvedIdleRate(asset);
+    var measured = FCM.measuredWorkingRate(workingRows);
+    var workingPerHour = FCM.calcWorkingCostPerHour(asset, avgCpl, measured.rate, totalEngineHours, fuelPricingAvailable);
+    var idlePerHour = FCM.calcIdleCostPerHour(asset, avgCpl, idleResolved.rate, totalEngineHours, fuelPricingAvailable);
+
+    var idleHours = 0;
+    var operatingHours = 0;
+    var byDate = {};
+    telRows.forEach(function(row) {
+      var idle = parseFloat(row.idle_hours) || 0;
+      var operating = parseFloat(row.operating_hours) || 0;
+      idleHours += idle;
+      operatingHours += operating;
+      var key = String(row.record_date).slice(0, 10);
+      if (!byDate[key]) byDate[key] = { idle: 0, operating: 0 };
+      byDate[key].idle += idle;
+      byDate[key].operating += operating;
+    });
+    var idleCosts = FCM.calcIdleHourCosts(asset, idleHours, avgCpl, idleResolved.rate, totalEngineHours, fuelPricingAvailable);
+    var operatingCosts = FCM.calcOperatingHourCosts(asset, operatingHours, totalEngineHours);
+
+    document.getElementById('asset-title').textContent = asset.asset_name || 'Unnamed machine';
+    var meta = [asset.asset_type || 'Machine'];
+    if (asset.registration) meta.push(String(asset.registration).trim());
+    var division = divisionLabel(asset);
+    if (division !== null) meta.push('Division: ' + division);
+    document.getElementById('asset-meta').textContent = meta.join(' · ');
+    document.getElementById('hour-meter').textContent = totalEngineHours == null ? '—' : Math.round(totalEngineHours).toLocaleString('en-NZ') + ' h';
+    document.getElementById('last-report').textContent = latestDate ? (latestDate === mtd.to ? 'Today' : FCM.formatDateNZ(latestDate)) : '—';
+    document.getElementById('data-source').textContent = FCM.telematicsVendorLabel(asset);
+    var freshness = document.getElementById('freshness');
+    var freshnessText = document.getElementById('freshness-text');
+    if (!latestDate) {
+      freshness.className = 'freshness stale';
+      freshnessText.textContent = 'No data yet';
+    } else if (daySpan(latestDate, mtd.to) <= 1) {
+      freshness.className = 'freshness ok';
+      freshnessText.textContent = 'Data is up to date';
+    } else {
+      freshness.className = 'freshness stale';
+      freshnessText.textContent = 'Last data: ' + FCM.formatDateNZ(latestDate);
+    }
+
+    paintPerHour('kpi-working', workingPerHour);
+    var workingSub = document.getElementById('kpi-working-sub');
+    if (measured.rate != null) {
+      workingSub.textContent = 'fuel at ' + Number(measured.rate).toFixed(1) + ' L/hr measured over ' + measured.days + ' days';
+    } else {
+      workingSub.textContent = 'needs 3 days of Fleet Fuel data';
+    }
+    paintPerHour('kpi-idle', idlePerHour);
+    document.getElementById('kpi-idle-sub').textContent = 'fuel at ' + Number(idleResolved.rate).toFixed(1) + ' L/hr · ' + idleResolved.label;
+
+    var shareEl = document.getElementById('kpi-share');
+    var shareSub = document.getElementById('kpi-share-sub');
+    var shareRatio = FCM.idleShareOfRunTime(idleHours, operatingHours);
+    if (shareRatio != null) {
+      var share = shareRatio * 100;
+      shareEl.textContent = Math.round(share) + '%';
+      shareEl.className = share > 15 ? 'kpi-value amber' : 'kpi-value';
+      shareSub.textContent = fmtHours(idleHours).replace(' h', '') + ' idle of ' + fmtHours(operatingHours).replace(' h', '') + ' run hours';
+    } else {
+      shareEl.textContent = '—';
+      shareEl.className = 'kpi-value';
+      shareSub.textContent = 'no run hours this month';
+    }
+
+    var weeks = daysInRange(mtd.from, mtd.to) / 7;
+    var available = hoursPerWeek(asset) * weeks;
+    var utilRate = available > 0 ? (operatingHours / available) * 100 : 0;
+    var target = asset.target_utilisation_percent != null ? parseFloat(asset.target_utilisation_percent) : null;
+    if (isNaN(target)) target = null;
+    var utilEl = document.getElementById('kpi-util');
+    var utilSub = document.getElementById('kpi-util-sub');
+    utilEl.textContent = Math.round(utilRate) + '%';
+    if (target == null) {
+      utilEl.className = 'kpi-value';
+      utilSub.textContent = 'no target set';
+    } else if (utilRate > 100) {
+      utilEl.className = 'kpi-value red';
+      utilSub.textContent = 'target ' + Math.round(target) + '%';
+    } else if (utilRate >= target) {
+      utilEl.className = 'kpi-value green';
+      utilSub.textContent = 'target ' + Math.round(target) + '%';
+    } else {
+      utilEl.className = 'kpi-value amber';
+      utilSub.textContent = 'target ' + Math.round(target) + '%';
+    }
+
+    var hasTel = telRows.length > 0;
+    var noPeriodFields = ['Fuel records for selected period'];
+    // No rows this month means the hours are unknown. A sum of zero from real rows stays zero.
+    if (!hasTel) {
+      ['depreciation', 'servicing', 'maintenance'].forEach(function(part) {
+        var missingKey = part + 'Missing';
+        var life = part === 'depreciation' && operatingCosts.depreciationLifeExceeded;
+        if (life || (operatingCosts[missingKey] && operatingCosts[missingKey].length)) return;
+        operatingCosts[part] = null;
+        operatingCosts[missingKey] = noPeriodFields;
+      });
+    }
+    var idleFuel = hasTel && fuelPricingAvailable ? idleHours * idleResolved.rate * avgCpl : null;
+    var workingFuel = hasTel && fuelPricingAvailable ? Math.max(0, fuel.cost - idleFuel) : null;
+    var fuelCost = FCM.breakdownFuelCost(workingFuel, idleFuel);
+    var fuelMissingFields = hasTel && fuelPricingAvailable ? null : noPeriodFields;
+    var rows = [
+      { name: 'Fuel, working hours', amount: workingFuel, color: '#0EA57A', missing: fuelMissingFields },
+      { name: 'Fuel, idle hours', amount: idleFuel, color: '#EF9F27', missing: fuelMissingFields },
+      { name: 'Depreciation', amount: operatingCosts.depreciation, color: '#5B8DEF', missing: operatingCosts.depreciationMissing, life: operatingCosts.depreciationLifeExceeded, near: operatingCosts.depreciationLifeNearLimit },
+      { name: 'Servicing', amount: operatingCosts.servicing, color: '#E2554A', missing: operatingCosts.servicingMissing },
+      { name: 'Maintenance', amount: operatingCosts.maintenance, color: '#8C7CF0', missing: operatingCosts.maintenanceMissing }
+    ];
+    var total = 0;
+    var anyAmount = false;
+    var partialNotes = [];
+    rows.forEach(function(row) {
+      if (row.life) partialNotes.push(FCM.formatLifeExceededMessage(row.near));
+      else if (row.missing && row.missing.length) partialNotes.push(FCM.formatMissingMessage(row.missing));
+      else if (row.amount != null) { total += row.amount; anyAmount = true; }
+    });
+    var bar = document.getElementById('cost-bar');
+    bar.innerHTML = '';
+    rows.forEach(function(row) {
+      if (row.amount == null || row.amount <= 0 || !anyAmount) return;
+      var piece = document.createElement('span');
+      piece.style.flex = String(row.amount) + ' 1 0';
+      piece.style.background = row.color;
+      piece.title = row.name;
+      bar.appendChild(piece);
+    });
+    document.getElementById('cost-tbody').innerHTML = rows.map(function(row) {
+      var unavailable = row.life || (row.missing && row.missing.length);
+      var tip = row.life ? FCM.formatLifeExceededMessage(row.near) : (unavailable ? FCM.formatMissingMessage(row.missing) : '');
+      var dash = unavailable || row.amount == null;
+      var amount = dash ? '—' : fmtMoney(row.amount);
+      var share = !unavailable && row.amount != null && anyAmount && total > 0 ? (row.amount / total * 100).toFixed(1) + '%' : '—';
+      var muted = dash ? ' muted' : '';
+      return '<tr><td><span class="swatch" style="background:' + row.color + '"></span>' + esc(row.name) + '</td>' +
+        '<td class="num' + muted + '"' + (tip ? ' title="' + esc(tip) + '"' : '') + '>' + amount + '</td>' +
+        '<td class="num' + (share === '—' ? ' muted' : '') + '">' + share + '</td></tr>';
+    }).join('');
+    var totalEl = document.getElementById('cost-total');
+    var shareElTotal = document.getElementById('cost-share');
+    if (!anyAmount) {
+      totalEl.textContent = '—';
+      totalEl.removeAttribute('title');
+      shareElTotal.textContent = '—';
+    } else if (partialNotes.length) {
+      totalEl.className = 'num';
+      totalEl.innerHTML = fmtMoney(total) + ' <span class="kpi-partial-suffix">(partial)</span>';
+      totalEl.setAttribute('title', partialNotes.join(' '));
+      shareElTotal.textContent = '100%';
+    } else {
+      totalEl.textContent = fmtMoney(total);
+      totalEl.removeAttribute('title');
+      shareElTotal.textContent = '100%';
+    }
+
+    var idleCostValue = null;
+    if (!idleCosts.hasMissing) {
+      idleCostValue = (idleCosts.fuel || 0) + (idleCosts.depreciation || 0) + (idleCosts.servicing || 0) + (idleCosts.maintenance || 0);
+    }
+    var callout = FCM.assetOverviewCallout({
+      partial: !!(workingPerHour.hasMissing || workingPerHour.value == null || idlePerHour.hasMissing || idlePerHour.value == null || operatingCosts.hasMissing || idleCosts.hasMissing || !fuelPricingAvailable),
+      idleHours: idleHours,
+      operatingHours: operatingHours,
+      idleCost: idleCostValue,
+      totalCost: anyAmount && !partialNotes.length ? total : null,
+      workingPerHour: workingPerHour.value,
+      idlePerHour: idlePerHour.value,
+      workingRate: measured.rate,
+      idleRate: idleResolved.rate,
+      pricePerLitre: fuelPricingAvailable ? avgCpl : null
+    });
+    var calloutEl = document.getElementById('callout');
+    if (callout.show) {
+      calloutEl.hidden = false;
+      calloutEl.innerHTML = '<strong>What stands out:</strong> ' + callout.sentences.map(esc).join(' ');
+    } else {
+      calloutEl.hidden = true;
+      calloutEl.textContent = '';
+    }
+
+    var labels = [];
+    var workingSeries = [];
+    var idleSeries = [];
+    var cursor = mtd.from;
+    while (cursor <= mtd.to) {
+      var bucket = byDate[cursor] || { idle: 0, operating: 0 };
+      labels.push(dayMonth(cursor));
+      idleSeries.push(Math.round(bucket.idle * 10) / 10);
+      workingSeries.push(Math.round(Math.max(0, bucket.operating - bucket.idle) * 10) / 10);
+      cursor = FCM.addDaysISO(cursor, 1);
+    }
+    renderDailyChart(labels, workingSeries, idleSeries);
+
+    var assetQuery = '?asset=' + encodeURIComponent(asset.id);
+    var noRunTitle = hasTel ? 'no run hours this month' : FCM.formatMissingMessage(noPeriodFields);
+    var fuelMissingTitle = FCM.formatMissingMessage(['Fuel records for selected period']);
+    var litresKnown = hasTel ? fuel.litres : null;
+    var perRun = FCM.fuelPerRunHour(litresKnown, operatingHours);
+    var workingBurn = measured.rate == null ? null : Number(measured.rate);
+    var burnText = (workingBurn == null ? '—' : workingBurn.toFixed(1)) + ' / ' + Number(idleResolved.rate).toFixed(1) + ' L/hr';
+    var burnTitle = workingBurn == null ? 'needs 3 days of Fleet Fuel data' : '';
+    var fuelStats = (litresKnown == null ? unknownStat('Fuel used', noRunTitle) : statBlock('Fuel used', Math.round(litresKnown).toLocaleString('en-NZ') + ' L', '', '')) +
+      moneyStat('Fuel cost', fuelCost, '', fuelCost == null ? fuelMissingTitle : '', false) +
+      (perRun == null ? unknownStat('Fuel per run hour', noRunTitle) : statBlock('Fuel per run hour', perRun.toFixed(1) + ' L/hr', '', '')) +
+      statBlock('Working / idle burn', burnText, '', burnTitle);
+
+    var idleShare = FCM.idleShareOfRunTime(hasTel ? idleHours : null, hasTel ? operatingHours : null);
+    var idleOnlyTitle = 'Idle hours only. The breakdown above charges fixed costs on all run hours.';
+    var idleCostTitle = idleOnlyTitle;
+    var idleMonthTotal = hasTel ? idleCosts.total : null;
+    if (!hasTel) idleCostTitle = FCM.formatMissingMessage(noPeriodFields);
+    else if (idleCosts.hasMissing) idleCostTitle += ' ' + unavailableTitle(idleCosts);
+    var idleRateTitle = unavailableTitle(idlePerHour.missing);
+    var idleStats = (hasTel ? statBlock('Idle hours', fmtHours(idleHours), '', '') : unknownStat('Idle hours', noRunTitle)) +
+      (idleShare == null ? unknownStat('Idle share of run time', noRunTitle) : statBlock('Idle share of run time', Math.round(idleShare * 100) + '%', idleShare > 0.15 ? 'amber' : '', '')) +
+      moneyStat('Idle cost', idleMonthTotal, 'red', idleCostTitle, hasTel && !!idleCosts.hasMissing && idleCosts.total != null) +
+      moneyStat('Cost per idle hour', idlePerHour.value, 'rate', idleRateTitle, !!(idlePerHour.hasMissing && idlePerHour.value != null));
+
+    var runKnown = hasTel ? operatingHours : null;
+    var against = FCM.hoursAgainstTarget(runKnown == null ? null : runKnown, available, target);
+    var againstLabel = target == null ? 'Against target' : 'Against ' + Math.round(target) + '% target';
+    var againstText = 'no target set';
+    var againstTone = '';
+    var againstTitle = '';
+    if (against.state === 'unknown') {
+      againstText = '—';
+      againstTone = 'muted';
+      againstTitle = noRunTitle;
+    } else if (against.state !== 'none') {
+      againstText = fmtHours(against.hours) + (against.state === 'short' ? ' short' : ' ahead');
+      againstTone = against.state === 'short' ? 'amber' : '';
+    }
+    var utilTone = '';
+    if (target != null && utilRate > 100) utilTone = 'red';
+    else if (target != null && utilRate >= target) utilTone = 'green';
+    else if (target != null && utilRate < target) utilTone = 'amber';
+    var utilStats = (runKnown == null ? unknownStat('Run hours', noRunTitle) : statBlock('Run hours', fmtHours(runKnown), '', '')) +
+      statBlock('Available hours', fmtHours(available), '', '') +
+      (runKnown == null ? unknownStat('Utilisation', noRunTitle) : statBlock('Utilisation', Math.round(utilRate) + '%', utilTone, target == null ? 'no target set' : '')) +
+      statBlock(againstLabel, againstText, againstTone, againstTitle);
+
+    var co2 = FCM.co2ForPeriod(litresKnown, asset.fuel_type, operatingHours);
+    var emissionStats = (co2.tonnes == null ? unknownStat('CO2 emitted', noRunTitle) : statBlock('CO2 emitted', co2.tonnes.toFixed(1) + ' t', '', '')) +
+      (co2.kgPerRunHour == null ? unknownStat('Per run hour', noRunTitle) : statBlock('Per run hour', co2.kgPerRunHour.toFixed(1) + ' kg', '', ''));
+
+    var cards = [
+      moduleCard('fuel-analyst.html' + assetQuery, 'Fuel Analyst', fuelStats),
+      moduleCard('idle-cost-analyst.html' + assetQuery, 'Idle Cost Analyst', idleStats),
+      moduleCard('utilisation-analyst.html' + assetQuery, 'True Utilisation Analyst', utilStats),
+      moduleCard('emissions-intelligence.html' + assetQuery, 'Emissions Intelligence', emissionStats)
+    ];
+    if (jobRows.length) {
+      var jobIds = {};
+      var jobDates = {};
+      jobRows.forEach(function(row) {
+        if (row.job_id != null) jobIds[String(row.job_id)] = true;
+        if (row.work_date) jobDates[String(row.work_date).slice(0, 10)] = true;
+      });
+      var periodTotal = anyAmount ? total : null;
+      var perHour = FCM.costPerRunHour(periodTotal, operatingHours);
+      var jobTitle = !anyAmount ? partialNotes.join(' ') : (partialNotes.length ? partialNotes.join(' ') : '');
+      var jobStats = statBlock('Jobs this month', String(Object.keys(jobIds).length), '', '') +
+        statBlock('Days on jobs', String(Object.keys(jobDates).length), '', '') +
+        moneyStat('Cost per run hour', perHour, 'rate', jobTitle || noRunTitle, !!(partialNotes.length && perHour != null));
+      cards.push(moduleCard('job-cost-analyst.html', 'Job Cost Analyst', jobStats));
+    }
+    document.getElementById('module-grid').innerHTML = cards.join('');
+
+    renderChecklist(asset, operatingCosts);
+  }
+
+  function fillSwitcher(selected) {
+    var select = document.getElementById('asset-select');
+    select.innerHTML = machines.map(function(asset) {
+      var label = asset.asset_name || 'Unnamed machine';
+      if (asset.registration) label += ' (' + asset.registration + ')';
+      return '<option value="' + asset.id + '">' + esc(label) + '</option>';
+    }).join('');
+    if (selected) select.value = String(selected.id);
+  }
+
+  document.getElementById('asset-select').addEventListener('change', function() {
+    var asset = findMachine(this.value);
+    if (asset) showMachine(asset);
+  });
+
+  async function init() {
+    var sessionResult = await supabase.auth.getSession();
+    var session = sessionResult.data && sessionResult.data.session;
+    if (!session) { window.location.href = 'login.html'; return; }
+    currentUser = session.user;
+    accountContext = await window.FleetMagnifyAccountContext.load(supabase, currentUser.id);
+    effectiveAccountId = accountContext.effectiveAccountId;
+    window.FleetMagnifySidebar.inject('asset-overview.html', supabase, effectiveAccountId);
+    document.getElementById('signout-btn').addEventListener('click', async function() {
+      await supabase.auth.signOut();
+      window.location.href = 'login.html';
+    });
+    var hasAccess = await window.FleetMagnifySubscriptionGuard.checkAccess(supabase, effectiveAccountId);
+    if (!hasAccess) return;
+    window.FleetMagnifyDivisionFilter.mount(accountContext);
+    await window.FleetMagnifySidebar.setAccountChip(supabase, effectiveAccountId, currentUser);
+    var settings = await window.FleetMagnifyAccountSettings.readMachineryFuelCost(supabase, accountContext);
+    if (settings != null) defaultMachineryFuelCostPerLitre = settings;
+
+    var assetsResult = await supabase.from('assets').select('*').eq('user_id', effectiveAccountId).eq('is_ignored', false).order('asset_name');
+    var allAssets = window.FleetMagnifyDivisionFilter.apply(assetsResult.data || [], accountContext);
+    var requested = queryAsset();
+    if (requested) {
+      for (var i = 0; i < allAssets.length; i++) {
+        if (String(allAssets[i].id) === String(requested) && FCM.isOnRoad(allAssets[i])) {
+          document.getElementById('truck-state').hidden = false;
+          return;
+        }
+      }
+    }
+    machines = allAssets.filter(function(asset) { return !FCM.isOnRoad(asset); });
+    if (!machines.length) {
+      document.getElementById('empty-state').hidden = false;
+      return;
+    }
+    var choice = await chooseMachine(allAssets);
+    if (choice.truck) {
+      document.getElementById('truck-state').hidden = false;
+      return;
+    }
+    document.getElementById('dashboard').hidden = false;
+    fillSwitcher(choice.asset);
+    await showMachine(choice.asset);
+  }
+
+  init();
+})();
+</script>
+<script src="js/mobile-nav.js" defer></script>
+<script defer src="/_vercel/insights/script.js"></script>
+</body>
+</html>
