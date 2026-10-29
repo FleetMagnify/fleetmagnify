@@ -427,60 +427,6 @@
     return out;
   }
 
-  function calloutMoney(n) {
-    var rounded = Math.round(n * 100) / 100;
-    var whole = Math.round(rounded);
-    if (Math.abs(rounded - whole) < 0.001) return '$' + String(whole);
-    return '$' + rounded.toFixed(2);
-  }
-
-  function calloutPercent(share) {
-    return String(Math.round(share * 100)) + '%';
-  }
-
-  // Sentences for the Asset overview "What stands out" callout.
-  // partial or a missing input hides the callout. Each sentence is included
-  // only when its comparison holds.
-  function assetOverviewCallout(input) {
-    var empty = { show: false, sentences: [] };
-    input = input || {};
-    if (input.partial) return empty;
-
-    var idleHours = num(input.idleHours);
-    var operatingHours = num(input.operatingHours);
-    var idleCost = num(input.idleCost);
-    var totalCost = num(input.totalCost);
-    var workingPerHour = num(input.workingPerHour);
-    var idlePerHour = num(input.idlePerHour);
-    var workingRate = num(input.workingRate);
-    var idleRate = num(input.idleRate);
-    var price = num(input.pricePerLitre);
-    var required = [idleHours, operatingHours, idleCost, totalCost, workingPerHour, idlePerHour, workingRate, idleRate, price];
-    for (var i = 0; i < required.length; i++) {
-      if (required[i] === null) return empty;
-    }
-
-    var sentences = [];
-    if (operatingHours > 0 && totalCost > 0) {
-      var hourShare = idleHours / operatingHours;
-      var costShare = idleCost / totalCost;
-      if (costShare < hourShare) {
-        sentences.push(
-          'Idle time is ' + calloutPercent(hourShare) + ' of this machine\'s run hours but only ' +
-          calloutPercent(costShare) + ' of its cost, because most of an idle hour\'s cost is fixed (depreciation, servicing, maintenance), not fuel.'
-        );
-      }
-    }
-    if (workingPerHour > idlePerHour) {
-      var gap = workingPerHour - idlePerHour;
-      var fuelGap = (workingRate - idleRate) * price;
-      sentences.push(
-        'A working hour costs ' + calloutMoney(gap) + ' more than an idle hour, of which ' + calloutMoney(fuelGap) + ' is fuel.'
-      );
-    }
-    return { show: sentences.length > 0, sentences: sentences };
-  }
-
   function runHoursOrNull(hours) {
     var value = num(hours);
     return value !== null && value > 0 ? value : null;
@@ -799,7 +745,6 @@
     measuredWorkingRate: measuredWorkingRate,
     calcWorkingCostPerHour: calcWorkingCostPerHour,
     calcOperatingHourCosts: calcOperatingHourCosts,
-    assetOverviewCallout: assetOverviewCallout,
     fuelPerRunHour: fuelPerRunHour,
     idleShareOfRunTime: idleShareOfRunTime,
     hoursAgainstTarget: hoursAgainstTarget,

@@ -98,8 +98,8 @@
   .asset-meta-value .warn { color: #EF9F27; }
 
   /* ── KPI ROW ── */
-  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
-  .kpi-row-components { margin-bottom: 28px; }
+  .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 14px; }
+  .kpi-row-components { grid-template-columns: repeat(4, 1fr); margin-bottom: 28px; }
   .kpi-value.missing { font-size: 11px; font-weight: 600; color: #EF9F27; line-height: 1.35; letter-spacing: 0; }
   .kpi-value.unavailable { color: #EF9F27; cursor: help; }
   .cell-missing { font-size: 11px; color: #EF9F27; line-height: 1.35; max-width: 180px; }
@@ -161,10 +161,11 @@
   .empty-state .icon, .loading-state .icon { font-size: 36px; margin-bottom: 14px; opacity: 0.4; display: block; }
 
   @media (max-width: 1200px) {
-    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .kpi-row { grid-template-columns: repeat(3, 1fr); }
+    .kpi-row.kpi-row-components { grid-template-columns: repeat(2, 1fr); }
   }
   @media (max-width: 768px) {
-    .kpi-row { grid-template-columns: repeat(2, 1fr) !important; }
+    .kpi-row-components { grid-template-columns: repeat(2, 1fr) !important; }
   }
 </style>
 </head>
@@ -229,11 +230,6 @@
         <div class="kpi-label">Cost per idle hour</div>
         <div class="kpi-value white" id="kpi-per-hour">—</div>
         <div class="kpi-sub">fuel + depreciation + servicing + maintenance</div>
-      </div>
-      <div class="kpi-card" title="Measured over the machine's latest days with Fleet Fuel data, not limited to the dates selected">
-        <div class="kpi-label">Cost per working hour</div>
-        <div class="kpi-value white" id="kpi-working-hour">—</div>
-        <div class="kpi-sub" id="kpi-working-sub">measured from Fleet Fuel</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Total Cost of Idling</div>
@@ -586,20 +582,6 @@
     paintPerHourValue(document.getElementById('kpi-per-hour'), result);
   }
 
-  function setKpiWorkingHour(result, measured) {
-    var el = document.getElementById('kpi-working-hour');
-    paintPerHourValue(el, result);
-    var note = "Measured over the machine's latest days with Fleet Fuel data, not limited to the dates selected";
-    var existing = el.getAttribute('title');
-    el.setAttribute('title', existing ? (existing + ' ' + note) : note);
-    var sub = document.getElementById('kpi-working-sub');
-    if (measured && measured.rate != null && isFinite(measured.rate)) {
-      sub.textContent = 'fuel at ' + Number(measured.rate).toFixed(1) + ' L/hr measured over ' + measured.days + ' days';
-    } else {
-      sub.textContent = 'needs 3 days of Fleet Fuel data';
-    }
-  }
-
   function setKpiTotalCost(partialSum, fuelMissing, deprMissing, deprLifeExceeded, deprLifeNearLimit, servMissing, maintMissing) {
     var el = document.getElementById('kpi-total-cost');
     var unavailable = unavailableComponents(fuelMissing, deprMissing, deprLifeExceeded, deprLifeNearLimit, servMissing, maintMissing);
@@ -685,17 +667,6 @@
       .order('record_date', { ascending: false })
       .limit(1);
 
-    // Working burn is a property of the machine, like the idle rate, so this
-    // read is not limited to the dates selected above.
-    var workingFuelResult = await supabase
-      .from('telematics_records')
-      .select('record_date, operating_hours, idle_hours, working_fuel_litres')
-      .eq('asset_id', selectedAsset.id)
-      .eq('user_id', effectiveAccountId)
-      .not('working_fuel_litres', 'is', null)
-      .order('record_date', { ascending: false })
-      .limit(120);
-
     btn.disabled = false; btn.textContent = 'Apply Filters';
 
     var fuelRows = (fuelResult.data || []);
@@ -711,13 +682,10 @@
     var avgCostPerLitre = totalLitres > 0 ? (totalFuelCost / totalLitres) : (defaultMachineryFuelCostPerLitre || 0);
     var fuelPricingAvailable = (fuelRows.length > 0 && totalLitres > 0) || (defaultMachineryFuelCostPerLitre > 0);
     var perHour = FCM.calcIdleCostPerHour(selectedAsset, avgCostPerLitre, idleRate, totalEngineHours, fuelPricingAvailable);
-    var measuredWorking = FCM.measuredWorkingRate((workingFuelResult && workingFuelResult.data) || []);
-    var workingPerHour = FCM.calcWorkingCostPerHour(selectedAsset, avgCostPerLitre, measuredWorking.rate, totalEngineHours, fuelPricingAvailable);
 
     if (telRows.length === 0) {
       showEmpty();
       setKpiPerHour(perHour);
-      setKpiWorkingHour(workingPerHour, measuredWorking);
       return;
     }
 
@@ -767,7 +735,6 @@
     setKpiMoneyOrMissing('kpi-maintenance-cost', sumMaintCost, aggMaintMissing);
     setKpiTotalCost(grandTotal, aggFuelMissing, aggDeprMissing, aggDeprLifeExceeded, aggDeprLifeNearLimit, aggServMissing, aggMaintMissing);
     setKpiPerHour(perHour);
-    setKpiWorkingHour(workingPerHour, measuredWorking);
     document.getElementById('kpi-total-cost-sub').textContent = 'over ' + sumIdleHours.toFixed(0) + ' idle hours';
     updateAssetMetaDisplay(selectedAsset, {
       fuelMissing: aggFuelMissing,
@@ -875,11 +842,6 @@
     perEl.className = 'kpi-value white';
     perEl.textContent = '—';
     perEl.removeAttribute('title');
-    var workingEl = document.getElementById('kpi-working-hour');
-    workingEl.className = 'kpi-value white';
-    workingEl.textContent = '—';
-    workingEl.removeAttribute('title');
-    document.getElementById('kpi-working-sub').textContent = 'needs 3 days of Fleet Fuel data';
     document.getElementById('chart-empty').style.display = 'block';
     if (idleChart) { idleChart.destroy(); idleChart = null; }
     document.getElementById('data-tbody').innerHTML = '<tr><td colspan="7"><div class="empty-state"><span class="icon">⏱</span>No telematics data found for this asset in the selected date range.</div></td></tr>';

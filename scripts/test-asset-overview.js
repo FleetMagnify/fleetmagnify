@@ -127,53 +127,6 @@ check('fuel idle plus fuel working equals total fuel, and fixed costs match the 
   assert.ok(Math.abs(fixed - operatingHours * (working.value - fuelPart)) < 1e-6);
 });
 
-var calloutInput = {
-  partial: false,
-  idleHours: 24,
-  operatingHours: 120,
-  idleCost: 700,
-  totalCost: 10000,
-  workingPerHour: 140,
-  idlePerHour: 43,
-  workingRate: 10,
-  idleRate: 4,
-  pricePerLitre: 2
-};
-
-check('the callout is shown only when every input exists', function() {
-  var shown = FCM.assetOverviewCallout(calloutInput);
-  assert.strictEqual(shown.show, true);
-  assert.strictEqual(
-    shown.sentences[0],
-    'Idle time is 20% of this machine\'s run hours but only 7% of its cost, because most of an idle hour\'s cost is fixed (depreciation, servicing, maintenance), not fuel.'
-  );
-  assert.strictEqual(
-    shown.sentences[1],
-    'A working hour costs $97 more than an idle hour, of which $12 is fuel.'
-  );
-  var missing = Object.assign({}, calloutInput, { pricePerLitre: null });
-  assert.deepStrictEqual(FCM.assetOverviewCallout(missing), { show: false, sentences: [] });
-});
-
-check('sentence 1 is absent when idle cost share is not below the idle hours share', function() {
-  var result = FCM.assetOverviewCallout(Object.assign({}, calloutInput, { idleCost: 5000 }));
-  assert.strictEqual(result.sentences.length, 1);
-  assert.ok(result.sentences[0].indexOf('working hour') !== -1);
-});
-
-check('sentence 2 is absent when a working hour does not cost more than an idle hour', function() {
-  var result = FCM.assetOverviewCallout(Object.assign({}, calloutInput, { workingPerHour: 43 }));
-  assert.strictEqual(result.sentences.length, 1);
-  assert.ok(result.sentences[0].indexOf('Idle time is') === 0);
-});
-
-check('partial data hides the callout', function() {
-  var result = FCM.assetOverviewCallout(Object.assign({}, calloutInput, { partial: true }));
-  assert.deepStrictEqual(result, { show: false, sentences: [] });
-  var neither = FCM.assetOverviewCallout(Object.assign({}, calloutInput, { idleCost: 8000, workingPerHour: 40 }));
-  assert.strictEqual(neither.show, false);
-});
-
 check('module ratios are null when run hours are zero, never NaN or Infinity', function() {
   assert.strictEqual(FCM.fuelPerRunHour(100, 0), null);
   assert.strictEqual(FCM.fuelPerRunHour(100, null), null);
@@ -240,6 +193,7 @@ check('fuel cost equals the two breakdown fuel rows, and cost per run hour scale
 });
 
 var page = fs.readFileSync(path.join(__dirname, '..', 'asset-overview.html'), 'utf8');
+var model = fs.readFileSync(path.join(__dirname, '..', 'js', 'fleet-cost-model.js'), 'utf8');
 var sidebar = fs.readFileSync(path.join(__dirname, '..', 'js', 'sidebar-nav.js'), 'utf8');
 var sidebarCss = fs.readFileSync(path.join(__dirname, '..', 'css', 'sidebar.css'), 'utf8');
 var mobileNav = fs.readFileSync(path.join(__dirname, '..', 'js', 'mobile-nav.js'), 'utf8');
@@ -292,6 +246,50 @@ check('the page applies the division filter and scopes every query by user_id', 
   assert.ok(page.indexOf(".gte('work_date', from)") !== -1);
   assert.ok(page.indexOf(".lte('work_date', to)") !== -1);
   assert.ok(page.indexOf('Idle hours only. The breakdown above charges fixed costs on all run hours.') !== -1);
+  assert.ok(page.indexOf('>Data to<') !== -1);
+  assert.ok(page.indexOf('Last report') === -1);
+  assert.ok(page.indexOf('What stands out') === -1);
+  assert.ok(page.indexOf('id="callout"') === -1);
+  assert.ok(page.indexOf('assetOverviewCallout') === -1);
+  assert.strictEqual(FCM.assetOverviewCallout, undefined);
+  assert.ok(model.indexOf('function assetOverviewCallout') === -1);
+  assert.ok(model.indexOf('function calloutMoney') === -1);
+  assert.ok(model.indexOf('function calloutPercent') === -1);
+});
+
+check('Idle Cost Analyst top row is three tiles and does not query working fuel', function() {
+  var analyst = fs.readFileSync(path.join(__dirname, '..', 'idle-cost-analyst.html'), 'utf8');
+  assert.ok(analyst.indexOf('Cost per working hour') === -1);
+  assert.ok(analyst.indexOf('setKpiWorkingHour') === -1);
+  assert.ok(analyst.indexOf('kpi-working-hour') === -1);
+  assert.ok(analyst.indexOf('working_fuel_litres') === -1);
+  var topStart = analyst.indexOf('<div class="kpi-row">');
+  var topEnd = analyst.indexOf('kpi-row-components', topStart);
+  var top = analyst.slice(topStart, topEnd);
+  assert.strictEqual((top.match(/class="kpi-card"/g) || []).length, 3);
+  assert.ok(top.indexOf('Total Idle Hours') !== -1);
+  assert.ok(top.indexOf('Cost per idle hour') !== -1);
+  assert.ok(top.indexOf('Total Cost of Idling') !== -1);
+  assert.ok(analyst.indexOf('grid-template-columns: repeat(3, 1fr)') !== -1);
+  assert.ok(analyst.indexOf('grid-template-columns: repeat(4, 1fr)') !== -1);
+  assert.ok(model.indexOf('function measuredWorkingRate') !== -1);
+  assert.ok(model.indexOf('function calcWorkingCostPerHour') !== -1);
+});
+
+check('sign-in and sign-up use the landing page mobile menu', function() {
+  ['login.html', 'signup.html'].forEach(function(file) {
+    var text = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+    assert.ok(text.indexOf('<nav>') !== -1, file);
+    assert.ok(text.indexOf('class="nav-inner"') !== -1, file);
+    assert.ok(text.indexOf('class="nav-links"') !== -1, file);
+    assert.ok(text.indexOf('js/mobile-nav.js') !== -1, file);
+    assert.ok(text.indexOf('<header>') === -1, file);
+  });
+  assert.ok(mobileNav.indexOf("document.querySelector('nav .nav-inner')") !== -1);
+  assert.ok(mobileNav.indexOf("btn.className = 'mobile-menu-btn'") !== -1);
+  var css = fs.readFileSync(path.join(__dirname, '..', 'css', 'mobile-responsive.css'), 'utf8');
+  assert.ok(css.indexOf('.nav-inner > .nav-links') !== -1);
+  assert.ok(css.indexOf('min-height: 44px') !== -1);
 });
 
 var analysts = ['idle-cost-analyst.html', 'fuel-analyst.html', 'utilisation-analyst.html', 'emissions-intelligence.html'];
