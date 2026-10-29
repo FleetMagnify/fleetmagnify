@@ -749,7 +749,7 @@
       return;
     }
     var idle = FCM.resolvedIdleRate(selectedAsset);
-    display.textContent = FCM.formatIdleRate(idle.rate) + ' L/hr (' + idle.label.toLowerCase() + ')';
+    display.textContent = FCM.formatIdleRate(idle.rate) + ' L/hr (' + FCM.formatIdleRateLabel(idle.label) + ')';
     display.title = idle.source === 'measured'
       ? 'Measured from VisionLink fuel and idle-hour data'
       : '';

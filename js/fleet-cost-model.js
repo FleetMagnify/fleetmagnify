@@ -597,9 +597,17 @@
       return { rate: stored, source: 'calibrated', label: 'Calibrated' };
     }
     if (src === 'measured') {
-      return { rate: stored, source: 'measured', label: 'Measured (VisionLink)' };
+      return { rate: stored, source: 'measured', label: 'Measured from VisionLink' };
     }
     return { rate: stored, source: 'set', label: 'Set on asset' };
+  }
+
+  // Parenthetical rate text. Other sources are lowercased ("set on asset").
+  // VisionLink stays capitalised: "3.50 L/hr (measured from VisionLink)".
+  function formatIdleRateLabel(label) {
+    var text = String(label || '');
+    if (text === 'Measured from VisionLink') return 'measured from VisionLink';
+    return text.toLowerCase();
   }
 
   function formatIdleRate(rate) {
@@ -758,6 +766,7 @@
     isPlausibleIdleRate: isPlausibleIdleRate,
     resolvedIdleRate: resolvedIdleRate,
     formatIdleRate: formatIdleRate,
+    formatIdleRateLabel: formatIdleRateLabel,
     defaultIdleRateForAsset: defaultIdleRateForAsset,
     machineryFuelFromTelematics: machineryFuelFromTelematics,
     truckFuelFromInvoices: truckFuelFromInvoices,
