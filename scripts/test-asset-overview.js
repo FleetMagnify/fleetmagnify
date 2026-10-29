@@ -255,6 +255,25 @@ check('the page applies the division filter and scopes every query by user_id', 
   assert.ok(model.indexOf('function calloutPercent') === -1);
 });
 
+check('Idle Cost Analyst top row is three tiles and does not query working fuel', function() {
+  var analyst = fs.readFileSync(path.join(__dirname, '..', 'idle-cost-analyst.html'), 'utf8');
+  assert.ok(analyst.indexOf('Cost per working hour') === -1);
+  assert.ok(analyst.indexOf('setKpiWorkingHour') === -1);
+  assert.ok(analyst.indexOf('kpi-working-hour') === -1);
+  assert.ok(analyst.indexOf('working_fuel_litres') === -1);
+  var topStart = analyst.indexOf('<div class="kpi-row">');
+  var topEnd = analyst.indexOf('kpi-row-components', topStart);
+  var top = analyst.slice(topStart, topEnd);
+  assert.strictEqual((top.match(/class="kpi-card"/g) || []).length, 3);
+  assert.ok(top.indexOf('Total Idle Hours') !== -1);
+  assert.ok(top.indexOf('Cost per idle hour') !== -1);
+  assert.ok(top.indexOf('Total Cost of Idling') !== -1);
+  assert.ok(analyst.indexOf('grid-template-columns: repeat(3, 1fr)') !== -1);
+  assert.ok(analyst.indexOf('grid-template-columns: repeat(4, 1fr)') !== -1);
+  assert.ok(model.indexOf('function measuredWorkingRate') !== -1);
+  assert.ok(model.indexOf('function calcWorkingCostPerHour') !== -1);
+});
+
 var analysts = ['idle-cost-analyst.html', 'fuel-analyst.html', 'utilisation-analyst.html', 'emissions-intelligence.html'];
 check('the four analyst pages preselect ?asset= when that machine is in the list', function() {
   analysts.forEach(function(file) {
