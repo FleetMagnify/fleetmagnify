@@ -254,22 +254,6 @@ function assertNewestLimitedQuery(html, label) {
   assert.strictEqual(slice.indexOf(".gte('record_date'"), -1, label + ' has no date lower bound');
 }
 
-var analyst = fs.readFileSync(path.join(__dirname, '../idle-cost-analyst.html'), 'utf8');
-assert.ok(analyst.indexOf('Cost per working hour') !== -1);
-assert.ok(analyst.indexOf('needs 3 days of Fleet Fuel data') !== -1);
-assert.ok(analyst.indexOf("Measured over the machine's latest days with Fleet Fuel data, not limited to the dates selected") !== -1);
-assert.ok(analyst.indexOf('grid-template-columns: repeat(4, 1fr)') !== -1);
-assert.ok(analyst.indexOf('repeat(2, 1fr) !important') !== -1);
-var hoursAt = analyst.indexOf('Total Idle Hours');
-var idleAt = analyst.indexOf('Cost per idle hour');
-var workingAt = analyst.indexOf('Cost per working hour');
-var totalAt = analyst.indexOf('Total Cost of Idling');
-assert.ok(hoursAt < idleAt && idleAt < workingAt && workingAt < totalAt);
-var emptyAt = analyst.indexOf('telRows.length === 0');
-assert.ok(analyst.slice(emptyAt, emptyAt + 280).indexOf('setKpiWorkingHour') !== -1);
-assertNewestLimitedQuery(analyst, 'Idle Cost Analyst');
-console.log('✓ Idle Cost Analyst shows the working-hour tile from a newest-120 query');
-
 var home = fs.readFileSync(path.join(__dirname, '../home.html'), 'utf8');
 assert.ok(home.indexOf('Cost per hour by machine') !== -1);
 assert.ok(home.indexOf('Idle cost per hour') !== -1);

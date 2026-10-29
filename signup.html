@@ -27,7 +27,7 @@
     background-size: 64px 64px;
   }
 
-  header {
+  nav {
     position: relative; z-index: 1;
     padding: 24px 3rem;
     border-bottom: 1px solid #2D3748;
@@ -35,7 +35,7 @@
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
   }
-  .header-inner {
+  .nav-inner {
     max-width: 1280px; margin: 0 auto;
     display: flex; align-items: center; justify-content: space-between;
   }
@@ -180,7 +180,7 @@
   .login-prompt a:hover { color: #0BC48E; }
 
   @media (max-width: 600px) {
-    header { padding: 20px 1.5rem; }
+    nav { padding: 20px 1.5rem; }
     .signup-card { padding: 32px 24px 28px; }
     .signup-card h1 { font-size: 24px; }
   }
@@ -191,8 +191,8 @@
 <div class="page-glow"></div>
 <div class="page-grid"></div>
 
-<header>
-  <div class="header-inner">
+<nav>
+  <div class="nav-inner">
     <a class="logo" href="index.html">
       <div class="logo-mark">FM</div>
       <span class="logo-name">Fleet<span>Magnify</span></span>
@@ -209,7 +209,7 @@
       <a class="btn-primary" href="signup.html">Sign Up</a>
     </div>
   </div>
-</header>
+</nav>
 
 <main>
   <div class="signup-card">
