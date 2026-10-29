@@ -67,11 +67,6 @@
   .kpi-value.unavailable { color: #EF9F27; cursor: help; }
   .kpi-partial-suffix { font-size: 11px; font-weight: 600; letter-spacing: 0; }
   .kpi-sub { font-size: 13px; color: #93A0B2; margin-top: 8px; line-height: 1.4; }
-  .callout {
-    background: rgba(14,165,122,0.08); border: 1px solid rgba(14,165,122,0.35);
-    border-radius: 14px; padding: 16px 20px; font-size: 15px; line-height: 1.5; color: #C9F0E1; margin-bottom: 20px;
-  }
-  .callout strong { color: #E6FBF3; }
   .overview-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr); gap: 20px; align-items: start; }
   .breakdown-panel { grid-column: 1; grid-row: 1; }
   .chart-panel { grid-column: 1; grid-row: 2; }
@@ -210,7 +205,6 @@
           <div class="kpi-sub" id="kpi-util-sub">no target set</div>
         </div>
       </div>
-      <div class="callout" id="callout" hidden></div>
       <div class="overview-layout">
           <div class="panel breakdown-panel">
             <div class="panel-title">Operating cost, month to date</div>
@@ -803,39 +797,6 @@
       totalEl.textContent = fmtMoney(total);
       totalEl.removeAttribute('title');
       shareElTotal.textContent = '100%';
-    }
-
-    var idleCostValue = null;
-    if (!idleCosts.hasMissing) {
-      idleCostValue = (idleCosts.fuel || 0) + (idleCosts.depreciation || 0) + (idleCosts.servicing || 0) + (idleCosts.maintenance || 0);
-    }
-    // Idle fuel is the tile's idle rate × price. Fixed is the rest of that
-    // same per-hour tile (depreciation + servicing + maintenance).
-    var idleFuelPerHour = fuelPricingAvailable ? idleResolved.rate * avgCpl : null;
-    var fixedPerHour = (idleFuelPerHour != null && idlePerHour.value != null && !idlePerHour.hasMissing)
-      ? idlePerHour.value - idleFuelPerHour
-      : null;
-    var callout = FCM.assetOverviewCallout({
-      partial: !!(workingPerHour.hasMissing || workingPerHour.value == null || idlePerHour.hasMissing || idlePerHour.value == null || operatingCosts.hasMissing || idleCosts.hasMissing || !fuelPricingAvailable),
-      idleHours: idleHours,
-      operatingHours: operatingHours,
-      idleCost: idleCostValue,
-      totalCost: anyAmount && !partialNotes.length ? total : null,
-      workingPerHour: workingPerHour.value,
-      idlePerHour: idlePerHour.value,
-      workingRate: measured.rate,
-      idleRate: idleResolved.rate,
-      pricePerLitre: fuelPricingAvailable ? avgCpl : null,
-      idleFuelPerHour: idleFuelPerHour,
-      fixedPerHour: fixedPerHour
-    });
-    var calloutEl = document.getElementById('callout');
-    if (callout.show) {
-      calloutEl.hidden = false;
-      calloutEl.innerHTML = '<strong>What stands out:</strong> ' + callout.sentences.map(esc).join(' ');
-    } else {
-      calloutEl.hidden = true;
-      calloutEl.textContent = '';
     }
 
     var labels = [];
