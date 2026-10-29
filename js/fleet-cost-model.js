@@ -251,11 +251,8 @@
     return result;
   }
 
-  // Per-idle-hour cost. Same components as calcIdleHourCosts, without
-  // multiplying by idle hours, so a quiet period still has a rate.
-  // value × idleHours equals calcIdleHourCosts(...).total for the same inputs.
-  function calcIdleCostPerHour(asset, avgCostPerLitre, idleRate, totalEngineHours, fuelPricingAvailable) {
-    var missing = {
+  function blankHourlyMissing() {
+    return {
       fuelMissing: null,
       depreciationMissing: null,
       depreciationLifeExceeded: false,
@@ -263,6 +260,42 @@
       servicingMissing: null,
       maintenanceMissing: null
     };
+  }
+
+  // Depreciation, servicing and maintenance per hour. Shared by the idle
+  // and working rates so the two numbers can only differ by fuel.
+  function appendNonFuelHourlyParts(asset, totalEngineHours, missing, parts) {
+    var deprHr = calcDepreciationPerHour(asset, totalEngineHours);
+    missing.depreciationLifeExceeded = !!deprHr.lifeExceeded;
+    missing.depreciationLifeNearLimit = !!deprHr.lifeNearLimit;
+    missing.depreciationMissing = deprHr.ok ? null : (deprHr.lifeExceeded ? null : deprHr.missing);
+    if (deprHr.ok) parts.push(deprHr.value);
+
+    var servHr = getServicingPerHour(asset);
+    missing.servicingMissing = servHr.ok ? null : servHr.missing;
+    if (servHr.ok) parts.push(servHr.value);
+
+    var maintHr = calcMaintenancePerHour(asset);
+    missing.maintenanceMissing = maintHr.ok ? null : maintHr.missing;
+    if (maintHr.ok) parts.push(maintHr.value);
+  }
+
+  function hourlyCostResult(parts, missing) {
+    var hasMissing = !!(missing.fuelMissing || missing.depreciationMissing || missing.depreciationLifeExceeded ||
+      missing.servicingMissing || missing.maintenanceMissing);
+    var value = null;
+    if (parts.length) {
+      value = 0;
+      parts.forEach(function(part) { value += part; });
+    }
+    return { value: value, hasMissing: hasMissing, missing: missing };
+  }
+
+  // Per-idle-hour cost. Same components as calcIdleHourCosts, without
+  // multiplying by idle hours, so a quiet period still has a rate.
+  // value × idleHours equals calcIdleHourCosts(...).total for the same inputs.
+  function calcIdleCostPerHour(asset, avgCostPerLitre, idleRate, totalEngineHours, fuelPricingAvailable) {
+    var missing = blankHourlyMissing();
     if (!asset || isOnRoad(asset)) {
       return { value: null, hasMissing: false, missing: missing };
     }
@@ -277,29 +310,83 @@
     } else {
       parts.push(idleRate * avgCostPerLitre);
     }
+    appendNonFuelHourlyParts(asset, totalEngineHours, missing, parts);
+    return hourlyCostResult(parts, missing);
+  }
 
-    var deprHr = calcDepreciationPerHour(asset, totalEngineHours);
-    missing.depreciationLifeExceeded = !!deprHr.lifeExceeded;
-    missing.depreciationLifeNearLimit = !!deprHr.lifeNearLimit;
-    missing.depreciationMissing = deprHr.ok ? null : (deprHr.lifeExceeded ? null : deprHr.missing);
-    if (deprHr.ok) parts.push(deprHr.value);
+  // Weighted working burn from Fleet Fuel litres and Utilization hours.
+  // One qualifying telematics row is one machine-day. No class default:
+  // unknown stays unknown.
+  function measuredWorkingRate(rows) {
+    var qualifying = [];
+    (rows || []).forEach(function(row) {
+      if (!row) return;
+      if (row.working_fuel_litres === null || row.working_fuel_litres === undefined || row.working_fuel_litres === '') return;
+      var litres = num(row.working_fuel_litres);
+      if (litres === null || litres < 0) return;
+      var operating = num(row.operating_hours);
+      var idle = num(row.idle_hours);
+      if (operating === null || idle === null) return;
+      // 4 decimal places so a stored 0.05 hour gap (1.05 − 1) is not
+      // treated as more than 0.05 by binary float noise.
+      var workingHours = Math.round((operating - idle) * 10000) / 10000;
+      if (!(workingHours > 0.05)) return;
+      var day = row.record_date == null ? '' : String(row.record_date).slice(0, 10);
+      qualifying.push({ date: day, litres: litres, workingHours: workingHours });
+    });
+    qualifying.sort(function(a, b) {
+      if (a.date === b.date) return 0;
+      return a.date < b.date ? 1 : -1;
+    });
+    if (qualifying.length > 120) qualifying = qualifying.slice(0, 120);
 
-    var servHr = getServicingPerHour(asset);
-    missing.servicingMissing = servHr.ok ? null : servHr.missing;
-    if (servHr.ok) parts.push(servHr.value);
-
-    var maintHr = calcMaintenancePerHour(asset);
-    missing.maintenanceMissing = maintHr.ok ? null : maintHr.missing;
-    if (maintHr.ok) parts.push(maintHr.value);
-
-    var hasMissing = !!(missing.fuelMissing || missing.depreciationMissing || missing.depreciationLifeExceeded ||
-      missing.servicingMissing || missing.maintenanceMissing);
-    var value = null;
-    if (parts.length) {
-      value = 0;
-      parts.forEach(function(part) { value += part; });
+    var days = qualifying.length;
+    var sumLitres = 0;
+    var sumHours = 0;
+    qualifying.forEach(function(row) {
+      sumLitres += row.litres;
+      sumHours += row.workingHours;
+    });
+    if (days < 3 || !(sumHours >= 10)) {
+      return { rate: null, days: days, reason: 'not enough data' };
     }
-    return { value: value, hasMissing: hasMissing, missing: missing };
+    var rate = sumLitres / sumHours;
+    if (!(isFinite(rate) && rate >= 3 && rate <= 150)) {
+      return { rate: null, days: days, reason: 'implausible' };
+    }
+    return {
+      rate: Math.round((rate + Number.EPSILON) * 100) / 100,
+      days: days,
+      workingHours: sumHours
+    };
+  }
+
+  // Per-working-hour cost. Same non-fuel components as calcIdleCostPerHour.
+  // Fuel is the measured working burn × price. A missing working rate does
+  // not fall back to the idle rate or a class default.
+  function calcWorkingCostPerHour(asset, avgCostPerLitre, workingRate, totalEngineHours, fuelPricingAvailable) {
+    var missing = blankHourlyMissing();
+    if (!asset || isOnRoad(asset)) {
+      return { value: null, hasMissing: false, missing: missing };
+    }
+
+    fuelPricingAvailable = fuelPricingAvailable !== false;
+    avgCostPerLitre = avgCostPerLitre || 0;
+    var rate = num(workingRate);
+    if (rate === null || !(rate > 0)) {
+      missing.fuelMissing = ['Measured working fuel burn (needs at least 3 days of Fleet Fuel data)'];
+      appendNonFuelHourlyParts(asset, totalEngineHours, missing, []);
+      return hourlyCostResult([], missing);
+    }
+
+    var parts = [];
+    if (!fuelPricingAvailable) {
+      missing.fuelMissing = ['Fuel records for selected period'];
+    } else {
+      parts.push(rate * avgCostPerLitre);
+    }
+    appendNonFuelHourlyParts(asset, totalEngineHours, missing, parts);
+    return hourlyCostResult(parts, missing);
   }
 
   /** Per-km running cost components for on-road vehicles. */
@@ -558,6 +645,8 @@
     calcAnnualUsageHours: calcAnnualUsageHours,
     calcIdleHourCosts: calcIdleHourCosts,
     calcIdleCostPerHour: calcIdleCostPerHour,
+    measuredWorkingRate: measuredWorkingRate,
+    calcWorkingCostPerHour: calcWorkingCostPerHour,
     calcRunningCostPerKm: calcRunningCostPerKm,
     getLatestEngineHours: getLatestEngineHours,
     costOrMissing: costOrMissing,

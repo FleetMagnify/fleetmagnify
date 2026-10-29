@@ -65,6 +65,8 @@
   .chart-excluded[hidden] { display: none; }
 
   .table-card { background: #111827; border: 1px solid #2D3748; border-radius: 14px; overflow: hidden; }
+  #cost-per-hour-card { margin-top: 24px; }
+  .cost-per-hour-more { font-size: 12px; color: #3A4A5C; padding: 12px 22px 16px; }
   .table-header { padding: 18px 22px; border-bottom: 1px solid #2D3748; }
   .table-title { font-size: 14px; font-weight: 700; color: #C8D0DB; }
   table { width: 100%; border-collapse: collapse; }
@@ -202,6 +204,17 @@
           </table>
         </div>
       </div>
+
+      <div class="table-card" id="cost-per-hour-card" hidden>
+        <div class="table-header"><div class="table-title">Cost per hour by machine</div></div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>Machine</th><th>Idle cost per hour</th><th>Working cost per hour</th><th>Fuel burn basis</th></tr></thead>
+            <tbody id="cost-per-hour-tbody"><tr><td colspan="4" style="text-align:center;padding:24px;color:#3A4A5C;">Loading...</td></tr></tbody>
+          </table>
+        </div>
+        <p class="cost-per-hour-more" id="cost-per-hour-more" hidden></p>
+      </div>
     </div>
   </div>
 </div>
@@ -334,6 +347,7 @@
     return isNaN(h) ? DEFAULT_HOURS_PER_WEEK : h;
   }
   function fmtMoney(n) { return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+  function fmtMoney2(n) { return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
   function chartLabel(asset) {
     return String(asset.asset_name || '').trim() || 'Unnamed asset';
@@ -497,7 +511,11 @@
         hasFuelData: litres > 0,
         hasIdleData: assetTel.length > 0,
         hasEmissionsData: litres > 0,
-        hasUtilData: assetTel.length > 0
+        hasUtilData: assetTel.length > 0,
+        avgCpl: avgCpl,
+        idleRate: idleRate,
+        totalEngineHours: totalEngineHours,
+        fuelPricingAvailable: fuelPricingAvailable
       };
     });
 
@@ -608,6 +626,7 @@
 
     renderCharts(curMetrics.assets);
     renderTopTable(curMetrics.assets.filter(function(a) { return a.totalCost > 0; }));
+    await renderCostPerHourCard(current.assets, curMetrics);
   }
 
   function destroyCharts() {
@@ -770,6 +789,114 @@
         }
       }
     });
+  }
+
+  function perHourMissingTitle(result) {
+    if (!result || !result.missing) return '';
+    var m = result.missing;
+    var parts = [];
+    if (m.fuelMissing && m.fuelMissing.length) parts.push(FCM.formatMissingMessage(m.fuelMissing));
+    if (m.depreciationLifeExceeded) parts.push(FCM.formatLifeExceededMessage(m.depreciationLifeNearLimit));
+    else if (m.depreciationMissing && m.depreciationMissing.length) parts.push(FCM.formatMissingMessage(m.depreciationMissing));
+    if (m.servicingMissing && m.servicingMissing.length) parts.push(FCM.formatMissingMessage(m.servicingMissing));
+    if (m.maintenanceMissing && m.maintenanceMissing.length) parts.push(FCM.formatMissingMessage(m.maintenanceMissing));
+    return parts.join(' ');
+  }
+
+  function perHourCell(result) {
+    var title = perHourMissingTitle(result);
+    if (!result || result.value == null) {
+      return title ? '<td title="' + esc(title) + '">—</td>' : '<td>—</td>';
+    }
+    var text = fmtMoney2(result.value);
+    if (result.hasMissing) {
+      return '<td title="' + esc(title) + '">' + text + ' <span class="kpi-partial-suffix">(partial)</span></td>';
+    }
+    return '<td>' + text + '</td>';
+  }
+
+  function compactRate(n) {
+    var text = (Math.round(Number(n) * 100) / 100).toFixed(2);
+    return text.replace(/0$/, '').replace(/\.0$/, '');
+  }
+
+  function fuelBurnBasis(measured, idleRate) {
+    if (!measured || measured.rate == null) {
+      if (measured && measured.reason === 'implausible') return 'implausible burn rate';
+      return 'needs 3 days of Fleet Fuel data';
+    }
+    var idle = Number(idleRate);
+    var idleText = isFinite(idle) ? compactRate(idle) : '—';
+    return Number(measured.rate).toFixed(1) + ' L/hr idle ' + idleText + ', ' + measured.days + ' days';
+  }
+
+  function fetchWorkingFuelRows(assetId) {
+    return supabase
+      .from('telematics_records')
+      .select('record_date, operating_hours, idle_hours, working_fuel_litres')
+      .eq('asset_id', assetId)
+      .eq('user_id', effectiveAccountId)
+      .not('working_fuel_litres', 'is', null)
+      .order('record_date', { ascending: false })
+      .limit(120)
+      .then(function(result) { return (result && result.data) || []; }, function() { return []; });
+  }
+
+  async function renderCostPerHourCard(assets, metrics) {
+    var card = document.getElementById('cost-per-hour-card');
+    var machines = (assets || []).filter(function(asset) { return !FCM.isOnRoad(asset); });
+    if (!machines.length) {
+      card.hidden = true;
+      return;
+    }
+    card.hidden = false;
+    var tbody = document.getElementById('cost-per-hour-tbody');
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:#3A4A5C;">Loading...</td></tr>';
+
+    var metricById = {};
+    (metrics.assets || []).forEach(function(row) { metricById[Number(row.id)] = row; });
+    var rowSets = await Promise.all(machines.map(function(asset) { return fetchWorkingFuelRows(asset.id); }));
+
+    var rows = [];
+    machines.forEach(function(asset, index) {
+      var metric = metricById[Number(asset.id)];
+      if (!metric) return;
+      var measured = FCM.measuredWorkingRate(rowSets[index]);
+      rows.push({
+        name: asset.asset_name || 'Unnamed machine',
+        measured: measured,
+        idleRate: metric.idleRate,
+        idleCost: FCM.calcIdleCostPerHour(asset, metric.avgCpl, metric.idleRate, metric.totalEngineHours, metric.fuelPricingAvailable),
+        workingCost: FCM.calcWorkingCostPerHour(asset, metric.avgCpl, measured.rate, metric.totalEngineHours, metric.fuelPricingAvailable)
+      });
+    });
+
+    rows.sort(function(a, b) {
+      var aRated = a.measured.rate != null;
+      var bRated = b.measured.rate != null;
+      if (aRated !== bRated) return aRated ? -1 : 1;
+      var av = a.workingCost.value == null ? -Infinity : a.workingCost.value;
+      var bv = b.workingCost.value == null ? -Infinity : b.workingCost.value;
+      return bv - av;
+    });
+
+    var shown = rows.slice(0, 10);
+    var extra = rows.length - shown.length;
+    tbody.innerHTML = shown.map(function(row) {
+      return '<tr><td class="cell-strong">' + esc(row.name) + '</td>' +
+        perHourCell(row.idleCost) +
+        perHourCell(row.workingCost) +
+        '<td>' + esc(fuelBurnBasis(row.measured, row.idleRate)) + '</td></tr>';
+    }).join('');
+
+    var more = document.getElementById('cost-per-hour-more');
+    if (extra > 0) {
+      more.hidden = false;
+      more.textContent = '+' + extra + ' more machines';
+    } else {
+      more.hidden = true;
+      more.textContent = '';
+    }
   }
 
   function renderTopTable(assets) {
