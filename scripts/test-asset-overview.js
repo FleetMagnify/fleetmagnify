@@ -246,6 +246,8 @@ check('the page applies the division filter and scopes every query by user_id', 
   assert.ok(page.indexOf(".gte('work_date', from)") !== -1);
   assert.ok(page.indexOf(".lte('work_date', to)") !== -1);
   assert.ok(page.indexOf('Idle hours only. The breakdown above charges fixed costs on all run hours.') !== -1);
+  assert.ok(page.indexOf('>Data to<') !== -1);
+  assert.ok(page.indexOf('Last report') === -1);
   assert.ok(page.indexOf('What stands out') === -1);
   assert.ok(page.indexOf('id="callout"') === -1);
   assert.ok(page.indexOf('assetOverviewCallout') === -1);
