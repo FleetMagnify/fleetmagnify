@@ -156,6 +156,40 @@ function getField(fields, name) {
   return val || '';
 }
 
+var EMAIL_SUBJECT_LIMIT = 200;
+var EMAIL_BODY_LIMIT = 20000;
+
+function subjectAsFilename(subject) {
+  var text = String(subject == null ? '' : subject).trim();
+  if (!text) return '(no subject)';
+  if (text.length > EMAIL_SUBJECT_LIMIT) return text.slice(0, EMAIL_SUBJECT_LIMIT);
+  return text;
+}
+
+function stripHtmlToText(html) {
+  var source = String(html || '');
+  source = source.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ');
+  source = source.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ');
+  source = source.replace(/<[^>]+>/g, ' ');
+  source = source
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&');
+  return source.replace(/\s+/g, ' ').trim();
+}
+
+function emailBodyForStorage(fields) {
+  var plain = String(getField(fields, 'text') || '');
+  var body = plain.trim() ? plain : stripHtmlToText(getField(fields, 'html'));
+  if (!body) return '';
+  if (body.length > EMAIL_BODY_LIMIT) return body.slice(0, EMAIL_BODY_LIMIT);
+  return body;
+}
+
 function resolveToEmail(fields) {
   var to = getField(fields, 'to');
   if (!to) {
@@ -294,6 +328,27 @@ async function processInboundEmail(supabase, input) {
       var reportLinks = extractVisionLinkReportLinks(getField(fields, 'html'), getField(fields, 'text'));
       if (!reportLinks.length) {
         console.warn('email-inbound: no CSV attachments for', toEmail);
+        // Not a failed import. Save the message so a sign-in code, a
+        // forwarding confirmation, or an unparsed report can be read later.
+        // status is no_attachment, so nothing that scans pending or failed
+        // rows will parse it. No alert.
+        try {
+          var savedMail = await supabase.from('email_imports').insert({
+            user_id: userResult.data.user_id,
+            received_at: receivedAt,
+            from_email: fromEmail || null,
+            to_email: toEmail,
+            filename: subjectAsFilename(getField(fields, 'subject')),
+            raw_csv: emailBodyForStorage(fields),
+            status: 'no_attachment',
+            error_message: 'No CSV attachment or report link; email saved for review',
+          }).select('id').single();
+          if (savedMail.error) {
+            console.error('email-inbound: failed to save email with no attachment', savedMail.error.message);
+          }
+        } catch (saveErr) {
+          console.error('email-inbound: failed to save email with no attachment', saveErr.message);
+        }
         return { ok: true, message: 'Received — no CSV attachments' };
       }
       console.log('email-inbound: fetching', reportLinks.length, 'VisionLink report link(s)');
