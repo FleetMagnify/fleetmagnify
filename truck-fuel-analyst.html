@@ -299,7 +299,8 @@
 
   function travelRateStatus(asset) {
     var idle = FCM.resolvedIdleRate(asset);
-    var idleBit = 'idle ' + FCM.formatIdleRate(idle.rate) + ' L/hr (' + idle.label + ')';
+    var idleShown = idle.source === 'measured' ? FCM.formatIdleRateLabel(idle.label) : idle.label;
+    var idleBit = 'idle ' + FCM.formatIdleRate(idle.rate) + ' L/hr (' + idleShown + ')';
     if (asset.last_calibrated_at) {
       var r2 = asset.travel_rate_r2 != null ? parseFloat(asset.travel_rate_r2) : null;
       return {
