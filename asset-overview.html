@@ -647,20 +647,23 @@
     var idlePerHour = FCM.calcIdleCostPerHour(asset, avgCpl, idleResolved.rate, totalEngineHours, fuelPricingAvailable);
 
     var idleHours = 0;
-    var operatingHours = 0;
+    var workingHours = 0;
     var byDate = {};
     telRows.forEach(function(row) {
       var idle = parseFloat(row.idle_hours) || 0;
-      var operating = parseFloat(row.operating_hours) || 0;
+      // operating_hours is working time and already excludes idle.
+      var working = parseFloat(row.operating_hours) || 0;
       idleHours += idle;
-      operatingHours += operating;
+      workingHours += working;
       var key = String(row.record_date).slice(0, 10);
-      if (!byDate[key]) byDate[key] = { idle: 0, operating: 0 };
+      if (!byDate[key]) byDate[key] = { idle: 0, working: 0 };
       byDate[key].idle += idle;
-      byDate[key].operating += operating;
+      byDate[key].working += working;
     });
+    // Run hours are engine switched-on time: working + idle.
+    var periodRunHours = FCM.runHours(workingHours, idleHours);
     var idleCosts = FCM.calcIdleHourCosts(asset, idleHours, avgCpl, idleResolved.rate, totalEngineHours, fuelPricingAvailable);
-    var operatingCosts = FCM.calcOperatingHourCosts(asset, operatingHours, totalEngineHours);
+    var operatingCosts = FCM.calcOperatingHourCosts(asset, periodRunHours, totalEngineHours);
 
     document.getElementById('asset-title').textContent = asset.asset_name || 'Unnamed machine';
     var meta = [asset.asset_type || 'Machine'];
@@ -696,12 +699,12 @@
 
     var shareEl = document.getElementById('kpi-share');
     var shareSub = document.getElementById('kpi-share-sub');
-    var shareRatio = FCM.idleShareOfRunTime(idleHours, operatingHours);
+    var shareRatio = FCM.idleShareOfRunTime(idleHours, workingHours);
     if (shareRatio != null) {
       var share = shareRatio * 100;
       shareEl.textContent = Math.round(share) + '%';
       shareEl.className = share > 15 ? 'kpi-value amber' : 'kpi-value';
-      shareSub.textContent = fmtHours(idleHours).replace(' h', '') + ' idle of ' + fmtHours(operatingHours).replace(' h', '') + ' run hours';
+      shareSub.textContent = fmtHours(idleHours).replace(' h', '') + ' idle of ' + fmtHours(periodRunHours).replace(' h', '') + ' run hours';
     } else {
       shareEl.textContent = '—';
       shareEl.className = 'kpi-value';
@@ -710,7 +713,7 @@
 
     var weeks = daysInRange(mtd.from, mtd.to) / 7;
     var available = hoursPerWeek(asset) * weeks;
-    var utilRate = available > 0 ? (operatingHours / available) * 100 : 0;
+    var utilRate = available > 0 ? (workingHours / available) * 100 : 0;
     var target = asset.target_utilisation_percent != null ? parseFloat(asset.target_utilisation_percent) : null;
     if (isNaN(target)) target = null;
     var utilEl = document.getElementById('kpi-util');
@@ -804,10 +807,11 @@
     var idleSeries = [];
     var cursor = mtd.from;
     while (cursor <= mtd.to) {
-      var bucket = byDate[cursor] || { idle: 0, operating: 0 };
+      var bucket = byDate[cursor] || { idle: 0, working: 0 };
       labels.push(dayMonth(cursor));
       idleSeries.push(Math.round(bucket.idle * 10) / 10);
-      workingSeries.push(Math.round(Math.max(0, bucket.operating - bucket.idle) * 10) / 10);
+      // Stack working hours and idle hours. Their sum is the day's run hours.
+      workingSeries.push(Math.round(bucket.working * 10) / 10);
       cursor = FCM.addDaysISO(cursor, 1);
     }
     renderDailyChart(labels, workingSeries, idleSeries);
@@ -816,7 +820,8 @@
     var noRunTitle = hasTel ? 'no run hours this month' : FCM.formatMissingMessage(noPeriodFields);
     var fuelMissingTitle = FCM.formatMissingMessage(['Fuel records for selected period']);
     var litresKnown = hasTel ? fuel.litres : null;
-    var perRun = FCM.fuelPerRunHour(litresKnown, operatingHours);
+    var runForRates = hasTel ? periodRunHours : null;
+    var perRun = FCM.fuelPerRunHour(litresKnown, runForRates);
     var workingBurn = measured.rate == null ? null : Number(measured.rate);
     var burnText = (workingBurn == null ? '—' : workingBurn.toFixed(1)) + ' / ' + Number(idleResolved.rate).toFixed(1) + ' L/hr';
     var burnTitle = workingBurn == null ? 'needs 3 days of Fleet Fuel data' : '';
@@ -825,7 +830,7 @@
       (perRun == null ? unknownStat('Fuel per run hour', noRunTitle) : statBlock('Fuel per run hour', perRun.toFixed(1) + ' L/hr', '', '')) +
       statBlock('Working / idle burn', burnText, '', burnTitle);
 
-    var idleShare = FCM.idleShareOfRunTime(hasTel ? idleHours : null, hasTel ? operatingHours : null);
+    var idleShare = FCM.idleShareOfRunTime(hasTel ? idleHours : null, hasTel ? workingHours : null);
     var idleOnlyTitle = 'Idle hours only. The breakdown above charges fixed costs on all run hours.';
     var idleCostTitle = idleOnlyTitle;
     var idleMonthTotal = hasTel ? idleCosts.total : null;
@@ -837,8 +842,8 @@
       moneyStat('Idle cost', idleMonthTotal, 'red', idleCostTitle, hasTel && !!idleCosts.hasMissing && idleCosts.total != null) +
       moneyStat('Cost per idle hour', idlePerHour.value, 'rate', idleRateTitle, !!(idlePerHour.hasMissing && idlePerHour.value != null));
 
-    var runKnown = hasTel ? operatingHours : null;
-    var against = FCM.hoursAgainstTarget(runKnown == null ? null : runKnown, available, target);
+    var workingKnown = hasTel ? workingHours : null;
+    var against = FCM.hoursAgainstTarget(workingKnown, available, target);
     var againstLabel = target == null ? 'Against target' : 'Against ' + Math.round(target) + '% target';
     var againstText = 'no target set';
     var againstTone = '';
@@ -855,12 +860,12 @@
     if (target != null && utilRate > 100) utilTone = 'red';
     else if (target != null && utilRate >= target) utilTone = 'green';
     else if (target != null && utilRate < target) utilTone = 'amber';
-    var utilStats = (runKnown == null ? unknownStat('Run hours', noRunTitle) : statBlock('Run hours', fmtHours(runKnown), '', '')) +
+    var utilStats = (workingKnown == null ? unknownStat('Working hours', noRunTitle) : statBlock('Working hours', fmtHours(workingKnown), '', '')) +
       statBlock('Available hours', fmtHours(available), '', '') +
-      (runKnown == null ? unknownStat('Utilisation', noRunTitle) : statBlock('Utilisation', Math.round(utilRate) + '%', utilTone, target == null ? 'no target set' : '')) +
+      (workingKnown == null ? unknownStat('Utilisation', noRunTitle) : statBlock('Utilisation', Math.round(utilRate) + '%', utilTone, target == null ? 'no target set' : '')) +
       statBlock(againstLabel, againstText, againstTone, againstTitle);
 
-    var co2 = FCM.co2ForPeriod(litresKnown, asset.fuel_type, operatingHours);
+    var co2 = FCM.co2ForPeriod(litresKnown, asset.fuel_type, runForRates);
     var emissionStats = (co2.tonnes == null ? unknownStat('CO2 emitted', noRunTitle) : statBlock('CO2 emitted', co2.tonnes.toFixed(1) + ' t', '', '')) +
       (co2.kgPerRunHour == null ? unknownStat('Per run hour', noRunTitle) : statBlock('Per run hour', co2.kgPerRunHour.toFixed(1) + ' kg', '', ''));
 
@@ -878,7 +883,7 @@
         if (row.work_date) jobDates[String(row.work_date).slice(0, 10)] = true;
       });
       var periodTotal = anyAmount ? total : null;
-      var perHour = FCM.costPerRunHour(periodTotal, operatingHours);
+      var perHour = FCM.costPerRunHour(periodTotal, runForRates);
       var jobTitle = !anyAmount ? partialNotes.join(' ') : (partialNotes.length ? partialNotes.join(' ') : '');
       var jobStats = statBlock('Jobs this month', String(Object.keys(jobIds).length), '', '') +
         statBlock('Days on jobs', String(Object.keys(jobDates).length), '', '') +

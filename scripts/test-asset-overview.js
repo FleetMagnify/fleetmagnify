@@ -131,8 +131,11 @@ check('module ratios are null when run hours are zero, never NaN or Infinity', f
   assert.strictEqual(FCM.fuelPerRunHour(100, 0), null);
   assert.strictEqual(FCM.fuelPerRunHour(100, null), null);
   assert.strictEqual(FCM.fuelPerRunHour(0, 10), 0);
-  assert.strictEqual(FCM.idleShareOfRunTime(24, 0), null);
-  assert.strictEqual(FCM.idleShareOfRunTime(24, 120), 0.2);
+  assert.strictEqual(FCM.idleShareOfRunTime(0, 0), null);
+  assert.strictEqual(FCM.idleShareOfRunTime(24, null), null);
+  assert.strictEqual(FCM.idleShareOfRunTime(null, 120), null);
+  assert.ok(Math.abs(FCM.idleShareOfRunTime(24, 96) - 0.2) < 1e-12);
+  assert.ok(Math.abs(FCM.idleShareOfRunTime(1.0, 4.8) - (1.0 / 5.8)) < 1e-12);
   assert.strictEqual(FCM.costPerRunHour(1440, 0), null);
   assert.strictEqual(FCM.costPerRunHour(null, 12), null);
   var co2None = FCM.co2ForPeriod(100, 'Diesel', 0);
@@ -180,11 +183,15 @@ check('fuel cost equals the two breakdown fuel rows, and cost per run hour scale
   var workingPart = Math.max(0, totalFuel - idlePart);
   assert.strictEqual(FCM.breakdownFuelCost(workingPart, idlePart), totalFuel);
 
-  var operatingHours = 120;
-  var operating = FCM.calcOperatingHourCosts(excavator, operatingHours, 1000);
+  var workingHours = 96;
+  var run = FCM.runHours(workingHours, idleHours);
+  assert.strictEqual(run, 120);
+  var operating = FCM.calcOperatingHourCosts(excavator, run, 1000);
+  var onWorkingOnly = FCM.calcOperatingHourCosts(excavator, workingHours, 1000);
+  assert.ok(operating.depreciation > onWorkingOnly.depreciation);
   var breakdownTotal = workingPart + idlePart + operating.depreciation + operating.servicing + operating.maintenance;
-  var perHour = FCM.costPerRunHour(breakdownTotal, operatingHours);
-  assert.ok(Math.abs(perHour * operatingHours - breakdownTotal) < 1e-6);
+  var perHour = FCM.costPerRunHour(breakdownTotal, run);
+  assert.ok(Math.abs(perHour * run - breakdownTotal) < 1e-6);
 
   var idleCost = FCM.calcIdleHourCosts(excavator, idleHours, price, idleRate, 1000, true);
   assert.strictEqual(idleCost.hasMissing, false);
@@ -192,11 +199,103 @@ check('fuel cost equals the two breakdown fuel rows, and cost per run hour scale
   assert.ok(Math.abs(idleCost.total - ((idleCost.fuel || 0) + (idleCost.depreciation || 0) + (idleCost.servicing || 0) + (idleCost.maintenance || 0))) < 1e-6);
 });
 
+check('run hours are working hours plus idle, and unknown stays null', function() {
+  assert.strictEqual(FCM.runHours(4.8, 1.0), 5.8);
+  assert.strictEqual(FCM.runHours(4.8, null), 4.8);
+  assert.strictEqual(FCM.runHours(4.8, ''), 4.8);
+  assert.strictEqual(FCM.runHours(0, 0), 0);
+  assert.strictEqual(FCM.runHours(null, 1), null);
+  assert.strictEqual(FCM.runHours(null, null), null);
+  assert.strictEqual(FCM.runHours('', 1), null);
+  assert.strictEqual(FCM.runHours(4.8, 'nope'), null);
+});
+
+check('hour meter case: working 4.757 plus idle 0.95 is 5.707 run hours', function() {
+  var run = FCM.runHours(4.757, 0.95);
+  assert.ok(Math.abs(run - 5.707) < 1e-9);
+  assert.ok(Math.abs(FCM.idleShareOfRunTime(0.95, 4.757) - (0.95 / 5.707)) < 1e-9);
+  assert.strictEqual(FCM.idleShareOfRunTime(0.95, null), null);
+});
+
+check('invented day: working rate, run hours, idle share, and idle burn', function() {
+  var working = 4.8;
+  var idle = 1.0;
+  var workingFuel = 100;
+  var idleFuel = 4;
+  var run = FCM.runHours(working, idle);
+  assert.ok(Math.abs(run - 5.8) < 1e-12);
+  assert.ok(Math.abs(workingFuel / working - (100 / 4.8)) < 1e-12);
+  assert.strictEqual(Math.round((workingFuel / working) * 100) / 100, 20.83);
+  assert.ok(Math.abs(FCM.idleShareOfRunTime(idle, working) - (1.0 / 5.8)) < 1e-12);
+  assert.strictEqual(idleFuel / idle, 4);
+  var rows = [];
+  ['2026-06-01', '2026-06-02', '2026-06-03'].forEach(function(date) {
+    rows.push({
+      record_date: date,
+      operating_hours: working,
+      idle_hours: idle,
+      working_fuel_litres: workingFuel,
+      idle_fuel_litres: idleFuel
+    });
+  });
+  var measured = FCM.measuredWorkingRate(rows);
+  assert.strictEqual(measured.rate, 20.83);
+  assert.ok(Math.abs(measured.workingHours - 14.4) < 1e-9);
+});
+
+check('fixed costs on the asset overview basis are charged on run hours', function() {
+  var working = 4.8;
+  var idle = 1.0;
+  var run = FCM.runHours(working, idle);
+  var onRun = FCM.calcOperatingHourCosts(excavator, run, 1000);
+  var onWorking = FCM.calcOperatingHourCosts(excavator, working, 1000);
+  var depr = FCM.calcDepreciationPerHour(excavator, 1000);
+  var serv = FCM.getServicingPerHour(excavator);
+  var maint = FCM.calcMaintenancePerHour(excavator);
+  assert.ok(Math.abs(onRun.depreciation - run * depr.value) < 1e-6);
+  assert.ok(Math.abs(onRun.servicing - run * serv.value) < 1e-6);
+  assert.ok(Math.abs(onRun.maintenance - run * maint.value) < 1e-6);
+  assert.ok(onRun.depreciation > onWorking.depreciation);
+  assert.ok(onRun.servicing > onWorking.servicing);
+  assert.ok(onRun.maintenance > onWorking.maintenance);
+
+  var price = 2.5;
+  var workingFuelCost = 100 * price;
+  var idleFuelCost = 4 * price;
+  var breakdownTotal = workingFuelCost + idleFuelCost + onRun.depreciation + onRun.servicing + onRun.maintenance;
+  var perHour = FCM.costPerRunHour(breakdownTotal, run);
+  assert.ok(Math.abs(perHour * run - breakdownTotal) < 1e-6);
+  var perWorking = FCM.costPerRunHour(breakdownTotal, working);
+  assert.ok(perHour < perWorking);
+});
+
 var page = fs.readFileSync(path.join(__dirname, '..', 'asset-overview.html'), 'utf8');
 var model = fs.readFileSync(path.join(__dirname, '..', 'js', 'fleet-cost-model.js'), 'utf8');
 var sidebar = fs.readFileSync(path.join(__dirname, '..', 'js', 'sidebar-nav.js'), 'utf8');
 var sidebarCss = fs.readFileSync(path.join(__dirname, '..', 'css', 'sidebar.css'), 'utf8');
 var mobileNav = fs.readFileSync(path.join(__dirname, '..', 'js', 'mobile-nav.js'), 'utf8');
+
+check('asset overview charges run hours and labels working hours on the utilisation card', function() {
+  assert.ok(page.indexOf('var periodRunHours = FCM.runHours(workingHours, idleHours);') !== -1);
+  assert.ok(page.indexOf('FCM.calcOperatingHourCosts(asset, periodRunHours, totalEngineHours)') !== -1);
+  assert.ok(page.indexOf('FCM.fuelPerRunHour(litresKnown, runForRates)') !== -1);
+  assert.ok(page.indexOf('FCM.co2ForPeriod(litresKnown, asset.fuel_type, runForRates)') !== -1);
+  assert.ok(page.indexOf('FCM.costPerRunHour(periodTotal, runForRates)') !== -1);
+  assert.ok(page.indexOf('FCM.hoursAgainstTarget(workingKnown, available, target)') !== -1);
+  assert.ok(page.indexOf('FCM.idleShareOfRunTime(idleHours, workingHours)') !== -1);
+  assert.ok(page.indexOf("statBlock('Working hours'") !== -1);
+  assert.ok(page.indexOf("unknownStat('Working hours'") !== -1);
+  assert.strictEqual(page.indexOf("statBlock('Run hours'"), -1);
+  assert.strictEqual(page.indexOf('bucket.operating - bucket.idle'), -1);
+  assert.ok(page.indexOf('workingSeries.push(Math.round(bucket.working * 10) / 10)') !== -1);
+  assert.ok(page.indexOf('Daily run hours') !== -1);
+  assert.ok(page.indexOf('Fuel per run hour') !== -1);
+  assert.ok(page.indexOf('Cost per run hour') !== -1);
+  assert.ok(page.indexOf('Per run hour') !== -1);
+  assert.ok(page.indexOf('(workingHours / available)') !== -1);
+  assert.ok(model.indexOf('operating_hours = working hours') !== -1);
+  assert.ok(model.indexOf('function runHours(operatingHours, idleHours)') !== -1);
+});
 
 check('the sidebar entry is a child of Overview and stays hidden until the account has machinery', function() {
   var overviewAt = sidebar.indexOf("href: 'home.html'");
