@@ -15,6 +15,11 @@
  *   litres_consumed ← Total Fuel Burned (L)  [feeds machinery Fuel Analyst]
  *   data_quality_notes ← Callouts (OEM data-quality warnings)
  *
+ * Hour convention: operating_hours is working hours and excludes idle.
+ * idle_hours is idle hours. Run hours (engine switched on) are
+ * operating_hours + idle_hours. VisionLink Runtime = Working Time + Idle
+ * Time, so the hour meter moves by run hours, not by operating_hours alone.
+ *
  * assets.current_hours takes the max Hour Meter in this file, and only when
  * the file's record_date is at least as new as the asset's newest stored
  * telematics day. An older file still upserts its telematics row.

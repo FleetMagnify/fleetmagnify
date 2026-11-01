@@ -1,5 +1,13 @@
 /**
  * FleetMagnify shared depreciation, servicing, and maintenance cost model.
+ *
+ * telematics_records hour convention (parsers already store it this way):
+ *   operating_hours = working hours (engine run time excluding idle)
+ *   idle_hours = idle hours
+ *   run hours (engine switched on) = operating_hours + idle_hours
+ * Utilisation % is working hours divided by available hours. Fixed costs,
+ * fuel per run hour, CO2 per run hour, cost per run hour, and idle share
+ * of run time use run hours.
  */
 (function(global) {
   var ON_ROAD_TYPES = ['Light Vehicle', 'Rigid Truck', 'Semi Trailer', 'Truck & Trailer'];
@@ -314,9 +322,12 @@
     return hourlyCostResult(parts, missing);
   }
 
-  // Weighted working burn from Fleet Fuel litres and Utilization hours.
-  // One qualifying telematics row is one machine-day. No class default:
-  // unknown stays unknown.
+  // Weighted working burn from Fleet Fuel litres and working hours.
+  // operating_hours is already working time, so a day's working hours are
+  // operating_hours itself. Idle is not subtracted: subtracting it removed
+  // idle a second time. The old 4-decimal rounding only existed to tame
+  // that subtraction. One qualifying telematics row is one machine-day.
+  // No class default: unknown stays unknown.
   function measuredWorkingRate(rows) {
     var qualifying = [];
     (rows || []).forEach(function(row) {
@@ -324,13 +335,8 @@
       if (row.working_fuel_litres === null || row.working_fuel_litres === undefined || row.working_fuel_litres === '') return;
       var litres = num(row.working_fuel_litres);
       if (litres === null || litres < 0) return;
-      var operating = num(row.operating_hours);
-      var idle = num(row.idle_hours);
-      if (operating === null || idle === null) return;
-      // 4 decimal places so a stored 0.05 hour gap (1.05 − 1) is not
-      // treated as more than 0.05 by binary float noise.
-      var workingHours = Math.round((operating - idle) * 10000) / 10000;
-      if (!(workingHours > 0.05)) return;
+      var workingHours = num(row.operating_hours);
+      if (workingHours === null || !(workingHours > 0.05)) return;
       var day = row.record_date == null ? '' : String(row.record_date).slice(0, 10);
       qualifying.push({ date: day, litres: litres, workingHours: workingHours });
     });
@@ -389,9 +395,11 @@
     return hourlyCostResult(parts, missing);
   }
 
-  // Depreciation, servicing and maintenance for operating hours in a period.
-  // Same per-hour building blocks as the idle tiles, multiplied by run hours.
-  function calcOperatingHourCosts(asset, operatingHours, totalEngineHours) {
+  // Depreciation, servicing and maintenance for a period.
+  // Pass run hours (operating_hours + idle_hours), not working hours alone.
+  // Same per-hour building blocks as the idle tiles, multiplied by those
+  // run hours. Idle cost itself stays on idle hours via calcIdleHourCosts.
+  function calcOperatingHourCosts(asset, hours, totalEngineHours) {
     var out = {
       depreciation: null,
       servicing: null,
@@ -405,8 +413,8 @@
     };
     if (!asset || isOnRoad(asset)) return out;
 
-    var hours = num(operatingHours);
-    hours = hours !== null && hours > 0 ? hours : 0;
+    var run = num(hours);
+    hours = run !== null && run > 0 ? run : 0;
 
     var deprHr = calcDepreciationPerHour(asset, totalEngineHours);
     out.depreciationLifeExceeded = !!deprHr.lifeExceeded;
@@ -432,50 +440,74 @@
     return value !== null && value > 0 ? value : null;
   }
 
-  // Litres per operating hour. Zero or missing run hours is unknown, not zero.
-  function fuelPerRunHour(litres, operatingHours) {
-    var fuel = num(litres);
-    var hours = runHoursOrNull(operatingHours);
-    if (fuel === null || hours === null) return null;
-    return fuel / hours;
+  // Run hours (engine switched on) = working hours + idle hours.
+  // operatingHours is telematics operating_hours, which excludes idle.
+  // A missing idle (null or empty) counts as 0 only when operating hours
+  // are known. A non-numeric idle cannot be known. Returns null, never 0,
+  // when run hours cannot be known. A known total of 0 is returned as 0.
+  function runHours(operatingHours, idleHours) {
+    var operating = num(operatingHours);
+    if (operating === null) return null;
+    if (idleHours === null || idleHours === undefined || idleHours === '') {
+      return operating;
+    }
+    var idle = num(idleHours);
+    if (idle === null) return null;
+    return operating + idle;
   }
 
-  // Idle hours / operating hours, as a fraction. Null when run hours are not positive.
+  // Litres per run hour. Pass run hours (operating_hours + idle_hours),
+  // not operating_hours alone. Zero or missing run hours is unknown, not zero.
+  function fuelPerRunHour(litres, hours) {
+    var fuel = num(litres);
+    var run = runHoursOrNull(hours);
+    if (fuel === null || run === null) return null;
+    return fuel / run;
+  }
+
+  // Idle hours / run hours, as a fraction. Run hours are operating hours
+  // (working) plus idle hours. Null when operating or idle is null, or
+  // when operating + idle is not positive.
   function idleShareOfRunTime(idleHours, operatingHours) {
     var idle = num(idleHours);
-    var hours = runHoursOrNull(operatingHours);
-    if (idle === null || hours === null) return null;
-    return idle / hours;
+    var operating = num(operatingHours);
+    if (idle === null || operating === null) return null;
+    var run = operating + idle;
+    if (!(run > 0)) return null;
+    return idle / run;
   }
 
-  // Target hours minus run hours. state is none, unknown, short, or ahead.
-  function hoursAgainstTarget(runHours, availableHours, targetPercent) {
+  // Target hours minus working hours. The first argument is working hours
+  // (operating_hours), not run hours. state is none, unknown, short, or ahead.
+  function hoursAgainstTarget(workingHours, availableHours, targetPercent) {
     var target = num(targetPercent);
     if (target === null) return { state: 'none', hours: null };
-    var run = num(runHours);
+    var working = num(workingHours);
     var available = num(availableHours);
-    if (run === null || available === null) return { state: 'unknown', hours: null };
-    var delta = (target / 100) * available - run;
+    if (working === null || available === null) return { state: 'unknown', hours: null };
+    var delta = (target / 100) * available - working;
     if (Math.abs(delta) < 1e-9) return { state: 'ahead', hours: 0 };
     return { state: delta > 0 ? 'short' : 'ahead', hours: Math.abs(delta) };
   }
 
-  function co2ForPeriod(litres, fuelType, operatingHours) {
+  // kgPerRunHour divides by run hours (operating_hours + idle_hours).
+  function co2ForPeriod(litres, fuelType, hours) {
     var fuel = num(litres);
     if (fuel === null) return { tonnes: null, kgPerRunHour: null };
     var factor = EMISSION_FACTORS[(fuelType || '').trim()];
     if (factor == null) factor = EMISSION_FACTORS.Diesel;
     if (factor == null) return { tonnes: null, kgPerRunHour: null };
     var kg = fuel * factor;
-    var hours = runHoursOrNull(operatingHours);
-    return { tonnes: kg / 1000, kgPerRunHour: hours === null ? null : kg / hours };
+    var run = runHoursOrNull(hours);
+    return { tonnes: kg / 1000, kgPerRunHour: run === null ? null : kg / run };
   }
 
-  function costPerRunHour(totalCost, operatingHours) {
+  // Period total divided by run hours (operating_hours + idle_hours).
+  function costPerRunHour(totalCost, hours) {
     var total = num(totalCost);
-    var hours = runHoursOrNull(operatingHours);
-    if (total === null || hours === null) return null;
-    return total / hours;
+    var run = runHoursOrNull(hours);
+    if (total === null || run === null) return null;
+    return total / run;
   }
 
   // Fuel card cost: the two fuel rows of the operating-cost breakdown.
@@ -743,6 +775,7 @@
     calcIdleHourCosts: calcIdleHourCosts,
     calcIdleCostPerHour: calcIdleCostPerHour,
     measuredWorkingRate: measuredWorkingRate,
+    runHours: runHours,
     calcWorkingCostPerHour: calcWorkingCostPerHour,
     calcOperatingHourCosts: calcOperatingHourCosts,
     fuelPerRunHour: fuelPerRunHour,

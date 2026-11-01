@@ -41,9 +41,9 @@ function idle(asset, price, rate, engineHours, fuelOk) {
 }
 
 var weightedRows = [
-  row('2026-01-03', 2, 1, 20),
-  row('2026-01-01', 9, 1, 40),
-  row('2026-01-02', 2, 1, 20)
+  row('2026-01-03', 1, 1, 20),
+  row('2026-01-01', 8, 1, 40),
+  row('2026-01-02', 1, 1, 20)
 ];
 var weighted = FCM.measuredWorkingRate(weightedRows);
 var ratioAverage = ((40 / 8) + (20 / 1) + (20 / 1)) / 3;
@@ -63,9 +63,9 @@ assert.strictEqual(twoDays.reason, 'not enough data');
 console.log('✓ fewer than 3 qualifying days returns null');
 
 var shortHours = FCM.measuredWorkingRate([
-  row('2026-03-01', 4, 1, 30),
-  row('2026-03-02', 4, 1, 30),
-  row('2026-03-03', 4, 1, 30)
+  row('2026-03-01', 3, 1, 30),
+  row('2026-03-02', 3, 1, 30),
+  row('2026-03-03', 3, 1, 30)
 ]);
 assert.strictEqual(shortHours.rate, null);
 assert.strictEqual(shortHours.days, 3);
@@ -74,38 +74,38 @@ assert.strictEqual(shortHours.reason, 'not enough data');
 console.log('✓ under 10 working hours returns null');
 
 var tooLow = FCM.measuredWorkingRate([
-  row('2026-04-01', 5, 1, 8),
-  row('2026-04-02', 5, 1, 8),
-  row('2026-04-03', 5, 1, 8)
+  row('2026-04-01', 4, 1, 8),
+  row('2026-04-02', 4, 1, 8),
+  row('2026-04-03', 4, 1, 8)
 ]);
 assert.strictEqual(tooLow.rate, null);
 assert.strictEqual(tooLow.days, 3);
 assert.strictEqual(tooLow.reason, 'implausible');
 var tooHigh = FCM.measuredWorkingRate([
-  row('2026-04-04', 5, 1, 700),
-  row('2026-04-05', 5, 1, 700),
-  row('2026-04-06', 5, 1, 700)
+  row('2026-04-04', 4, 1, 700),
+  row('2026-04-05', 4, 1, 700),
+  row('2026-04-06', 4, 1, 700)
 ]);
 assert.strictEqual(tooHigh.rate, null);
 assert.strictEqual(tooHigh.reason, 'implausible');
 console.log('✓ rates below 3 or above 150 L/hr are implausible');
 
 var atFloor = FCM.measuredWorkingRate([
-  row('2026-04-11', 5, 1, 12),
-  row('2026-04-12', 5, 1, 12),
-  row('2026-04-13', 5, 1, 12)
+  row('2026-04-11', 4, 1, 12),
+  row('2026-04-12', 4, 1, 12),
+  row('2026-04-13', 4, 1, 12)
 ]);
 assert.strictEqual(atFloor.rate, 3);
 var atCeiling = FCM.measuredWorkingRate([
-  row('2026-04-14', 5, 1, 600),
-  row('2026-04-15', 5, 1, 600),
-  row('2026-04-16', 5, 1, 600)
+  row('2026-04-14', 4, 1, 600),
+  row('2026-04-15', 4, 1, 600),
+  row('2026-04-16', 4, 1, 600)
 ]);
 assert.strictEqual(atCeiling.rate, 150);
 var justUnderHours = FCM.measuredWorkingRate([
-  row('2026-04-21', 4.33, 1, 33.3),
-  row('2026-04-22', 4.33, 1, 33.3),
-  row('2026-04-23', 4.33, 1, 33.3)
+  row('2026-04-21', 3.33, 1, 33.3),
+  row('2026-04-22', 3.33, 1, 33.3),
+  row('2026-04-23', 3.33, 1, 33.3)
 ]);
 assert.strictEqual(justUnderHours.rate, null);
 assert.strictEqual(justUnderHours.reason, 'not enough data');
@@ -114,10 +114,10 @@ console.log('✓ 3 and 150 L/hr are kept, and 9.99 working hours is not enough')
 var withJunk = weightedRows.concat([
   row('2026-01-04', 20, 0, null),
   row('2026-01-05', 20, 0, -10),
-  row('2026-01-06', 1.05, 1, 500),
+  row('2026-01-06', 0.05, 1, 500),
   row('2026-01-07', 0.04, 0, 500),
   { record_date: '2026-01-08', operating_hours: null, idle_hours: 0, working_fuel_litres: 80 },
-  { record_date: '2026-01-09', operating_hours: 12, idle_hours: 'nope', working_fuel_litres: 80 }
+  { record_date: '2026-01-09', operating_hours: null, idle_hours: 'nope', working_fuel_litres: 80 }
 ]);
 var ignored = FCM.measuredWorkingRate(withJunk);
 assert.strictEqual(ignored.rate, 8);
@@ -126,7 +126,7 @@ assert.strictEqual(ignored.workingHours, 10);
 console.log('✓ null litres, negative litres, and working hours of 0.05 or less are ignored');
 
 var withZero = FCM.measuredWorkingRate(weightedRows.concat([
-  row('2026-01-10', 11, 1, 0)
+  row('2026-01-10', 10, 1, 0)
 ]));
 assert.strictEqual(withZero.rate, 4);
 assert.strictEqual(withZero.days, 4);
@@ -134,9 +134,9 @@ assert.strictEqual(withZero.workingHours, 20);
 console.log('✓ a zero-litre working day is kept and pulls the weighted rate down');
 
 var asStrings = FCM.measuredWorkingRate([
-  row('2026-01-01', '9', '1', '40'),
-  row('2026-01-02', '2', '1', '20'),
-  row('2026-01-03', '2', '1', '20')
+  row('2026-01-01', '8', '1', '40'),
+  row('2026-01-02', '1', '1', '20'),
+  row('2026-01-03', '1', '1', '20')
 ]);
 assert.strictEqual(asStrings.rate, weighted.rate);
 console.log('✓ numeric strings from the telematics API count as numbers');
@@ -148,7 +148,7 @@ function dayOffset(n) {
 var many = [];
 for (var i = 0; i < 130; i++) {
   var newest = i >= 10;
-  many.push(row(dayOffset(i), 5, 1, newest ? 40 : 400));
+  many.push(row(dayOffset(i), 4, 1, newest ? 40 : 400));
 }
 for (var s = many.length - 1; s > 0; s--) {
   var swap = (s * 17) % (s + 1);
@@ -163,13 +163,34 @@ assert.strictEqual(recent.rate, 10);
 console.log('✓ only the 120 newest qualifying days are used, even when the input is unsorted');
 
 var rounded = FCM.measuredWorkingRate([
-  row('2026-05-01', 5, 1, 100 / 3),
-  row('2026-05-02', 5, 1, 100 / 3),
-  row('2026-05-03', 5, 1, 100 / 3)
+  row('2026-05-01', 4, 1, 100 / 3),
+  row('2026-05-02', 4, 1, 100 / 3),
+  row('2026-05-03', 4, 1, 100 / 3)
 ]);
 assert.strictEqual(rounded.rate, 8.33);
 assert.strictEqual(rounded.workingHours, 12);
 console.log('✓ the working rate is rounded to 2 decimals');
+
+var noSubtract = FCM.measuredWorkingRate([
+  row('2026-06-01', 4.8, 1.0, 100),
+  row('2026-06-02', 4.8, 1.0, 100),
+  row('2026-06-03', 4.8, 1.0, 100)
+]);
+assert.strictEqual(noSubtract.rate, 20.83);
+assert.strictEqual(noSubtract.days, 3);
+assert.ok(Math.abs(noSubtract.workingHours - 14.4) < 1e-9);
+assert.notStrictEqual(noSubtract.rate, Math.round((300 / 11.4) * 100) / 100);
+console.log('✓ measured working rate uses operating_hours and does not subtract idle (100 / 4.8 = 20.83 L/hr)');
+
+var idleNotRequired = FCM.measuredWorkingRate([
+  row('2026-07-01', 4, null, 40),
+  row('2026-07-02', 4, '', 40),
+  row('2026-07-03', 4, 'nope', 40)
+]);
+assert.strictEqual(idleNotRequired.rate, 10);
+assert.strictEqual(idleNotRequired.days, 3);
+assert.strictEqual(idleNotRequired.workingHours, 12);
+console.log('✓ a missing or non-numeric idle does not drop a day that has working hours');
 
 var depr = (180000 - 20000) / 8000;
 var servicing = 12;
