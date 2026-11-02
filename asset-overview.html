@@ -35,14 +35,22 @@
   }
   .user-name { font-size: 12.5px; font-weight: 500; color: #9BA4B0; }
   .page-content { padding: 28px 36px 56px; flex: 1; max-width: 1280px; min-width: 0; }
-  .switch-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: flex-end; margin-bottom: 18px; }
-  .switch-row select, .period-chip {
+  .switch-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; justify-content: flex-end; margin-bottom: 18px; max-width: 100%; }
+  .range-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 100%; }
+  .range-field label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #93A0B2; }
+  .switch-row select, .switch-row input[type="date"], .switch-row button, .period-chip {
     background: #111827; border: 1px solid #2D3748; color: #F0F2F5;
     border-radius: 10px; padding: 10px 14px; font-size: 14px; font-family: inherit;
     min-height: 44px;
   }
-  .switch-row select { min-width: 220px; max-width: 100%; }
+  .switch-row select { min-width: 0; width: 220px; max-width: 100%; }
+  .switch-row input[type="date"] { color-scheme: dark; min-width: 0; max-width: 100%; }
+  .switch-row button { background: #0EA57A; border-color: #0EA57A; color: #080C12; font-weight: 700; cursor: pointer; }
+  .switch-row button:hover { background: #0BC48E; }
   .period-chip { color: #C5CDD9; display: flex; align-items: center; }
+  .custom-range { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; min-width: 0; max-width: 100%; }
+  .custom-range[hidden] { display: none !important; }
+  .range-error { flex-basis: 100%; margin: 0; color: #E2554A; font-size: 13px; line-height: 1.4; }
   .header-card, .panel {
     background: #111827; border: 1px solid #2D3748; border-radius: 14px; padding: 22px 24px; min-width: 0; max-width: 100%;
   }
@@ -131,14 +139,31 @@
     .checklist-panel { order: 4; }
     .module-grid { grid-template-columns: 1fr; }
     .module-stat-value { font-size: 17px; }
-    .page-content { padding: 20px 16px 40px !important; }
+    .page-content { padding: 20px 16px 40px !important; overflow-x: hidden; }
     .switch-row { flex-direction: column; align-items: stretch; }
-    .switch-row select, .period-chip { width: 100%; }
+    .switch-row .range-field,
+    .switch-row select,
+    .switch-row input[type="date"],
+    .switch-row button,
+    .period-chip,
+    .custom-range { width: 100%; max-width: 100%; min-width: 0; }
+    .custom-range { flex-direction: column; align-items: stretch; }
     .header-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     .asset-title { font-size: 22px; }
     .kpi-value { font-size: 22px !important; }
     table { font-size: 13px; }
     th, td { padding-right: 6px; }
+  }
+  @media (max-width: 390px) {
+    .page-content { overflow-x: hidden; }
+    .switch-row { flex-direction: column; align-items: stretch; max-width: 100%; }
+    .switch-row .range-field,
+    .switch-row select,
+    .switch-row input[type="date"],
+    .switch-row button,
+    .period-chip,
+    .custom-range { width: 100%; max-width: 100%; min-width: 0; }
+    .custom-range { flex-direction: column; align-items: stretch; }
   }
 </style>
 </head>
@@ -163,13 +188,38 @@
     </div>
     <div id="empty-state" class="empty-state" hidden>
       <h2>No machinery yet</h2>
-      <p>Add a machine on the Assets page and its month-to-date costs, hours, and fuel will show here.</p>
+      <p>Add a machine on the Assets page and its costs, hours, and fuel for the selected period will show here.</p>
       <a class="btn-teal" href="assets.html">Go to Assets</a>
     </div>
     <div id="dashboard" hidden>
       <div class="switch-row">
-        <select id="asset-select" aria-label="Machine"></select>
-        <div class="period-chip" id="period-label">Month to date</div>
+        <div class="range-field">
+          <label for="asset-select">Machine</label>
+          <select id="asset-select"></select>
+        </div>
+        <div class="range-field">
+          <label for="period-select">Period</label>
+          <select id="period-select">
+            <option value="this-month">This month</option>
+            <option value="last-month">Last month</option>
+            <option value="last-30">Last 30 days</option>
+            <option value="last-7">Last 7 days</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="period-chip" id="period-label"></div>
+        <div class="custom-range" id="custom-range" hidden>
+          <div class="range-field">
+            <label for="date-from">From</label>
+            <input type="date" id="date-from">
+          </div>
+          <div class="range-field">
+            <label for="date-to">To</label>
+            <input type="date" id="date-to">
+          </div>
+          <button type="button" id="apply-range">Apply</button>
+          <p class="range-error" id="range-error" role="alert" hidden></p>
+        </div>
       </div>
       <div class="header-card">
         <div>
@@ -184,7 +234,7 @@
         </div>
       </div>
       <div class="kpi-row">
-        <div class="kpi-card" title="Measured over the machine's latest days with Fleet Fuel data, not limited to this month">
+        <div class="kpi-card" title="Measured over the machine's latest days with Fleet Fuel data, not limited to the selected period">
           <div class="kpi-label">Cost per working hour</div>
           <div class="kpi-value" id="kpi-working">—</div>
           <div class="kpi-sub" id="kpi-working-sub">needs 3 days of Fleet Fuel data</div>
@@ -197,7 +247,7 @@
         <div class="kpi-card">
           <div class="kpi-label">Idle share of run time</div>
           <div class="kpi-value" id="kpi-share">—</div>
-          <div class="kpi-sub" id="kpi-share-sub">this month</div>
+          <div class="kpi-sub" id="kpi-share-sub">selected period</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Utilisation vs target</div>
@@ -207,11 +257,11 @@
       </div>
       <div class="overview-layout">
           <div class="panel breakdown-panel">
-            <div class="panel-title">Operating cost, month to date</div>
+            <div class="panel-title" id="cost-panel-title">Operating cost</div>
             <div class="cost-bar" id="cost-bar"></div>
             <div class="cost-table-wrap">
               <table>
-                <thead><tr><th>Cost</th><th class="num">Month to date</th><th class="num">Share</th></tr></thead>
+                <thead><tr><th>Cost</th><th class="num">Period</th><th class="num">Share</th></tr></thead>
                 <tbody id="cost-tbody"></tbody>
                 <tfoot>
                   <tr class="total"><td>Total</td><td class="num" id="cost-total">—</td><td class="num" id="cost-share">—</td></tr>
@@ -227,7 +277,7 @@
             <div class="chart-wrap">
               <canvas id="daily-chart"></canvas>
             </div>
-            <p class="panel-sub" id="chart-empty" hidden>No run hours recorded this month.</p>
+            <p class="panel-sub" id="chart-empty" hidden>No run hours recorded in this period.</p>
           </div>
           <div class="panel checklist-panel">
             <div class="panel-title">Setup checklist</div>
@@ -237,7 +287,7 @@
           </div>
           <section class="module-section">
             <h2 class="module-heading">Module summaries</h2>
-            <p class="panel-sub">Month to date. Each card links to the full analyst for this machine.</p>
+            <p class="panel-sub" id="module-sub">Each card links to the full analyst for this machine.</p>
             <div class="module-grid" id="module-grid"></div>
           </section>
       </div>
@@ -252,14 +302,16 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="js/fleet-cost-model.js"></script>
+<script src="js/asset-overview-range.js"></script>
 <script src="js/sidebar-nav.js"></script>
 <script>
 (function() {
   var FCM = window.FleetCostModel;
+  var AOR = window.AssetOverviewRange;
   var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   var LAST_KEY = 'fm_asset_overview_last';
+  var PERIOD_KEY = 'fm_asset_overview_period';
   var DEFAULT_HOURS_PER_WEEK = 40;
-  var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var currentUser = null;
   var accountContext = null;
   var effectiveAccountId = null;
@@ -267,12 +319,20 @@
   var machines = [];
   var dailyChart = null;
   var renderToken = 0;
+  var currentRange = null;
 
   function readLast() {
     try { return localStorage.getItem(LAST_KEY); } catch (e) { return null; }
   }
   function writeLast(id) {
     try { localStorage.setItem(LAST_KEY, String(id)); } catch (e) {}
+  }
+  function readPeriod() {
+    try { return localStorage.getItem(PERIOD_KEY); } catch (e) { return null; }
+  }
+  function writePeriod(preset) {
+    if (!AOR.isNamedPreset(preset)) return;
+    try { localStorage.setItem(PERIOD_KEY, preset); } catch (e) {}
   }
   function esc(str) {
     return String(str == null ? '' : str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -288,30 +348,6 @@
     var text = Math.abs(rounded - Math.round(rounded)) < 0.05 ? String(Math.round(rounded)) : rounded.toFixed(1);
     return text + ' h';
   }
-  function dayMonth(iso) {
-    var p = String(iso).slice(0, 10).split('-').map(Number);
-    if (p.length !== 3 || !p[0]) return String(iso);
-    return p[2] + ' ' + MONTHS[p[1] - 1];
-  }
-  function periodLabel(from, to) {
-    return dayMonth(from) + ' to ' + dayMonth(to) + ' (month to date)';
-  }
-  function getMTDRange() {
-    var today = FCM.nzTodayISO();
-    var parts = today.split('-').map(Number);
-    var from = parts[0] + '-' + String(parts[1]).padStart(2, '0') + '-01';
-    return { from: from, to: today };
-  }
-  function daysInRange(fromStr, toStr) {
-    var start = new Date(fromStr + 'T00:00:00');
-    var end = new Date(toStr + 'T00:00:00');
-    return Math.round((end - start) / 86400000) + 1;
-  }
-  function daySpan(older, newer) {
-    var a = String(older).slice(0, 10).split('-').map(Number);
-    var b = String(newer).slice(0, 10).split('-').map(Number);
-    return Math.round((Date.UTC(b[0], b[1] - 1, b[2]) - Date.UTC(a[0], a[1] - 1, a[2])) / 86400000);
-  }
   function hoursPerWeek(asset) {
     var h = asset.available_hours_per_week != null ? parseFloat(asset.available_hours_per_week) : DEFAULT_HOURS_PER_WEEK;
     return isNaN(h) ? DEFAULT_HOURS_PER_WEEK : h;
@@ -322,9 +358,28 @@
       return params.get('asset');
     } catch (e) { return null; }
   }
-  function replaceAssetUrl(id) {
-    var url = 'asset-overview.html?asset=' + encodeURIComponent(id);
-    try { history.replaceState({ asset: String(id) }, '', url); } catch (e) {}
+  function replaceOverviewUrl(id) {
+    var url = 'asset-overview.html' + AOR.overviewQuery(id, currentRange.from, currentRange.to);
+    try { history.replaceState({ asset: String(id), from: currentRange.from, to: currentRange.to }, '', url); } catch (e) {}
+  }
+  function syncPeriodControls() {
+    var range = currentRange;
+    var today = FCM.nzTodayISO();
+    var select = document.getElementById('period-select');
+    var editingCustom = select.value === 'custom' && range.preset !== 'custom';
+    document.getElementById('period-label').textContent = AOR.rangeLabel(range.from, range.to, range.preset);
+    document.getElementById('cost-panel-title').textContent = 'Operating cost, ' + AOR.shortLabel(range.from, range.to);
+    document.getElementById('module-sub').textContent = AOR.shortLabel(range.from, range.to) + '. Each card links to the full analyst for this machine.';
+    document.getElementById('date-from').max = today;
+    document.getElementById('date-to').max = today;
+    if (editingCustom) return;
+    select.value = range.preset;
+    var custom = document.getElementById('custom-range');
+    custom.hidden = range.preset !== 'custom';
+    if (range.preset === 'custom') {
+      document.getElementById('date-from').value = range.from;
+      document.getElementById('date-to').value = range.to;
+    }
   }
 
   function unavailableTitle(missing) {
@@ -502,10 +557,10 @@
     return fuel.cost + idlePartial - (idleCosts.fuel || 0);
   }
 
-  async function machineWithHighestCost(mtd) {
+  async function machineWithHighestCost(range) {
     try {
       var ids = machines.map(function(asset) { return asset.id; });
-      var rows = await pageMonthTelematics(ids, mtd.from, mtd.to);
+      var rows = await pageMonthTelematics(ids, range.from, range.to);
       var byId = {};
       rows.forEach(function(row) {
         var id = Number(row.asset_id);
@@ -548,12 +603,13 @@
     }
     var last = findMachine(readLast());
     if (last) return { asset: last };
-    var ranked = await machineWithHighestCost(getMTDRange());
+    var today = FCM.nzTodayISO();
+    var ranked = await machineWithHighestCost(AOR.presetRange(AOR.defaultPreset(today), today));
     if (ranked) return { asset: ranked };
     return { asset: machines[0] };
   }
 
-  function renderDailyChart(labels, working, idle) {
+  function renderDailyChart(labels, working, idle, emptyMessage) {
     var canvas = document.getElementById('daily-chart');
     var empty = document.getElementById('chart-empty');
     var any = false;
@@ -562,6 +618,7 @@
     }
     if (!any) {
       empty.hidden = false;
+      empty.textContent = emptyMessage;
       canvas.style.display = 'none';
       if (dailyChart) { dailyChart.destroy(); dailyChart = null; }
       return;
@@ -600,19 +657,20 @@
   async function showMachine(asset) {
     var token = ++renderToken;
     writeLast(asset.id);
-    replaceAssetUrl(asset.id);
+    replaceOverviewUrl(asset.id);
+    syncPeriodControls();
     document.getElementById('asset-select').value = String(asset.id);
     document.getElementById('crumb-name').textContent = asset.asset_name || 'Asset overview';
-    var mtd = getMTDRange();
-    document.getElementById('period-label').textContent = periodLabel(mtd.from, mtd.to);
+    var today = FCM.nzTodayISO();
 
     var fetched = await Promise.all([
+      // A range is at most 366 days, so one machine's rows stay within the 1,000-row page limit.
       supabase.from('telematics_records')
         .select('record_date, operating_hours, idle_hours, litres_consumed, total_engine_hours')
         .eq('asset_id', asset.id)
         .eq('user_id', effectiveAccountId)
-        .gte('record_date', mtd.from)
-        .lte('record_date', mtd.to)
+        .gte('record_date', currentRange.from)
+        .lte('record_date', currentRange.to)
         .order('record_date'),
       supabase.from('telematics_records')
         .select('record_date, operating_hours, idle_hours, working_fuel_litres')
@@ -627,7 +685,7 @@
         .eq('user_id', effectiveAccountId)
         .order('record_date', { ascending: false })
         .limit(1),
-      loadJobRows(asset.id, mtd.from, mtd.to)
+      loadJobRows(asset.id, currentRange.from, currentRange.to)
     ]);
     if (token !== renderToken) return;
 
@@ -672,14 +730,14 @@
     if (division !== null) meta.push('Division: ' + division);
     document.getElementById('asset-meta').textContent = meta.join(' · ');
     document.getElementById('hour-meter').textContent = totalEngineHours == null ? '—' : Math.round(totalEngineHours).toLocaleString('en-NZ') + ' h';
-    document.getElementById('last-report').textContent = latestDate ? (latestDate === mtd.to ? 'Today' : FCM.formatDateNZ(latestDate)) : '—';
+    document.getElementById('last-report').textContent = !latestDate ? '—' : (AOR.reportIsToday(latestDate, today) ? 'Today' : FCM.formatDateNZ(latestDate));
     document.getElementById('data-source').textContent = FCM.telematicsVendorLabel(asset);
     var freshness = document.getElementById('freshness');
     var freshnessText = document.getElementById('freshness-text');
     if (!latestDate) {
       freshness.className = 'freshness stale';
       freshnessText.textContent = 'No data yet';
-    } else if (daySpan(latestDate, mtd.to) <= 1) {
+    } else if (!AOR.isReportStale(latestDate, today)) {
       freshness.className = 'freshness ok';
       freshnessText.textContent = 'Data is up to date';
     } else {
@@ -708,12 +766,20 @@
     } else {
       shareEl.textContent = '—';
       shareEl.className = 'kpi-value';
-      shareSub.textContent = 'no run hours this month';
+      shareSub.textContent = 'no run hours in this period';
     }
 
-    var weeks = daysInRange(mtd.from, mtd.to) / 7;
-    var available = hoursPerWeek(asset) * weeks;
-    var utilRate = available > 0 ? (workingHours / available) * 100 : 0;
+    var dataDates = Object.keys(byDate).sort();
+    var utilWindow = AOR.utilisationForSelection({
+      from: currentRange.from,
+      to: currentRange.to,
+      dataFrom: dataDates.length ? dataDates[0] : '',
+      dataTo: dataDates.length ? dataDates[dataDates.length - 1] : '',
+      hoursPerWeek: hoursPerWeek(asset),
+      workingHours: workingHours
+    });
+    var available = utilWindow.available;
+    var utilRate = utilWindow.rate;
     var target = asset.target_utilisation_percent != null ? parseFloat(asset.target_utilisation_percent) : null;
     if (isNaN(target)) target = null;
     var utilEl = document.getElementById('kpi-util');
@@ -735,7 +801,7 @@
 
     var hasTel = telRows.length > 0;
     var noPeriodFields = ['Fuel records for selected period'];
-    // No rows this month means the hours are unknown. A sum of zero from real rows stays zero.
+    // No rows in this period means the hours are unknown. A sum of zero from real rows stays zero.
     if (!hasTel) {
       ['depreciation', 'servicing', 'maintenance'].forEach(function(part) {
         var missingKey = part + 'Missing';
@@ -805,19 +871,20 @@
     var labels = [];
     var workingSeries = [];
     var idleSeries = [];
-    var cursor = mtd.from;
-    while (cursor <= mtd.to) {
+    var cursor = currentRange.from;
+    while (cursor <= currentRange.to) {
       var bucket = byDate[cursor] || { idle: 0, working: 0 };
-      labels.push(dayMonth(cursor));
+      labels.push(AOR.dayMonth(cursor));
       idleSeries.push(Math.round(bucket.idle * 10) / 10);
       // Stack working hours and idle hours. Their sum is the day's run hours.
       workingSeries.push(Math.round(bucket.working * 10) / 10);
       cursor = FCM.addDaysISO(cursor, 1);
     }
-    renderDailyChart(labels, workingSeries, idleSeries);
+    var emptyMessage = hasTel ? 'No run hours recorded in this period.' : AOR.chartEmptyMessage(latestDate);
+    renderDailyChart(labels, workingSeries, idleSeries, emptyMessage);
 
     var assetQuery = '?asset=' + encodeURIComponent(asset.id);
-    var noRunTitle = hasTel ? 'no run hours this month' : FCM.formatMissingMessage(noPeriodFields);
+    var noRunTitle = hasTel ? 'no run hours in this period' : FCM.formatMissingMessage(noPeriodFields);
     var fuelMissingTitle = FCM.formatMissingMessage(['Fuel records for selected period']);
     var litresKnown = hasTel ? fuel.litres : null;
     var runForRates = hasTel ? periodRunHours : null;
@@ -885,7 +952,7 @@
       var periodTotal = anyAmount ? total : null;
       var perHour = FCM.costPerRunHour(periodTotal, runForRates);
       var jobTitle = !anyAmount ? partialNotes.join(' ') : (partialNotes.length ? partialNotes.join(' ') : '');
-      var jobStats = statBlock('Jobs this month', String(Object.keys(jobIds).length), '', '') +
+      var jobStats = statBlock('Jobs in this period', String(Object.keys(jobIds).length), '', '') +
         statBlock('Days on jobs', String(Object.keys(jobDates).length), '', '') +
         moneyStat('Cost per run hour', perHour, 'rate', jobTitle || noRunTitle, !!(partialNotes.length && perHour != null));
       cards.push(moduleCard('job-cost-analyst.html', 'Job Cost Analyst', jobStats));
@@ -908,6 +975,59 @@
   document.getElementById('asset-select').addEventListener('change', function() {
     var asset = findMachine(this.value);
     if (asset) showMachine(asset);
+  });
+
+  document.getElementById('period-select').addEventListener('change', function() {
+    var preset = this.value;
+    var today = FCM.nzTodayISO();
+    var error = document.getElementById('range-error');
+    error.hidden = true;
+    error.textContent = '';
+    if (preset === 'custom') {
+      document.getElementById('custom-range').hidden = false;
+      document.getElementById('date-from').value = currentRange.from;
+      document.getElementById('date-to').value = currentRange.to;
+      document.getElementById('date-from').max = today;
+      document.getElementById('date-to').max = today;
+      document.getElementById('date-from').focus();
+      return;
+    }
+    document.getElementById('custom-range').hidden = true;
+    var next = AOR.presetRange(preset, today);
+    currentRange = { from: next.from, to: next.to, preset: preset };
+    writePeriod(preset);
+    var asset = findMachine(document.getElementById('asset-select').value);
+    if (asset) showMachine(asset);
+  });
+
+  function applyCustomRange() {
+    var today = FCM.nzTodayISO();
+    var from = document.getElementById('date-from').value;
+    var to = document.getElementById('date-to').value;
+    var checked = AOR.validateCustomRange(from, to, today);
+    var error = document.getElementById('range-error');
+    if (!checked.ok) {
+      error.hidden = false;
+      error.textContent = checked.message;
+      return;
+    }
+    error.hidden = true;
+    error.textContent = '';
+    var preset = AOR.matchingPreset(checked.from, checked.to, today) || 'custom';
+    currentRange = { from: checked.from, to: checked.to, preset: preset };
+    writePeriod(preset);
+    var asset = findMachine(document.getElementById('asset-select').value);
+    if (asset) showMachine(asset);
+    else syncPeriodControls();
+  }
+  document.getElementById('apply-range').addEventListener('click', applyCustomRange);
+  ['date-from', 'date-to'].forEach(function(id) {
+    document.getElementById(id).addEventListener('keydown', function(event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        applyCustomRange();
+      }
+    });
   });
 
   async function init() {
@@ -950,8 +1070,10 @@
       document.getElementById('truck-state').hidden = false;
       return;
     }
+    currentRange = AOR.resolveInitialRange(window.location.search, readPeriod(), FCM.nzTodayISO());
     document.getElementById('dashboard').hidden = false;
     fillSwitcher(choice.asset);
+    syncPeriodControls();
     await showMachine(choice.asset);
   }
 
