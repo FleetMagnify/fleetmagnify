@@ -1908,8 +1908,13 @@
     if (raw && typeof raw === 'object' && raw.cardNumber) {
       payload.bp_card_number = String(raw.cardNumber).trim() || null;
     }
+    // visionlink_serial is a historical column name. It stores any telematics
+    // serial or PIN (a VisionLink serial, a John Deere machine serial, and so on).
     if (raw && typeof raw === 'object' && typeof raw.serial === 'string' && raw.serial.trim()) {
       payload.visionlink_serial = String(raw.serial).trim();
+    }
+    if (raw && typeof raw === 'object' && typeof raw.telematicsProvider === 'string' && raw.telematicsProvider.trim()) {
+      payload.telematics_provider = String(raw.telematicsProvider).trim();
     }
     return payload;
   }

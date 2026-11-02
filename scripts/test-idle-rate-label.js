@@ -80,6 +80,34 @@ check(
   JSON.stringify(measuredTrimmed)
 );
 
+var measuredDeere = FCM.resolvedIdleRate({
+  asset_type: 'Forestry Harvester',
+  telematics_provider: 'John Deere',
+  idle_burn_rate_lph: 1.96,
+  idle_rate_source: 'measured'
+});
+check(
+  'John Deere measured rate keeps the value and uses a provider-neutral label',
+  measuredDeere.source === 'measured' &&
+    measuredDeere.label === 'Measured (telematics)' &&
+    measuredDeere.rate === 1.96,
+  JSON.stringify(measuredDeere)
+);
+
+var measuredVisionNamed = FCM.resolvedIdleRate({
+  asset_type: 'Excavator',
+  telematics_provider: 'VisionLink',
+  idle_burn_rate_lph: 4.25,
+  idle_rate_source: 'measured'
+});
+check(
+  'A VisionLink asset keeps the Measured (VisionLink) label',
+  measuredVisionNamed.source === 'measured' &&
+    measuredVisionNamed.label === 'Measured (VisionLink)' &&
+    measuredVisionNamed.rate === 4.25,
+  JSON.stringify(measuredVisionNamed)
+);
+
 var measuredOutOfBand = FCM.resolvedIdleRate({
   asset_type: 'Excavator',
   idle_burn_rate_lph: 20,
