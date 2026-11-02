@@ -292,7 +292,8 @@ check('asset overview charges run hours and labels working hours on the utilisat
   assert.ok(page.indexOf('Fuel per run hour') !== -1);
   assert.ok(page.indexOf('Cost per run hour') !== -1);
   assert.ok(page.indexOf('Per run hour') !== -1);
-  assert.ok(page.indexOf('(workingHours / available)') !== -1);
+  assert.ok(page.indexOf('AOR.utilisationForSelection(') !== -1);
+  assert.ok(page.indexOf('workingHours: workingHours') !== -1);
   assert.ok(model.indexOf('operating_hours = working hours') !== -1);
   assert.ok(model.indexOf('function runHours(operatingHours, idleHours)') !== -1);
 });
@@ -333,7 +334,8 @@ check('the page applies the division filter and scopes every query by user_id', 
   assert.ok(page.indexOf('Asset overview is for machinery for now') !== -1);
   assert.ok(page.indexOf('FCM.isOnRoad') !== -1);
   assert.ok(page.indexOf('.range(') !== -1);
-  assert.ok(page.indexOf('Operating cost, month to date') !== -1);
+  assert.ok(page.indexOf('Operating cost, month to date') === -1);
+  assert.ok(page.indexOf("'Operating cost, ' + AOR.shortLabel") !== -1);
   assert.ok(page.indexOf('Module summaries') !== -1);
   assert.ok(page.indexOf('Fuel burn') === -1);
   assert.ok(page.indexOf('Go deeper') === -1);
