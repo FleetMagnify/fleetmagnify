@@ -382,6 +382,11 @@ function visionLinkOneDayMessage(start, end) {
     '). FleetMagnify needs a one-day report: schedule it Daily with Report Duration \'Previous day\'.';
 }
 
+function johnDeereMultiDayMessage(startLabel, endLabel) {
+  return 'This John Deere report covers more than one day (' + startLabel + ' to ' + endLabel +
+    '). FleetMagnify needs a single-day report so each day\'s figures are kept separate. In Operations Center, schedule the Utilization report as Daily.';
+}
+
 /**
  * Fleet Utilization <start> <end> <generated>.csv / .xlsx
  *
@@ -463,6 +468,7 @@ module.exports = {
   resolveVisionLinkDateReading: resolveVisionLinkDateReading,
   parseVisionLinkFilenameRange: parseVisionLinkFilenameRange,
   visionLinkOneDayMessage: visionLinkOneDayMessage,
+  johnDeereMultiDayMessage: johnDeereMultiDayMessage,
   BP_FUEL_PRODUCT_ALLOWLIST: BP_FUEL_PRODUCT_ALLOWLIST,
   isKnownFuelProduct: isKnownFuelProduct,
   MOBIL_FUEL_PRODUCT_ALLOWLIST: MOBIL_FUEL_PRODUCT_ALLOWLIST,

@@ -14,6 +14,7 @@ const { isNavmanIdleCsv, parseNavmanIdleReport } = require('../parsers/navman-id
 const { isVisionLinkCsv, parseVisionLinkReport } = require('../parsers/visionlink');
 const { isVisionLinkFuelCsv, parseVisionLinkFuelReport } = require('../parsers/visionlink-fuel');
 const { isEroadCsv, parseEroadReport } = require('../parsers/eroad');
+const { isJohnDeereUtilizationCsv, parseJohnDeereUtilizationReport, extractJohnDeereReportLinks, fetchJohnDeereReportFromLink, johnDeereLinkFailureMessage } = require('../parsers/john-deere-utilization');
 const {
   extractVisionLinkReportLinks,
   fetchReportFromLink,
@@ -327,68 +328,115 @@ async function processInboundEmail(supabase, input) {
     if (csvFiles.length === 0) {
       var reportLinks = extractVisionLinkReportLinks(getField(fields, 'html'), getField(fields, 'text'));
       if (!reportLinks.length) {
-        console.warn('email-inbound: no CSV attachments for', toEmail);
-        // Not a failed import. Save the message so a sign-in code, a
-        // forwarding confirmation, or an unparsed report can be read later.
-        // status is no_attachment, so nothing that scans pending or failed
-        // rows will parse it. No alert.
-        try {
-          var savedMail = await supabase.from('email_imports').insert({
-            user_id: userResult.data.user_id,
-            received_at: receivedAt,
-            from_email: fromEmail || null,
-            to_email: toEmail,
-            filename: subjectAsFilename(getField(fields, 'subject')),
-            raw_csv: emailBodyForStorage(fields),
-            status: 'no_attachment',
-            error_message: 'No CSV attachment or report link; email saved for review',
-          }).select('id').single();
-          if (savedMail.error) {
-            console.error('email-inbound: failed to save email with no attachment', savedMail.error.message);
+        var deereLinks = extractJohnDeereReportLinks(
+          getField(fields, 'html'),
+          getField(fields, 'text'),
+          getField(fields, 'subject')
+        );
+        if (deereLinks.length) {
+          console.log('email-inbound: fetching', deereLinks.length, 'John Deere report link(s)');
+          for (var deereIndex = 0; deereIndex < deereLinks.length; deereIndex++) {
+            try {
+              var deereFile = await fetchJohnDeereReportFromLink(deereLinks[deereIndex]);
+              csvFiles.push({
+                filename: deereFile.filename,
+                mimeType: deereFile.mimeType,
+                buffer: deereFile.buffer,
+              });
+            } catch (deereLinkErr) {
+              var deereFailName = (deereLinkErr && deereLinkErr.reportFilename) || 'John-Deere-Utilization.csv';
+              var deereReason = scrubLinkError(deereLinkErr && deereLinkErr.message);
+              var deereError = johnDeereLinkFailureMessage(deereReason);
+              console.error('email-inbound: John Deere download link failed', deereReason);
+              var deereFailInsert = await supabase.from('email_imports').insert({
+                user_id: userResult.data.user_id,
+                received_at: receivedAt,
+                from_email: fromEmail || null,
+                to_email: toEmail,
+                filename: deereFailName,
+                raw_csv: '',
+                status: 'failed',
+                error_message: deereError,
+              }).select('id').single();
+              if (deereFailInsert.error) {
+                console.error('email-inbound: failed to record John Deere link failure', deereFailInsert.error.message);
+              }
+              await sendFailureAlert(deereFailName, deereError, userResult.data.user_id);
+            }
           }
-        } catch (saveErr) {
-          console.error('email-inbound: failed to save email with no attachment', saveErr.message);
-        }
-        return { ok: true, message: 'Received — no CSV attachments' };
-      }
-      console.log('email-inbound: fetching', reportLinks.length, 'VisionLink report link(s)');
-      for (var linkIndex = 0; linkIndex < reportLinks.length; linkIndex++) {
-        try {
-          var downloaded = await fetchReportFromLink(reportLinks[linkIndex]);
-          csvFiles.push({
-            filename: downloaded.filename,
-            mimeType: downloaded.mimeType,
-            buffer: downloaded.buffer,
-          });
-        } catch (linkErr) {
-          var failName = (linkErr && linkErr.reportFilename) || 'VisionLink report link';
-          var reason = scrubLinkError(linkErr && linkErr.message);
-          var errorMessage = 'VisionLink download link could not be fetched: ' + reason +
-            '; try Download Report manually and email the file';
-          console.error('email-inbound: VisionLink download link failed', reason);
-          var failInsert = await supabase.from('email_imports').insert({
-            user_id: userResult.data.user_id,
-            received_at: receivedAt,
-            from_email: fromEmail || null,
-            to_email: toEmail,
-            filename: failName,
-            raw_csv: '',
-            status: 'failed',
-            error_message: errorMessage,
-          }).select('id').single();
-          if (failInsert.error) {
-            console.error('email-inbound: failed to record link failure', failInsert.error.message);
+          if (csvFiles.length === 0) {
+            return {
+              ok: true,
+              message: 'Received',
+              saved: [],
+              user_id: userResult.data.user_id,
+            };
           }
-          await sendFailureAlert(failName, errorMessage, userResult.data.user_id);
+        } else {
+          console.warn('email-inbound: no CSV attachments for', toEmail);
+          // Not a failed import. Save the message so a sign-in code, a
+          // forwarding confirmation, or an unparsed report can be read later.
+          // status is no_attachment, so nothing that scans pending or failed
+          // rows will parse it. No alert.
+          try {
+            var savedMail = await supabase.from('email_imports').insert({
+              user_id: userResult.data.user_id,
+              received_at: receivedAt,
+              from_email: fromEmail || null,
+              to_email: toEmail,
+              filename: subjectAsFilename(getField(fields, 'subject')),
+              raw_csv: emailBodyForStorage(fields),
+              status: 'no_attachment',
+              error_message: 'No CSV attachment or report link; email saved for review',
+            }).select('id').single();
+            if (savedMail.error) {
+              console.error('email-inbound: failed to save email with no attachment', savedMail.error.message);
+            }
+          } catch (saveErr) {
+            console.error('email-inbound: failed to save email with no attachment', saveErr.message);
+          }
+          return { ok: true, message: 'Received — no CSV attachments' };
         }
-      }
-      if (csvFiles.length === 0) {
-        return {
-          ok: true,
-          message: 'Received',
-          saved: [],
-          user_id: userResult.data.user_id,
-        };
+      } else {
+        console.log('email-inbound: fetching', reportLinks.length, 'VisionLink report link(s)');
+        for (var linkIndex = 0; linkIndex < reportLinks.length; linkIndex++) {
+          try {
+            var downloaded = await fetchReportFromLink(reportLinks[linkIndex]);
+            csvFiles.push({
+              filename: downloaded.filename,
+              mimeType: downloaded.mimeType,
+              buffer: downloaded.buffer,
+            });
+          } catch (linkErr) {
+            var failName = (linkErr && linkErr.reportFilename) || 'VisionLink report link';
+            var reason = scrubLinkError(linkErr && linkErr.message);
+            var errorMessage = 'VisionLink download link could not be fetched: ' + reason +
+              '; try Download Report manually and email the file';
+            console.error('email-inbound: VisionLink download link failed', reason);
+            var failInsert = await supabase.from('email_imports').insert({
+              user_id: userResult.data.user_id,
+              received_at: receivedAt,
+              from_email: fromEmail || null,
+              to_email: toEmail,
+              filename: failName,
+              raw_csv: '',
+              status: 'failed',
+              error_message: errorMessage,
+            }).select('id').single();
+            if (failInsert.error) {
+              console.error('email-inbound: failed to record link failure', failInsert.error.message);
+            }
+            await sendFailureAlert(failName, errorMessage, userResult.data.user_id);
+          }
+        }
+        if (csvFiles.length === 0) {
+          return {
+            ok: true,
+            message: 'Received',
+            saved: [],
+            user_id: userResult.data.user_id,
+          };
+        }
       }
     }
 
@@ -663,6 +711,32 @@ async function processInboundEmail(supabase, input) {
           await sendFailureAlert(
             attachment.filename,
             visionErr.message,
+            userResult.data.user_id
+          );
+        }
+      } else if (isJohnDeereUtilizationCsv(rawCsv)) {
+        try {
+          var deereResult = await parseJohnDeereUtilizationReport(supabase, {
+            userId: userResult.data.user_id,
+            importId: importId,
+            rawCsv: rawCsv,
+            filename: attachment.filename || null,
+            receivedAt: receivedAt,
+          });
+          console.log(
+            'email-inbound: John Deere Utilization parse complete',
+            attachment.filename,
+            deereResult.summary
+          );
+        } catch (deereErr) {
+          console.error(
+            'email-inbound: John Deere Utilization parse failed',
+            attachment.filename,
+            deereErr.message
+          );
+          await sendFailureAlert(
+            attachment.filename,
+            deereErr.message,
             userResult.data.user_id
           );
         }

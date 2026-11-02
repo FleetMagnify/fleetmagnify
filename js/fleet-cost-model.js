@@ -629,7 +629,7 @@
       return { rate: stored, source: 'calibrated', label: 'Calibrated' };
     }
     if (src === 'measured') {
-      return { rate: stored, source: 'measured', label: 'Measured (VisionLink)' };
+      return { rate: stored, source: 'measured', label: measuredIdleLabel(asset) };
     }
     return { rate: stored, source: 'set', label: 'Set on asset' };
   }
@@ -698,6 +698,16 @@
     if (gvm <= 28) return 0.340;
     if (gvm <= 32) return 0.385;
     return 0.430;
+  }
+
+  // A blank provider stays "Measured (VisionLink)": existing machinery
+  // imports never wrote telematics_provider, and those assets are VisionLink.
+  // Any other saved provider, including John Deere, uses a neutral label.
+  // The rate itself is unchanged.
+  function measuredIdleLabel(asset) {
+    var provider = String((asset && asset.telematics_provider) || '').trim();
+    if (!provider || /visionlink/i.test(provider)) return 'Measured (VisionLink)';
+    return 'Measured (telematics)';
   }
 
   function telematicsVendorLabel(asset) {
