@@ -174,7 +174,9 @@ window.FleetMagnifySidebar = (function() {
       existing.outerHTML = html;
     } else {
       console.warn('FleetMagnifySidebar: no #sidebar-placeholder element found on this page');
+      return;
     }
+    document.dispatchEvent(new CustomEvent('fleetmagnify:sidebar-mounted'));
   }
 
   async function inject(activePage, supabase, effectiveAccountId) {

@@ -2,6 +2,8 @@
   'use strict';
 
   var MOBILE_BP = 768;
+  var appSidebarReady = false;
+  var sidebarObserver = null;
 
   function isMobile() {
     return window.innerWidth <= MOBILE_BP;
@@ -25,11 +27,26 @@
     return btn;
   }
 
+  function stopSidebarWatch() {
+    if (!sidebarObserver) return;
+    sidebarObserver.disconnect();
+    sidebarObserver = null;
+  }
+
   function initAppSidebar() {
+    if (appSidebarReady || document.querySelector('.mobile-menu-btn') || document.querySelector('.sidebar-backdrop')) {
+      appSidebarReady = true;
+      stopSidebarWatch();
+      return true;
+    }
+
     var sidebar = document.querySelector('aside.sidebar');
     if (!sidebar) return false;
     if (!document.querySelector('.main, .main-area, .app-layout, .app-shell')) return false;
     if (!sidebar.querySelector('.sidebar-nav, .sidebar-footer, .btn-signout')) return false;
+
+    appSidebarReady = true;
+    stopSidebarWatch();
 
     var backdrop = createBackdrop('sidebar-backdrop');
     var btn = createMenuBtn();
@@ -119,11 +136,34 @@
     });
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () {
-      if (!initAppSidebar()) initLandingNav();
+  function watchForSidebar() {
+    if (typeof MutationObserver !== 'function' || !document.body || sidebarObserver) return;
+    sidebarObserver = new MutationObserver(function () {
+      if (!document.querySelector('aside.sidebar')) return;
+      stopSidebarWatch();
+      initAppSidebar();
     });
+    sidebarObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
+  function start() {
+    if (document.querySelector('aside.sidebar')) {
+      if (!initAppSidebar()) initLandingNav();
+      return;
+    }
+    if (document.getElementById('sidebar-placeholder')) {
+      document.addEventListener('fleetmagnify:sidebar-mounted', function () {
+        initAppSidebar();
+      }, { once: true });
+      watchForSidebar();
+      return;
+    }
+    initLandingNav();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start);
   } else {
-    if (!initAppSidebar()) initLandingNav();
+    start();
   }
 })();
