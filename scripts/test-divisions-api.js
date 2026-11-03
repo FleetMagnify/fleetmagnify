@@ -651,10 +651,12 @@ async function run() {
     vercel.functions && vercel.functions['api/*.js'] && vercel.functions['api/*.js'].maxDuration === 60
   );
   check(
-    'The daily cron entry is unchanged',
-    vercel.crons && vercel.crons.length === 1 &&
+    'The quantity cron is unchanged and the quiet-feed cron is second',
+    vercel.crons && vercel.crons.length === 2 &&
       vercel.crons[0].path === '/api/sync-subscription-quantities' &&
-      vercel.crons[0].schedule === '0 16 * * *'
+      vercel.crons[0].schedule === '0 16 * * *' &&
+      vercel.crons[1].path === '/api/check-missing-reports' &&
+      vercel.crons[1].schedule === '30 16 * * *'
   );
   check(
     'The data partners redirect is unchanged',
@@ -670,6 +672,7 @@ async function run() {
   var expectedApi = [
     'admin-users.js',
     'bulk-import.js',
+    'check-missing-reports.js',
     'contact-form.js',
     'create-checkout-session.js',
     'create-invoice-subscription.js',
@@ -679,7 +682,7 @@ async function run() {
     'sync-subscription-quantities.js',
     'team.js'
   ];
-  check('api contains 10 JavaScript files', apiFiles.length === 10 && apiFiles.join() === expectedApi.join(), apiFiles.join(', '));
+  check('api contains 11 JavaScript files', apiFiles.length === 11 && apiFiles.join() === expectedApi.join(), apiFiles.join(', '));
 
   console.log('\nAll division API tests passed.');
 }
