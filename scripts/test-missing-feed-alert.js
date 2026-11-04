@@ -12,6 +12,8 @@ var CANCELLED = '22222222-2222-4222-8222-222222222222';
 var DELETED = '33333333-3333-4333-8333-333333333333';
 var BLANK = '44444444-4444-4444-8444-444444444444';
 var NOISY = '55555555-5555-4555-8555-555555555555';
+var TRIAL = '66666666-6666-4666-8666-666666666666';
+var NULL_STATUS = '77777777-7777-4777-8777-777777777777';
 var SENDER = 'reports@plant.example';
 var MANUAL = 'person@workshop.example';
 var TODAY = '2026-11-04';
@@ -255,14 +257,36 @@ async function main() {
   assert.strictEqual(alert.findOverdueFeeds(abandoned, today, accounts).length, 0);
   console.log('✓ milestones 1, 3 and 7 alert; 2, 4, 5, 6 and 8 or more do not');
 
-  var cancelledRows = daily(CANCELLED, SENDER, '2026-10-22', '2026-11-02');
+  var cancelledRows = daily(CANCELLED, SENDER, '2026-10-22', '2026-11-02')
+    .concat(daily('canceled-us', 'canceled@plant.example', '2026-10-22', '2026-11-02'));
   var deletedRows = daily(DELETED, SENDER, '2026-10-22', '2026-11-02');
-  assert.strictEqual(alert.findOverdueFeeds(cancelledRows.concat(deletedRows), today, accounts).length, 0);
-  assert.strictEqual(alert.isBillableAccount({ subscription_status: 'trialing' }), true);
-  assert.strictEqual(alert.isBillableAccount({ subscription_status: 'past_due' }), true);
+  var trialRows = daily(TRIAL, 'trial@plant.example', '2026-10-22', '2026-11-02');
+  var nullRows = daily(NULL_STATUS, 'unset@plant.example', '2026-10-22', '2026-11-02');
+  var emptyRows = daily(BLANK, 'blank@plant.example', '2026-10-22', '2026-11-02');
+  var receivingAccounts = accountMap([
+    activeAccount(ACTIVE, COMPANY),
+    { id: CANCELLED, subscription_status: 'cancelled', company_name: 'Closed Yard Ltd' },
+    { id: 'canceled-us', subscription_status: 'canceled', company_name: 'Closed US Yard' },
+    { id: TRIAL, subscription_status: 'trial', company_name: 'Trial Yard Ltd' },
+    { id: NULL_STATUS, subscription_status: null, company_name: 'Unset Yard Ltd' },
+    { id: BLANK, subscription_status: '', company_name: 'Blank Status Ltd' }
+  ]);
+  assert.strictEqual(alert.findOverdueFeeds(cancelledRows.concat(deletedRows), today, receivingAccounts).length, 0);
+  var included = alert.findOverdueFeeds(trialRows.concat(nullRows, emptyRows), today, receivingAccounts);
+  assert.strictEqual(included.length, 3);
+  assert.deepStrictEqual(included.map(function (feed) { return feed.companyName; }).sort(), [
+    'Blank Status Ltd',
+    'Trial Yard Ltd',
+    'Unset Yard Ltd'
+  ]);
+  assert.strictEqual(alert.isBillableAccount({ subscription_status: 'trial' }), true);
+  assert.strictEqual(alert.isBillableAccount({ subscription_status: null }), true);
+  assert.strictEqual(alert.isBillableAccount({ subscription_status: '' }), true);
+  assert.strictEqual(alert.isBillableAccount({ subscription_status: 'active' }), true);
   assert.strictEqual(alert.isBillableAccount({ subscription_status: 'cancelled' }), false);
-  assert.deepStrictEqual(alert.BILLABLE_STATUSES, ['trialing', 'active', 'past_due']);
-  console.log('✓ a cancelled or deleted account is skipped');
+  assert.strictEqual(alert.isBillableAccount({ subscription_status: 'canceled' }), false);
+  assert.strictEqual(alert.isBillableAccount(null), false);
+  console.log('✓ trial and null-status accounts are alerted; cancelled and a missing profile are not');
 
   var previousKey = process.env.RESEND_API_KEY;
   var previousCron = process.env.CRON_SECRET;
@@ -412,6 +436,43 @@ async function main() {
     assert.strictEqual(pagedResult.feeds[0].missedDays, 1);
     assert.strictEqual(pagedRows.length > 1000, true);
     console.log('✓ more than 1,000 import rows are read with range()');
+
+    var profileFillers = [];
+    for (var p = 0; p < 1000; p++) {
+      profileFillers.push({
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-' + String(p).padStart(12, '0'),
+        company_name: 'Filler Yard ' + p,
+        subscription_status: 'cancelled'
+      });
+    }
+    profileFillers.push(
+      { id: TRIAL, company_name: 'Trial Yard Ltd', subscription_status: 'trial' },
+      { id: NULL_STATUS, company_name: 'Unset Yard Ltd', subscription_status: null }
+    );
+    var statusRows = daily(TRIAL, 'trial@plant.example', '2026-10-22', '2026-11-02')
+      .concat(daily(NULL_STATUS, 'unset@plant.example', '2026-10-22', '2026-11-02'))
+      .concat(daily(CANCELLED, 'closed@sender.example', '2026-10-22', '2026-11-02'))
+      .concat(daily(DELETED, 'gone@sender.example', '2026-10-22', '2026-11-02'));
+    var statusDb = createSupabase(statusRows, profileFillers.concat([
+      { id: CANCELLED, company_name: 'Closed Yard Ltd', subscription_status: 'cancelled' }
+    ]));
+    var statusResult = await alert.runCheck({
+      supabase: statusDb.supabase,
+      now: today,
+      dryRun: true,
+      fetch: function () { throw new Error('dry run must not send'); }
+    });
+    assert.deepStrictEqual(statusDb.calls.profiles[0], [0, 999]);
+    assert.deepStrictEqual(statusDb.calls.profiles[1], [1000, 1999]);
+    assert.strictEqual(statusResult.overdue, 2);
+    assert.deepStrictEqual(statusResult.feeds.map(function (feed) { return feed.account; }).sort(), [
+      'Trial Yard Ltd',
+      'Unset Yard Ltd'
+    ]);
+    assert.ok(statusDb.calls.selects.every(function (item) {
+      return item.table !== 'profiles' || item.cols.indexOf('subscription_status') !== -1;
+    }));
+    console.log('✓ paged profiles keep trial and null status, and drop cancelled');
 
     sent.length = 0;
     var dryDb = createSupabase(quietRows, profiles);
