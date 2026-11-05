@@ -1,0 +1,80 @@
+# FleetMagnify
+
+> FleetMagnify is a fleet cost intelligence platform that acts as a forensic accountant for your vehicles and heavy machines. It is for commercial fleet operators who need genuine cost visibility, typically fleets of 10 or more vehicles or machines, and it is particularly valuable for mixed fleets operating both trucks and heavy machinery. It uses the reports you already receive. Set your telematics and fuel card providers to email their scheduled reports to your FleetMagnify upload address, and your data flows in automatically. No new hardware, and no manual data entry once it's set up.
+
+FleetMagnify Limited (NZBN 9429053816467) provides the service. The home page says it is currently piloting with New Zealand fleet operators. The home page title is "FleetMagnify | Enterprise Fleet Cost Intelligence".
+
+## What it calculates
+
+From those reports, the public pages say FleetMagnify calculates:
+
+- True total cost of ownership.
+- Cost per kilometre, using a fill-to-fill methodology: actual fuel card purchases paired with odometer readings from the telematics provider, for the fuel cost per kilometre. Depreciation, maintenance, servicing, and Road User Charges are added for a total cost per kilometre. Road User Charges are calculated from the vehicle's gross vehicle mass.
+- Cost per tonne-kilometre, from the payload you enter.
+- Job cost. The Job Cost Analyst assigns machinery assets to specific jobs and tracks daily operating hours from telematics. It calculates fuel cost, depreciation, idle cost, servicing, and maintenance for each machine on each job, per job, per asset, and per operating hour.
+- Idle cost. For heavy machinery and trucks, the home page says idle fuel burn can represent 20-40% of total fuel consumption. The machinery Idle Cost Analyst splits idle cost into idle fuel, depreciation, servicing, and maintenance.
+- CO₂ emissions from actual measured fuel consumption and the New Zealand Ministry for the Environment emission factor of 2.680680605 kg CO₂-e per litre of diesel.
+- Utilisation against a target the operator sets per asset class.
+- A cost and emissions summary for a trip.
+
+Machinery modules named on the features page: Fuel Analyst, Idle Cost Analyst, Emissions Intelligence, True Utilisation Analyst, and Job Cost Analyst. VisionLink reports arrive by email, with more OEM platforms coming soon.
+
+Truck modules named on the features page: Fuel Cost Analyst, Cost Per KM Analyst, Emissions Analyst, and Trip Report. Mileage reports come from eRoad and Navman, and fuel card transactions from BP Fleet Card and Mobil.
+
+The home page describes ten integrated intelligence modules across machinery and trucks, and also names a Reports Centre and Telematics Integration. Fleet setup on the features page is Assets, Integrations, and Settings: add assets, schedule reports to the upload address, and set the diesel price.
+
+## Data sources
+
+This list is the supported platforms page. Reports are emailed to the FleetMagnify upload address. No API connections. No new hardware. Product and company names are trademarks of their respective owners. FleetMagnify is not affiliated with or endorsed by any of the platforms listed.
+
+Available now:
+
+- eRoad. Mileage reports emailed to the upload address, used for cost-per-km calculation.
+- Navman. Mileage, idle, and executive summary reports emailed to the upload address, used to calculate driving and idle fuel costs.
+- BP Fleet Card. Transaction reports emailed to the upload address — litres, cost, date, and vehicle reference — used for fill-to-fill cost calculations.
+- Mobil. Fuel card transaction reports emailed to the upload address, used alongside BP Fleet Card for fill-to-fill cost calculations.
+- VisionLink. Operating hours, idle hours, and fuel consumption reports emailed to the upload address, used for job cost and idle cost analysis.
+
+Not available yet:
+
+- Komtrax. Komatsu machinery reports.
+- CareTrack. Volvo machinery reports.
+- ConSite. Hitachi machinery reports.
+- FleetPin. Truck and light vehicle reports.
+
+The glossary also says Komtrax, ConSite, CareTrack, FleetPin, ActiveCare, and LiDAT are coming soon. ActiveCare and LiDAT are not on the supported platforms page.
+
+## Prices
+
+All prices below are the pricing page, in NZD, and exclude GST. There is a 30-day trial before billing begins.
+
+- Platform: $49 platform fee per month. Required for all accounts — platform access, integrations, email pipeline, and support. The page also lists full platform access, all supported platforms included, the upload email pipeline, asset management and reporting, and email and support. All supported platforms are included in the $49 platform fee.
+- Trucks: $8 per truck per month, plus the $49 per month platform fee. Described as for on-road fleets with connected fuel and mileage data sources.
+- Machinery: $15 per machine per month, plus the $49 per month platform fee. Described as for construction and plant fleets with OEM telematics.
+- Full fleet: $49 platform fee per month, plus $8 per truck per month, plus $15 per machine per month. Described as for mixed fleets — machines and trucks on one platform.
+- Divisions add-on: $10 per division per month, NZD ex GST. The platform guide says divisions are optional. An account with none looks the same as it does today.
+- Pro Insights: coming soon. The card says "Pricing to be announced". The page says Pro Insights is currently in development, and pricing and availability will be announced to existing customers first.
+
+No setup fees. No fixed terms. No minimum commitment. Cancel anytime. Add or remove assets monthly.
+
+Billing, from the pricing questions: you are billed monthly based on the $49 platform fee plus the number of active trucks and machines in your account. Add or remove assets at any time — billing adjusts the following month. There are no minimum terms, no setup fees, and no lock-in periods. You pay month to month for exactly what you have.
+
+The terms of service add that per-asset fees use the active asset count at the start of each billing cycle, and assets marked as not tracked ("ignored") are excluded from billing. Fees are quoted in New Zealand dollars and are exclusive of GST unless stated otherwise. There are no fixed-term contracts.
+
+Signup says: start a 30-day trial. A card is taken now — you won't be charged until day 31, after you've set up your fleet.
+
+Machinery, on the pricing page, means excavators, dump trucks, wheel loaders, motor graders, bulldozers, cranes, forklifts, water trucks, and other plant assets. Trucks means light vehicles, rigid trucks, and semi trailers operating on public roads.
+
+## Pages
+
+- [Home](https://www.fleetmagnify.com/): what FleetMagnify is, what it calculates, and who it is for
+- [Features](https://www.fleetmagnify.com/features.html): every module and how it is calculated
+- [Pricing](https://www.fleetmagnify.com/pricing.html): NZD prices and the common questions
+- [Supported platforms](https://www.fleetmagnify.com/supported-platforms.html): data sources available now and not yet available
+- [Platform guide](https://www.fleetmagnify.com/platform-guide.html): how reports become daily costs, including divisions
+- [Sample reports](https://www.fleetmagnify.com/sample-reports.html): what cost per kilometre, job cost, idle cost, trip, and emissions reports show
+- [Glossary](https://www.fleetmagnify.com/glossary.html): cost, telematics, and financial terms
+- [Contact](https://www.fleetmagnify.com/contact.html): name, company, email, fleet size, and a message, or support@fleetmagnify.com
+- [Privacy policy](https://www.fleetmagnify.com/privacy-policy.html): how FleetMagnify Limited handles personal information under the New Zealand Privacy Act 2020. Last updated 5 July 2026
+- [Terms of service](https://www.fleetmagnify.com/terms-of-service.html): terms for using the service. Last updated 20 October 2026
+- [Sign up](https://www.fleetmagnify.com/signup.html): create an account and start a 30-day trial
