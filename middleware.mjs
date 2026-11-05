@@ -1,5 +1,5 @@
 export const config = {
-  matcher: '/((?!api|_next|css|js|images|favicon.ico).*)',
+  matcher: '/((?!api|_next|css|js|images|favicon.ico|robots.txt|sitemap.xml|llms.txt).*)',
   runtime: 'edge',
 };
 

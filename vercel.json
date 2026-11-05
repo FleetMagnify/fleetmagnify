@@ -29,5 +29,16 @@
     { "source": "/api/rename-division", "destination": "/api/team?action=rename-division" },
     { "source": "/api/delete-division", "destination": "/api/team?action=delete-division" },
     { "source": "/api/set-division-managers", "destination": "/api/team?action=set-division-managers" }
+  ],
+  "headers": [
+    {
+      "source": "/:file(accept-invite|admin|asset-overview|assets|bulk-import|cost-per-km-analyst|divisions|emissions-intelligence|fuel-analyst|home|idle-cost-analyst|integrations|job-cost-analyst|login|orion-fuel-report|reports|settings|trip-report|truck-emissions-analyst|truck-fuel-analyst|truck-idle-monitor|upgrade|upload|utilisation-analyst).html",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    }
   ]
 }
