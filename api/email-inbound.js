@@ -191,22 +191,80 @@ function emailBodyForStorage(fields) {
   return body;
 }
 
-function resolveToEmail(fields) {
-  var to = getField(fields, 'to');
-  if (!to) {
-    var envelopeRaw = getField(fields, 'envelope');
-    if (envelopeRaw) {
-      try {
-        var envelope = JSON.parse(envelopeRaw);
-        if (envelope.to && envelope.to.length) {
-          to = envelope.to[0];
-        }
-      } catch (err) {
-        console.warn('email-inbound: could not parse envelope field', err.message);
-      }
+var RECIPIENT_CAP = 10;
+
+function splitAddressList(raw) {
+  if (!raw) return [];
+  var parts = [];
+  var current = '';
+  var inQuote = false;
+  var inAngle = false;
+  var text = String(raw);
+  for (var i = 0; i < text.length; i++) {
+    var ch = text.charAt(i);
+    if (ch === '"' && !inAngle) {
+      inQuote = !inQuote;
+      current += ch;
+      continue;
     }
+    if (ch === '<' && !inQuote) {
+      inAngle = true;
+      current += ch;
+      continue;
+    }
+    if (ch === '>' && !inQuote) {
+      inAngle = false;
+      current += ch;
+      continue;
+    }
+    if (ch === ',' && !inQuote && !inAngle) {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+    current += ch;
   }
-  return extractEmailAddress(to);
+  if (current) parts.push(current);
+  var out = [];
+  for (var p = 0; p < parts.length; p++) {
+    var addr = extractEmailAddress(parts[p]);
+    if (addr && addr.indexOf('@') !== -1) out.push(addr);
+  }
+  return out;
+}
+
+function envelopeRecipients(fields) {
+  var envelopeRaw = getField(fields, 'envelope');
+  if (!envelopeRaw) return [];
+  try {
+    var envelope = JSON.parse(envelopeRaw);
+    var list = envelope && envelope.to;
+    if (!Array.isArray(list)) return [];
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      if (typeof list[i] !== 'string') continue;
+      var addr = extractEmailAddress(list[i]);
+      if (addr && addr.indexOf('@') !== -1) out.push(addr);
+    }
+    return out;
+  } catch (err) {
+    console.warn('email-inbound: could not parse envelope field', err.message);
+    return [];
+  }
+}
+
+function candidateRecipients(fields) {
+  var ordered = envelopeRecipients(fields).concat(splitAddressList(getField(fields, 'to')));
+  var seen = {};
+  var out = [];
+  for (var i = 0; i < ordered.length; i++) {
+    var addr = ordered[i];
+    if (seen[addr]) continue;
+    seen[addr] = true;
+    out.push(addr);
+    if (out.length >= RECIPIENT_CAP) break;
+  }
+  return out;
 }
 
 function createSupabaseClient() {
@@ -287,34 +345,48 @@ async function processInboundEmail(supabase, input) {
   var files = input.files || [];
 
   try {
-    var toEmail = resolveToEmail(fields);
+    var candidates = candidateRecipients(fields);
     var fromEmail = extractEmailAddress(getField(fields, 'from'));
 
-    if (!toEmail) {
+    if (!candidates.length) {
       console.error('email-inbound: missing to address in webhook payload');
       return { ok: true, message: 'Received — no to address' };
     }
 
-    var uploadPrefix = extractLocalPart(toEmail);
-    console.log('email-inbound: received mail for', toEmail, 'from', fromEmail || '(unknown)');
-
     if (!supabase) supabase = createSupabaseClient();
 
-    var userResult = await supabase
-      .from('user_settings')
-      .select('user_id, upload_email')
-      .eq('upload_email', uploadPrefix)
-      .maybeSingle();
+    var matched = null;
+    for (var c = 0; c < candidates.length; c++) {
+      var candidate = candidates[c];
+      var uploadPrefix = extractLocalPart(candidate);
+      var lookup = await supabase
+        .from('user_settings')
+        .select('user_id, upload_email')
+        .eq('upload_email', uploadPrefix)
+        .maybeSingle();
 
-    if (userResult.error) {
-      console.error('email-inbound: user lookup failed', userResult.error.message);
-      return { ok: true, message: 'Received — user lookup error logged' };
+      if (lookup.error) {
+        console.error('email-inbound: user lookup failed', lookup.error.message);
+        return { ok: true, message: 'Received — user lookup error logged' };
+      }
+
+      if (lookup.data) {
+        matched = { toEmail: candidate, user: lookup.data };
+        break;
+      }
     }
 
-    if (!userResult.data) {
-      console.error('email-inbound: no user_settings row for upload_email prefix', uploadPrefix);
+    if (!matched) {
+      console.error(
+        'email-inbound: no user_settings row for upload_email prefix',
+        extractLocalPart(candidates[0])
+      );
       return { ok: true, message: 'Received — unknown upload address' };
     }
+
+    var toEmail = matched.toEmail;
+    var userResult = { data: matched.user };
+    console.log('email-inbound: received mail for', toEmail, 'from', fromEmail || '(unknown)');
 
     // Now includes XLS/XLSX attachments alongside CSV — BP is the only
     // provider currently known to send XLS (see bp-transaction.js /
