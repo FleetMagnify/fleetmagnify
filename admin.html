@@ -134,11 +134,19 @@
       return aName.localeCompare(bName);
     });
     var sel = document.getElementById('user-select');
-    sel.innerHTML = '<option value="">Select a user...</option>' +
-      users.map(function(u) {
-        var label = u.company_name ? u.company_name + ' (' + u.email + ')' : u.email;
-        return '<option value="' + u.email + '" data-user-id="' + u.id + '">' + label + '</option>';
-      }).join('');
+    while (sel.firstChild) sel.removeChild(sel.firstChild);
+    var placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Select a user...';
+    sel.appendChild(placeholder);
+    users.forEach(function(u) {
+      var label = u.company_name ? u.company_name + ' (' + u.email + ')' : u.email;
+      var option = document.createElement('option');
+      option.value = u.email;
+      option.textContent = label;
+      option.dataset.userId = u.id;
+      sel.appendChild(option);
+    });
     document.getElementById('user-count').textContent = users.length + ' registered users';
     document.getElementById('login-as-btn').disabled = false;
     document.getElementById('invoice-billing-btn').disabled = false;

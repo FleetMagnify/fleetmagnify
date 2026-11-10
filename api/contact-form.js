@@ -14,15 +14,7 @@ var MAX_EMAIL = 254;
 var MAX_MESSAGE = 5000;
 var CONTACT_TO = 'support@fleetmagnify.com';
 var CONTACT_FROM = 'alerts@fleetmagnify.com';
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+var escapeHtml = require('../lib/escape-html');
 
 function trimToString(value) {
   if (value == null) return '';

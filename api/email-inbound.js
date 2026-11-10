@@ -20,6 +20,7 @@ const {
   fetchReportFromLink,
   scrubLinkError,
 } = require('../parsers/email-report-link');
+const escapeHtml = require('../lib/escape-html');
 
 function classifyUnknownCsv(rawCsv) {
   var lines = String(rawCsv).split(/\r?\n/);
@@ -293,9 +294,9 @@ async function sendFailureAlert(filename, errorMessage, userId) {
         to: 'fleetmagnify@gmail.com',
         subject: '⚠️ FleetMagnify Import Failed: ' + (filename || 'unknown file'),
         html: '<p><strong>Import failed</strong></p>' +
-          '<p><strong>File:</strong> ' + (filename || 'unknown') + '</p>' +
-          '<p><strong>Error:</strong> ' + errorMessage + '</p>' +
-          '<p><strong>User ID:</strong> ' + userId + '</p>' +
+          '<p><strong>File:</strong> ' + escapeHtml(filename || 'unknown') + '</p>' +
+          '<p><strong>Error:</strong> ' + escapeHtml(errorMessage) + '</p>' +
+          '<p><strong>User ID:</strong> ' + escapeHtml(userId) + '</p>' +
           '<p>Check the email_imports table in Supabase for details.</p>'
       })
     });
@@ -907,6 +908,7 @@ async function handler(req, res) {
 
 module.exports = handler;
 module.exports.processInboundEmail = processInboundEmail;
+module.exports.sendFailureAlert = sendFailureAlert;
 
 module.exports.config = {
   api: {
