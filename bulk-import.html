@@ -138,11 +138,18 @@
       return (a.company_name || a.email).localeCompare(b.company_name || b.email);
     });
     var sel = document.getElementById('account-select');
-    sel.innerHTML = '<option value="">Select account...</option>' +
-      users.map(function(u) {
-        var label = u.company_name ? u.company_name + ' (' + u.email + ')' : u.email;
-        return '<option value="' + u.id + '">' + label + '</option>';
-      }).join('');
+    while (sel.firstChild) sel.removeChild(sel.firstChild);
+    var placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Select account...';
+    sel.appendChild(placeholder);
+    users.forEach(function(u) {
+      var label = u.company_name ? u.company_name + ' (' + u.email + ')' : u.email;
+      var option = document.createElement('option');
+      option.value = u.id;
+      option.textContent = label;
+      sel.appendChild(option);
+    });
   }
 
   document.getElementById('account-select').addEventListener('change', function() {
