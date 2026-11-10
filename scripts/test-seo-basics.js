@@ -414,6 +414,63 @@ check('llms.txt links the public pages, states the prices, and does not add John
   assert.ok(text.indexOf('aggregateRating') === -1);
 });
 
+function workedPriceExamples(text) {
+  var found = [];
+  var truckOnly = /(\d+)\s+trucks\s+costs\s+\$(\d+)\/month/gi;
+  var match;
+  while ((match = truckOnly.exec(text))) {
+    found.push({
+      trucks: Number(match[1]),
+      machines: 0,
+      total: Number(match[2]),
+      raw: match[0]
+    });
+  }
+  // "10 trucks costs $129" is not the start of a mixed example.
+  var mixed = /(\d+)\s+trucks(?!\s+costs)([\s\S]{0,80}?)(\d+)\s+machines([\s\S]{0,40}?)\$(\d+)\/month/gi;
+  while ((match = mixed.exec(text))) {
+    found.push({
+      trucks: Number(match[1]),
+      machines: Number(match[3]),
+      total: Number(match[5]),
+      raw: match[0].replace(/\s+/g, ' ')
+    });
+  }
+  return found;
+}
+
+function expectedSubscription(example) {
+  return 49 + (8 * example.trucks) + (15 * example.machines);
+}
+
+check('worked fleet totals equal $49 plus $8 per truck plus $15 per machine', function () {
+  var files = ['index.html', 'pricing.html', 'llms.txt'];
+  var all = [];
+  files.forEach(function (filename) {
+    workedPriceExamples(read(filename)).forEach(function (example) {
+      example.file = filename;
+      all.push(example);
+      assert.strictEqual(
+        example.total,
+        expectedSubscription(example),
+        filename + ' "' + example.raw + '" is $' + example.total +
+          ', expected $' + expectedSubscription(example)
+      );
+    });
+  });
+  var indexExamples = all.filter(function (example) { return example.file === 'index.html'; });
+  assert.deepStrictEqual(indexExamples.map(function (example) {
+    return { trucks: example.trucks, machines: example.machines, total: example.total };
+  }), [
+    { trucks: 10, machines: 0, total: 129 },
+    { trucks: 10, machines: 10, total: 279 }
+  ]);
+  assert.ok(read('index.html').indexOf('$249/month') === -1, 'old $249 mixed-fleet total is still present');
+  console.log('       examples: ' + all.map(function (example) {
+    return example.file + ' ' + example.trucks + ' trucks + ' + example.machines + ' machines = $' + example.total;
+  }).join('; '));
+});
+
 check('npm test runs this script', function () {
   var pkg = JSON.parse(read('package.json'));
   assert.ok(pkg.scripts.test.indexOf('node scripts/test-seo-basics.js') !== -1);
