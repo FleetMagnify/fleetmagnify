@@ -3,6 +3,10 @@
  * auto-charged card) for customers with 10+ active assets. Invoices are
  * generated automatically by Stripe each month from the date this is called,
  * due 7 days after issue.
+ *
+ * Requires a signed-in user. The id and email come from that session.
+ * userId and email in the request body are not used, except when a valid
+ * admin secret is supplied. That path still reads them from the body.
  */
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
@@ -30,24 +34,81 @@ function createStripeClient() {
   return new Stripe(secretKey);
 }
 
+function createAuthClient(token) {
+  var serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is not configured');
+  }
+  return createClient(SUPABASE_URL, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: 'Bearer ' + token } }
+  });
+}
+
+async function requireSignedInUser(req) {
+  var authHeader = (req.headers && req.headers.authorization) || '';
+  var token = authHeader.replace('Bearer ', '').trim();
+  if (!token) {
+    return { errorStatus: 401, error: 'Unauthorized' };
+  }
+
+  var userResult = await createAuthClient(token).auth.getUser();
+  if (userResult.error || !userResult.data || !userResult.data.user || !userResult.data.user.id || !userResult.data.user.email) {
+    return { errorStatus: 401, error: 'Invalid session' };
+  }
+  return { user: userResult.data.user };
+}
+
+async function teamMemberBlock(supabase, userId) {
+  var memberCheck = await supabase
+    .from('account_members')
+    .select('account_owner_user_id')
+    .eq('member_auth_user_id', userId)
+    .maybeSingle();
+
+  if (memberCheck.error) {
+    console.error('create-invoice-subscription: membership lookup failed', memberCheck.error.message);
+    return { errorStatus: 500, error: 'Could not verify account ownership' };
+  }
+  if (memberCheck.data) {
+    return { errorStatus: 403, error: 'Billing is managed by your account owner' };
+  }
+  return null;
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    var userId = req.body && req.body.userId;
-    var email = req.body && req.body.email;
     var poNumber = req.body && req.body.poNumber ? String(req.body.poNumber).trim() : '';
     var adminSecret = req.headers['x-admin-secret'];
     var isAdmin = !!(adminSecret && process.env.ADMIN_SECRET && adminSecret === process.env.ADMIN_SECRET);
     var bypassAssetMinimum = !!(isAdmin && req.body && req.body.bypassAssetMinimum);
-
-    if (!userId || !email) {
-      return res.status(400).json({ error: 'userId and email are required' });
-    }
+    var userId;
+    var email;
 
     var supabase = createSupabaseClient();
+    if (isAdmin) {
+      userId = req.body && req.body.userId;
+      email = req.body && req.body.email;
+      if (!userId || !email) {
+        return res.status(400).json({ error: 'userId and email are required' });
+      }
+    } else {
+      var signedIn = await requireSignedInUser(req);
+      if (signedIn.errorStatus) {
+        return res.status(signedIn.errorStatus).json({ error: signedIn.error });
+      }
+      userId = signedIn.user.id;
+      email = signedIn.user.email;
+      var blocked = await teamMemberBlock(supabase, userId);
+      if (blocked) {
+        return res.status(blocked.errorStatus).json({ error: blocked.error });
+      }
+    }
+
     var stripe = createStripeClient();
 
     if (!bypassAssetMinimum) {
@@ -120,6 +181,9 @@ module.exports = async function handler(req, res) {
       },
     });
 
+    // The webhook does not handle customer.subscription.created. An unpaid
+    // first invoice also does not emit invoice.payment_succeeded, so the
+    // profile status for an invoice subscription is recorded here.
     await supabase
       .from('profiles')
       .update({
