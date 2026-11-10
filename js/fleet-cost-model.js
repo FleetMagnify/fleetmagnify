@@ -566,7 +566,8 @@
 
   var DEFAULT_IDLE_RATES = {
     'Excavator': 4.0, 'Dump Truck': 5.5, 'Wheel Loader': 4.5, 'Motor Grader': 3.0,
-    'Bulldozer': 5.0, 'Compactor': 2.5, 'Crane': 4.5, 'Forklift': 1.5,
+    'Bulldozer': 5.0, 'Skidder': 3.5, 'Forestry Harvester': 4.0, 'Swing Machine': 4.0,
+    'Compactor': 2.5, 'Crane': 4.5, 'Forklift': 1.5,
     'Light Vehicle': 1.2, 'Rigid Truck': 2.5, 'Semi Trailer': 3.0,
     'Truck & Trailer': 3.0, 'Water Truck': 3.5, 'Other': 3.0
   };

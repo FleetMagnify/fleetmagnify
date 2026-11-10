@@ -664,6 +664,8 @@
             <option value="Motor Grader">Motor Grader</option>
             <option value="Bulldozer">Bulldozer</option>
             <option value="Skidder">Skidder</option>
+            <option value="Forestry Harvester">Forestry Harvester</option>
+            <option value="Swing Machine">Swing Machine</option>
             <option value="Compactor">Compactor</option>
             <option value="Crane">Crane</option>
             <option value="Forklift">Forklift</option>
@@ -1081,6 +1083,7 @@
 
   var ASSET_TYPE_OPTIONS = [
     'Excavator', 'Dump Truck', 'Wheel Loader', 'Motor Grader', 'Bulldozer', 'Skidder',
+    'Forestry Harvester', 'Swing Machine',
     'Compactor', 'Crane', 'Forklift', 'Light Vehicle', 'Rigid Truck', 'Semi Trailer',
     'Truck & Trailer', 'Water Truck', 'Other'
   ];
@@ -1099,7 +1102,8 @@
 
   var DEFAULT_IDLE_RATES = {
     'Excavator': 4.0, 'Dump Truck': 5.5, 'Wheel Loader': 4.5, 'Motor Grader': 4.0,
-    'Bulldozer': 5.0, 'Compactor': 2.5, 'Crane': 4.5, 'Forklift': 1.5, 'Light Vehicle': 1.2,
+    'Bulldozer': 5.0, 'Skidder': 3.5, 'Forestry Harvester': 4.0, 'Swing Machine': 4.0,
+    'Compactor': 2.5, 'Crane': 4.5, 'Forklift': 1.5, 'Light Vehicle': 1.2,
     'Rigid Truck': 2.5, 'Semi Trailer': 3.0, 'Truck & Trailer': 3.0, 'Water Truck': 3.5, 'Other': 3.0
   };
 
@@ -1832,19 +1836,46 @@
     banner.classList.add('visible');
   }
 
-  function buildAssetTypeOptionsHtml(selectedType) {
-    var selected = (selectedType || '').trim();
-    var html = '<option value="" disabled' + (selected ? '' : ' selected') + '>Select type</option>';
+  function assetTypeChoices(selectedType) {
+    var selected = String(selectedType == null ? '' : selectedType).trim();
+    var choices = [];
     var found = false;
     ASSET_TYPE_OPTIONS.forEach(function(type) {
-      var isSelected = type === selected;
-      if (isSelected) found = true;
+      if (type === selected) found = true;
+      choices.push(type);
+    });
+    if (selected && !found) choices.push(selected);
+    return { selected: selected, choices: choices, unknownAdded: !!(selected && !found) };
+  }
+
+  function buildAssetTypeOptionsHtml(selectedType) {
+    var model = assetTypeChoices(selectedType);
+    var html = '<option value="" disabled' + (model.selected ? '' : ' selected') + '>Select type</option>';
+    model.choices.forEach(function(type) {
+      var isSelected = type === model.selected;
       html += '<option value="' + esc(type) + '"' + (isSelected ? ' selected' : '') + '>' + esc(type) + '</option>';
     });
-    if (selected && !found) {
-      html += '<option value="' + esc(selected) + '" selected>' + esc(selected) + '</option>';
-    }
     return html;
+  }
+
+  function setAssetTypeSelect(selectedType) {
+    var select = document.getElementById('asset-type');
+    var model = assetTypeChoices(selectedType);
+    while (select.options.length) select.remove(0);
+    var placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Select type';
+    placeholder.disabled = true;
+    if (!model.selected) placeholder.selected = true;
+    select.appendChild(placeholder);
+    model.choices.forEach(function(type) {
+      var option = document.createElement('option');
+      option.value = type;
+      option.textContent = type;
+      if (type === model.selected) option.selected = true;
+      select.appendChild(option);
+    });
+    if (model.selected) select.value = model.selected;
   }
 
   function openPendingReviewModal() {
@@ -2557,7 +2588,7 @@
 
   function resetAssetForm() {
     ASSET_FIELD_IDS.forEach(function(id) { document.getElementById(id).value = ''; });
-    document.getElementById('asset-type').selectedIndex = 0;
+    setAssetTypeSelect('');
     document.getElementById('fuel-type').selectedIndex = 0;
     resetTelematicsFields();
     applyAssetTypeFieldVisibility('');
@@ -2595,7 +2626,7 @@
     document.getElementById('modal-error').classList.remove('visible');
     document.getElementById('modal-error').textContent = '';
     document.getElementById('asset-name').value = asset.asset_name || '';
-    setSelectValue('asset-type', asset.asset_type);
+    setAssetTypeSelect(asset.asset_type);
     setSelectValue('fuel-type', asset.fuel_type);
     document.getElementById('asset-make').value = asset.make || '';
     document.getElementById('asset-model').value = asset.model || '';
@@ -2771,7 +2802,7 @@
     'idle_burn_rate_lph', 'current_value', 'estimated_end_of_life_value', 'estimated_annual_repair_cost',
     'expected_life_km', 'service_cost_per_km', 'current_odometer', 'estimated_annual_km'
   ];
-  var MACHINERY_TYPE_NOTE = 'Valid asset_type values: Excavator, Dump Truck, Wheel Loader, Motor Grader, Bulldozer, Crane, Forklift, Water Truck, Other';
+  var MACHINERY_TYPE_NOTE = 'Valid asset_type values: Excavator, Dump Truck, Wheel Loader, Motor Grader, Bulldozer, Skidder, Forestry Harvester, Swing Machine, Crane, Forklift, Water Truck, Other';
   var TRUCKS_TYPE_NOTE = 'Valid asset_type values: Light Vehicle, Rigid Truck, Semi Trailer, Truck & Trailer';
   var ASSET_ID_NOTE = 'asset_id is pre-filled for existing assets — do not edit when updating; leave blank for new assets.';
   var MACHINERY_HEADERS = ['asset_id'].concat(MACHINERY_COLUMNS);
@@ -2924,7 +2955,7 @@
       MACHINERY_SHEET,
       machineryHeaders,
       machineryAssets,
-      'Valid asset_type values: Excavator, Dump Truck, Wheel Loader, Motor Grader, Bulldozer, Crane, Forklift, Water Truck, Other',
+      'Valid asset_type values: Excavator, Dump Truck, Wheel Loader, Motor Grader, Bulldozer, Skidder, Forestry Harvester, Swing Machine, Crane, Forklift, Water Truck, Other',
       ['', 'CAT 390F Excavator', 'Excavator', 'Caterpillar', '390F', 2021, 'Diesel', 4.0, 220000, 25000, 12000, 20000, 4500, 7.20, 40, 75]
     );
 
