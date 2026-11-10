@@ -2,7 +2,7 @@
   "name": "fleetmagnify",
   "private": true,
   "scripts": {
-    "test": "node scripts/test-navman-parsers.js && node scripts/test-visionlink-parser.js && node scripts/test-visionlink-fuel-parser.js && node scripts/test-email-report-link.js && node scripts/test-email-inbound-unimported.js && node scripts/test-email-inbound-envelope.js && node scripts/test-john-deere-utilization.js && node scripts/test-visionlink-idle-rate.js && node scripts/test-idle-cost-per-hour.js && node scripts/test-working-cost-per-hour.js && node scripts/test-asset-overview.js && node scripts/test-asset-overview-range.js && node scripts/test-mobile-nav.js && node scripts/test-missing-feed-alert.js && node scripts/test-seo-basics.js",
+    "test": "node scripts/test-navman-parsers.js && node scripts/test-visionlink-parser.js && node scripts/test-visionlink-fuel-parser.js && node scripts/test-email-report-link.js && node scripts/test-email-inbound-unimported.js && node scripts/test-email-inbound-envelope.js && node scripts/test-john-deere-utilization.js && node scripts/test-visionlink-idle-rate.js && node scripts/test-idle-cost-per-hour.js && node scripts/test-working-cost-per-hour.js && node scripts/test-asset-overview.js && node scripts/test-asset-overview-range.js && node scripts/test-mobile-nav.js && node scripts/test-missing-feed-alert.js && node scripts/test-seo-basics.js && node scripts/test-asset-types.js",
     "fuel-regression": "node lib/fuel-regression.js"
   },
   "dependencies": {
