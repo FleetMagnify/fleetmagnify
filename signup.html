@@ -469,11 +469,23 @@
           signUpResult.data.session
         );
 
+        // Email confirmation can create the user without a session. Checkout
+        // needs the signed-in access token, so send them to sign in first.
+        var sessionResult = await supabase.auth.getSession();
+        var accessToken = sessionResult.data && sessionResult.data.session && sessionResult.data.session.access_token;
+        if (!accessToken) {
+          window.location.href = 'login.html?next=upgrade.html';
+          return;
+        }
+
         submitBtn.textContent = 'Redirecting to checkout…';
 
         var checkoutResponse = await fetch('/api/create-checkout-session', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + accessToken
+          },
           body: JSON.stringify({
             userId: user.id,
             email: email,

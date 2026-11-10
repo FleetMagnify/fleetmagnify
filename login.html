@@ -206,6 +206,10 @@
       <h1>Sign in</h1>
       <p class="card-sub">Access your fleet intelligence dashboard.</p>
 
+      <div id="signup-continue-notice" class="form-success" role="status">
+        Your account is created. If you were asked to confirm your email, do that first, then sign in to continue to checkout.
+      </div>
+
       <div id="form-error" class="form-error" role="alert"></div>
 
       <form id="login-form" novalidate>
@@ -269,6 +273,17 @@
     var backToLogin = document.getElementById('back-to-login');
     var emailInput = document.getElementById('email');
     var resetEmailInput = document.getElementById('reset-email');
+    var nextPage = '';
+    try {
+      if (new URLSearchParams(window.location.search).get('next') === 'upgrade.html') {
+        nextPage = 'upgrade.html';
+      }
+    } catch (e) {
+      nextPage = '';
+    }
+    if (nextPage) {
+      document.getElementById('signup-continue-notice').classList.add('is-visible');
+    }
 
     if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY ||
         window.SUPABASE_URL === 'YOUR_SUPABASE_URL') {
@@ -376,7 +391,7 @@
           await window.FleetMagnifyUploadEmail.ensureUploadEmail(supabase, user.id, companyName);
         }
 
-        window.location.href = 'home.html';
+        window.location.href = nextPage || 'home.html';
       } catch (err) {
         showError(errorEl, friendlyLoginError(err));
         submitBtn.disabled = false;

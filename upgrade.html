@@ -184,6 +184,16 @@
     box.classList.add('is-visible');
   }
 
+  async function signedInHeaders() {
+    var sessionResult = await supabase.auth.getSession();
+    var accessToken = sessionResult.data && sessionResult.data.session && sessionResult.data.session.access_token;
+    if (!accessToken) return null;
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + accessToken
+    };
+  }
+
   async function init() {
     var sessionResult = await supabase.auth.getSession();
     if (!sessionResult.data.session) {
@@ -244,9 +254,15 @@
           checkoutBody.trialPeriodDays = window.FleetMagnifySubscriptionGuard.TRIAL_DAYS;
         }
 
+        var headers = await signedInHeaders();
+        if (!headers) {
+          window.location.href = 'login.html';
+          return;
+        }
+
         var response = await fetch('/api/create-checkout-session', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: headers,
           body: JSON.stringify(checkoutBody)
         });
 
@@ -281,9 +297,15 @@
       btn.textContent = 'Setting up invoicing…';
 
       try {
+        var headers = await signedInHeaders();
+        if (!headers) {
+          window.location.href = 'login.html';
+          return;
+        }
+
         var response = await fetch('/api/create-invoice-subscription', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: headers,
           body: JSON.stringify({
             userId: currentUser.id,
             email: currentUser.email,
