@@ -74,6 +74,7 @@ Machinery, on the pricing page, means excavators, dump trucks, wheel loaders, mo
 - [Platform guide](https://www.fleetmagnify.com/platform-guide.html): how reports become daily costs, including divisions
 - [Sample reports](https://www.fleetmagnify.com/sample-reports.html): what cost per kilometre, job cost, idle cost, trip, and emissions reports show
 - [Glossary](https://www.fleetmagnify.com/glossary.html): cost, telematics, and financial terms
+- [Machine operating cost per hour](https://www.fleetmagnify.com/machine-operating-cost-per-hour.html): how to work out a machine's owning and operating cost per hour, with the formula, a made-up example, and a calculator you fill in yourself
 - [Contact](https://www.fleetmagnify.com/contact.html): name, company, email, fleet size, and a message, or support@fleetmagnify.com
 - [Privacy policy](https://www.fleetmagnify.com/privacy-policy.html): how FleetMagnify Limited handles personal information under the New Zealand Privacy Act 2020. Last updated 5 July 2026
 - [Terms of service](https://www.fleetmagnify.com/terms-of-service.html): terms for using the service. Last updated 20 October 2026

@@ -29,6 +29,7 @@ var PUBLIC = [
   'platform-guide.html',
   'sample-reports.html',
   'glossary.html',
+  'machine-operating-cost-per-hour.html',
   'contact.html',
   'privacy-policy.html',
   'terms-of-service.html',
@@ -261,7 +262,7 @@ check('every public page has one title, one description, one canonical, and the 
   console.log('       hero.jpg ' + hero.width + 'x' + hero.height + ', share card summary_large_image');
 });
 
-check('sitemap lists exactly the 11 public pages and no app page', function () {
+check('sitemap lists exactly the 12 public pages and no app page', function () {
   var xml = read('sitemap.xml');
   assert.ok(!/<lastmod\b/i.test(xml), 'sitemap has lastmod');
   assert.ok(!/<priority\b/i.test(xml), 'sitemap has priority');
@@ -271,7 +272,7 @@ check('sitemap lists exactly the 11 public pages and no app page', function () {
   while ((match = re.exec(xml))) locs.push(match[1]);
   var expected = PUBLIC.map(canonicalFor);
   assert.deepStrictEqual(locs.slice().sort(), expected.slice().sort());
-  assert.strictEqual(locs.length, 11);
+  assert.strictEqual(locs.length, 12);
   locs.forEach(function (loc) {
     assert.ok(loc.indexOf(HOST) === 0, loc);
     if (loc === HOST + '/') {
@@ -357,6 +358,21 @@ check('no HTML file contains aggregateRating, and every JSON-LD block parses', f
     { name: 'Truck Module', price: '8.00', priceCurrency: 'NZD' },
     { name: 'Machine Module', price: '15.00', priceCurrency: 'NZD' }
   ]);
+});
+
+check('machine cost FAQ JSON-LD questions and answers are on the page', function () {
+  var html = read('machine-operating-cost-per-hour.html');
+  var visible = visibleText(html);
+  var faqs = jsonLdBlocks(html).map(JSON.parse).filter(function (block) {
+    return block['@type'] === 'FAQPage';
+  });
+  assert.strictEqual(faqs.length, 1);
+  var questions = faqs[0].mainEntity;
+  assert.strictEqual(questions.length, 4);
+  questions.forEach(function (question) {
+    assert.ok(visible.indexOf(question.name) !== -1, 'missing question: ' + question.name);
+    assert.ok(visible.indexOf(question.acceptedAnswer.text) !== -1, 'missing answer: ' + question.name);
+  });
 });
 
 check('pricing FAQ JSON-LD questions and answers are on the page', function () {
