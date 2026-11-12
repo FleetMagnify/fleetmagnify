@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Machine operating cost per hour | FleetMagnify</title>
+<meta name="description" content="Work out a machine's owning and operating cost per hour in NZD, excluding GST. See the formula, a made-up example, and a calculator you fill in yourself.">
+<link rel="canonical" href="https://www.fleetmagnify.com/machine-operating-cost-per-hour.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="FleetMagnify">
+<meta property="og:title" content="Machine operating cost per hour | FleetMagnify">
+<meta property="og:description" content="Work out a machine's owning and operating cost per hour in NZD, excluding GST. See the formula, a made-up example, and a calculator you fill in yourself.">
+<meta property="og:url" content="https://www.fleetmagnify.com/machine-operating-cost-per-hour.html">
+<meta property="og:image" content="https://www.fleetmagnify.com/images/hero.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://www.fleetmagnify.com/images/hero.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/mobile-responsive.css?v=2">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #E2E8F0; overflow-x: hidden; }
+
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(8,12,18,0.90);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-bottom: 1px solid #2D3748;
+    padding: 0 3rem;
+  }
+  .nav-inner {
+    max-width: 1280px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 68px;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .logo-mark {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: #0EA57A;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 800; color: #080C12; letter-spacing: -0.5px;
+  }
+  .logo-name { font-size: 17px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
+  .logo-name span { color: #0EA57A; }
+  .nav-links { display: flex; align-items: center; gap: 32px; }
+  .nav-links a { font-size: 13.5px; font-weight: 500; color: #9BA4B0; text-decoration: none; transition: color 0.2s; }
+  .nav-links a:hover { color: #F0F2F5; }
+  .nav-actions { display: flex; align-items: center; gap: 12px; }
+  .btn-ghost {
+    background: none; border: 1px solid #2D3748;
+    color: #C8D0DB; font-size: 13px; font-weight: 500;
+    padding: 8px 20px; border-radius: 8px; cursor: pointer;
+    transition: all 0.2s; font-family: inherit;
+  }
+  .btn-ghost:hover { border-color: rgba(255,255,255,0.25); color: #F0F2F5; }
+  .btn-primary {
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 13px; font-weight: 700; padding: 9px 22px;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-primary:hover { background: #0BC48E; }
+  a.btn-ghost, a.btn-primary { text-decoration: none; display: inline-block; text-align: center; }
+
+  .page-header {
+    padding: 90px 3rem 56px;
+    background: #080C12;
+    border-bottom: 1px solid #2D3748;
+    position: relative; overflow: hidden;
+  }
+  .page-header-glow {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 65% 55% at 50% 0%, rgba(14,165,122,0.07) 0%, transparent 70%);
+  }
+  .page-header-inner { max-width: 820px; margin: 0 auto; position: relative; z-index: 1; text-align: center; }
+  .section-eyebrow {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #0EA57A; margin-bottom: 18px;
+    justify-content: center;
+  }
+  .section-eyebrow .dash { width: 16px; height: 1.5px; background: #0EA57A; border-radius: 2px; }
+  .page-header h1 {
+    font-size: 44px; font-weight: 800; letter-spacing: -1.6px;
+    line-height: 1.12; color: #F0F2F5; margin-bottom: 16px;
+  }
+  .page-header .sub {
+    font-size: 16px; color: #9BA4B0; line-height: 1.65;
+    max-width: 680px; margin: 0 auto;
+  }
+
+  .content { padding: 72px 3rem 40px; }
+  .content-inner { max-width: 820px; margin: 0 auto; }
+  .block {
+    background: rgba(255,255,255,0.018);
+    border: 1px solid #2D3748;
+    border-radius: 16px;
+    padding: 32px 36px;
+    margin-bottom: 18px;
+  }
+  .block h2 {
+    font-size: 22px; font-weight: 700; color: #D8DFE8;
+    letter-spacing: -0.4px; margin-bottom: 14px;
+  }
+  .block p, .block li { font-size: 14.5px; color: #8894A0; line-height: 1.75; }
+  .block p + p { margin-top: 12px; }
+  .block a { color: #0EA57A; text-decoration: none; }
+  .block a:hover { color: #0BC48E; }
+  .block ul, .block ol { margin: 12px 0 0 1.2em; }
+  .block li { margin-bottom: 8px; }
+  .gst-note { font-size: 13px; color: #6B7785; margin-top: 14px; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td {
+    text-align: left; font-size: 14px; color: #8894A0;
+    padding: 8px 10px; border-bottom: 1px solid #2D3748; vertical-align: top;
+  }
+  th { color: #9BA4B0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+  td.num, th.num { text-align: right; white-space: nowrap; color: #D8DFE8; }
+  caption { text-align: left; font-size: 13px; color: #6B7785; margin-bottom: 8px; }
+
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 13px; font-weight: 600; color: #C8D0DB; margin-bottom: 6px; }
+  .form-group .unit { font-weight: 500; color: #6B7785; }
+  .form-group input {
+    width: 100%; padding: 12px 14px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid #2D3748; border-radius: 10px;
+    color: #F0F2F5; font-size: 15px; font-family: inherit;
+  }
+  .form-group input::placeholder { color: #5A6474; }
+  .form-group input:focus { outline: none; border-color: rgba(14,165,122,0.55); }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; font-size: 14.5px; font-weight: 600; color: #0EA57A; margin-bottom: 14px; }
+  .fill-btn {
+    background: none; border: 1px solid #2D3748; color: #C8D0DB;
+    font-size: 13px; font-weight: 600; padding: 10px 16px;
+    border-radius: 8px; cursor: pointer; font-family: inherit; margin-top: 4px;
+  }
+  .fill-btn:hover { border-color: rgba(14,165,122,0.45); color: #0EA57A; }
+
+  .headline {
+    font-size: 28px; font-weight: 800; letter-spacing: -0.8px;
+    color: #F0F2F5; line-height: 1.25; margin: 18px 0 8px;
+  }
+  .calc-message { margin-top: 16px; color: #9BA4B0; }
+  #calc-included { margin-top: 12px; }
+
+  footer { border-top: 1px solid #2D3748; padding: 48px 3rem; }
+  .footer-inner {
+    max-width: 1280px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .footer-left { display: flex; align-items: center; gap: 24px; }
+  .footer-logo { display: flex; align-items: center; gap: 9px; }
+  .footer-logo-mark {
+    width: 28px; height: 28px; border-radius: 8px; background: #0EA57A;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 800; color: #080C12;
+  }
+  .footer-logo-name { font-size: 14px; font-weight: 700; color: #3A4A5C; }
+  .footer-copy { font-size: 12px; color: #253040; }
+  .footer-links { display: flex; gap: 24px; flex-wrap: wrap; }
+  .footer-links a { font-size: 12px; color: #253040; text-decoration: none; transition: color 0.2s; }
+  .footer-links a:hover { color: #5A6474; }
+
+  @media (max-width: 900px) {
+    nav { padding: 0 1.5rem; }
+    .page-header { padding: 64px 1.5rem 44px; }
+    .page-header h1 { font-size: 32px; letter-spacing: -1.1px; }
+    .content { padding: 48px 1.5rem 32px; }
+    .block { padding: 24px 22px; }
+    .footer-inner { flex-direction: column; gap: 20px; text-align: center; }
+    .footer-left { flex-direction: column; gap: 8px; }
+  }
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What is owning and operating cost?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Owning cost is the cost of having the machine, whether it works or not. It covers depreciation, finance and interest, and insurance and registration. Operating cost is the cost that rises with every hour the machine runs. It covers fuel, servicing and repairs, tracks or tyres, and the operator if you enter a wage."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does the cost per hour include the operator?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Only if you enter an operator wage. Leave that field blank and the operator is left out. The worked example does not include an operator."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Why use engine hours rather than days?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Fuel, servicing, tracks, and the life of the machine are counted in hours. Two machines can be on site for the same number of days and work very different hours. Hours worked per year turn the yearly costs into a cost per hour."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Which machines does this work for?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Any machine that has a purchase price, working hours and fuel use, including excavators, loaders, dozers, graders, skidders, forestry harvesters and trucks. The method is the same and only the inputs change."
+      }
+    }
+  ]
+}
+</script>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a class="logo" href="index.html">
+      <div class="logo-mark">FM</div>
+      <span class="logo-name">Fleet<span>Magnify</span></span>
+    </a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="features.html">Features</a>
+      <a href="platform-guide.html">Platform Guide</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="glossary.html">Glossary</a>
+      <a href="contact.html">Contact</a>
+    </div>
+    <div class="nav-actions">
+      <a class="btn-ghost" href="login.html">Sign in</a>
+      <a class="btn-primary" href="signup.html">Sign Up</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="page-header-glow"></div>
+  <div class="page-header-inner">
+    <div class="section-eyebrow"><div class="dash"></div> Cost per hour</div>
+    <h1>How much does a machine cost per hour to run?</h1>
+    <p class="sub">Works for excavators, loaders, dozers, graders, skidders, forestry machines and trucks. The inputs are the same for any machine.</p>
+  </div>
+</header>
+
+<main class="content">
+  <div class="content-inner">
+    <section class="block">
+      <p>The hourly cost of running a machine, whether an excavator, loader, dozer or truck, is its owning cost (the cost of having the machine, whether it works or not) plus its operating cost (the cost that rises with every hour it runs), divided by the hours it works. It differs for every machine, so this page shows the formula, a worked example with made-up numbers, and a calculator you can fill in with your own.</p>
+      <p class="gst-note">All figures on this page are in New Zealand dollars and exclude GST.</p>
+    </section>
+
+    <section class="block">
+      <h2>The formula</h2>
+      <ul>
+        <li>Depreciation per hour = (purchase price minus expected resale value) divided by expected life in hours</li>
+        <li>Finance and interest per hour = interest rate x average investment, divided by hours worked per year, where average investment = (purchase price + resale value) / 2</li>
+        <li>Insurance and registration per hour = yearly insurance and registration divided by hours worked per year</li>
+        <li>Fuel per hour = fuel price x average litres per hour, where average litres per hour = (share of hours working x working burn rate) + (share of hours idling x idle burn rate)</li>
+        <li>Servicing and repairs per hour = the visitor's own $ per hour figure</li>
+        <li>Tracks or tyres per hour = cost of a set divided by the hours a set lasts</li>
+        <li>Operator per hour (optional) = wage and on-costs per hour; left at 0 if blank</li>
+        <li>Total cost per hour = owning cost per hour + operating cost per hour</li>
+      </ul>
+    </section>
+
+    <section class="block">
+      <h2>Worked example: an excavator (made-up numbers, not a benchmark)</h2>
+      <p>These figures are invented for the example. They are not a typical rate, a hire rate, or a benchmark.</p>
+      <table>
+        <caption>Worked example with invented figures, not a benchmark.</caption>
+        <thead>
+          <tr><th>Input or result</th><th class="num">Figure</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Purchase price</td><td class="num">$250,000</td></tr>
+          <tr><td>Resale value after 5 years</td><td class="num">$100,000</td></tr>
+          <tr><td>Hours worked per year</td><td class="num">1,500</td></tr>
+          <tr><td>Expected life</td><td class="num">7,500 hours</td></tr>
+          <tr><td>Interest rate</td><td class="num">8%</td></tr>
+          <tr><td>Insurance and registration</td><td class="num">$4,500 a year</td></tr>
+          <tr><td>Working fuel burn</td><td class="num">14 L/h</td></tr>
+          <tr><td>Idle fuel burn</td><td class="num">4 L/h</td></tr>
+          <tr><td>Idle share of engine hours</td><td class="num">20%</td></tr>
+          <tr><td>Fuel price</td><td class="num">$2.00 per litre</td></tr>
+          <tr><td>Servicing and repairs</td><td class="num">$12.00 per hour</td></tr>
+          <tr><td>Tracks</td><td class="num">$20,000 a set lasting 4,000 hours</td></tr>
+          <tr><td>Operator</td><td class="num">Not included</td></tr>
+          <tr><td>Depreciation</td><td class="num">$20.00/h</td></tr>
+          <tr><td>Finance and interest</td><td class="num">$9.33/h</td></tr>
+          <tr><td>Insurance and registration per hour</td><td class="num">$3.00/h</td></tr>
+          <tr><td>Owning cost</td><td class="num">$32.33/h</td></tr>
+          <tr><td>Average fuel burn</td><td class="num">12.0 L/h</td></tr>
+          <tr><td>Fuel</td><td class="num">$24.00/h</td></tr>
+          <tr><td>Of which idling</td><td class="num">$1.60/h</td></tr>
+          <tr><td>Servicing and repairs per hour</td><td class="num">$12.00/h</td></tr>
+          <tr><td>Tracks per hour</td><td class="num">$5.00/h</td></tr>
+          <tr><td>Operating cost</td><td class="num">$41.00/h</td></tr>
+          <tr><td>Total</td><td class="num">$73.33/h</td></tr>
+        </tbody>
+      </table>
+      <p>In this example idling uses 300 hours and 1,200 litres a year, which is $2,400 of fuel for a machine that is not moving any dirt.</p>
+    </section>
+
+    <section class="block">
+      <h2>What's my machine costing me?</h2>
+      <p>Type your own numbers. The grey text is only an example of what to enter. It is not filled in for you.</p>
+      <form id="cost-form" action="#" autocomplete="off">
+        <div class="form-group">
+          <label for="purchase">Purchase price <span class="unit">($)</span></label>
+          <input id="purchase" inputmode="decimal" placeholder="250000">
+        </div>
+        <div class="form-group">
+          <label for="resale">Resale value when you sell it <span class="unit">($)</span></label>
+          <input id="resale" inputmode="decimal" placeholder="100000">
+        </div>
+        <div class="form-group">
+          <label for="hours">Hours it works per year</label>
+          <input id="hours" inputmode="decimal" placeholder="1500">
+        </div>
+        <div class="form-group">
+          <label for="years">How long you keep it <span class="unit">(years)</span></label>
+          <input id="years" inputmode="decimal" placeholder="5">
+        </div>
+        <div class="form-group">
+          <label for="working-burn">Fuel it burns while working <span class="unit">(litres per hour)</span></label>
+          <input id="working-burn" inputmode="decimal" placeholder="14">
+        </div>
+        <div class="form-group">
+          <label for="fuel-price">Fuel price <span class="unit">($ per litre)</span></label>
+          <input id="fuel-price" inputmode="decimal" placeholder="2.00">
+        </div>
+        <div class="form-group">
+          <label for="servicing">Servicing and repairs <span class="unit">($ per hour)</span></label>
+          <input id="servicing" inputmode="decimal" placeholder="12.00">
+        </div>
+
+        <details id="more-detail">
+          <summary>Add more detail for a fuller answer</summary>
+          <div class="form-group">
+            <label for="interest">Interest rate <span class="unit">(%)</span></label>
+            <input id="interest" inputmode="decimal" placeholder="8">
+          </div>
+          <div class="form-group">
+            <label for="insurance">Insurance and registration <span class="unit">($ per year)</span></label>
+            <input id="insurance" inputmode="decimal" placeholder="4500">
+          </div>
+          <div class="form-group">
+            <label for="tracks-cost">Tracks or tyres, cost of a set <span class="unit">($)</span></label>
+            <input id="tracks-cost" inputmode="decimal" placeholder="20000">
+          </div>
+          <div class="form-group">
+            <label for="tracks-hours">Hours a set of tracks or tyres lasts</label>
+            <input id="tracks-hours" inputmode="decimal" placeholder="4000">
+          </div>
+          <div class="form-group">
+            <label for="idle-share">Share of engine hours spent idling <span class="unit">(%)</span></label>
+            <input id="idle-share" inputmode="decimal" placeholder="20">
+          </div>
+          <div class="form-group">
+            <label for="idle-burn">Idle burn <span class="unit">(litres per hour)</span></label>
+            <input id="idle-burn" inputmode="decimal" placeholder="4">
+          </div>
+          <div class="form-group">
+            <label for="operator">Operator wage <span class="unit">($ per hour)</span></label>
+            <input id="operator" inputmode="decimal" placeholder="Leave blank to leave the operator out">
+          </div>
+        </details>
+        <button type="button" class="fill-btn" id="fill-example">Fill with the example</button>
+      </form>
+
+      <div id="calc-result">
+        <p id="calc-message" class="calc-message">Enter the questions above to see a cost per hour.</p>
+        <p id="calc-headline" class="headline" hidden></p>
+        <table id="calc-table" hidden>
+          <caption>Your breakdown, from the numbers you entered.</caption>
+          <thead>
+            <tr><th>Cost</th><th class="num">Per hour</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Owning cost</td><td class="num" id="out-owning"></td></tr>
+            <tr><td>Operating cost</td><td class="num" id="out-operating"></td></tr>
+            <tr><td>Total</td><td class="num" id="out-total"></td></tr>
+          </tbody>
+        </table>
+        <p id="calc-idle" hidden></p>
+        <p id="calc-note" hidden>This includes only the costs you entered. Add more detail above for a fuller answer.</p>
+        <ul id="calc-included" hidden></ul>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>What is included and what is not</h2>
+      <p>Depreciation is the drop from the purchase price to the resale value you expect, spread over the hours you expect the machine to work. In the calculator, those hours are the hours per year multiplied by the years you keep it.</p>
+      <p>Finance and interest is the interest rate times the average of the purchase price and the resale value, then divided by the hours worked in a year. It is a simple yearly interest figure. It is not a lender's repayment schedule.</p>
+      <p>Insurance and registration is the yearly amount, divided by the hours worked in a year.</p>
+      <p>Fuel is the fuel price times the average litres per hour. The average mixes the working burn and the idle burn by the share of engine hours spent idling. If you leave the idle fields blank, every hour uses the working burn rate.</p>
+      <p>Servicing and repairs is your own dollar figure per hour. This page does not estimate it for you.</p>
+      <p>Tracks or tyres is the cost of a set divided by the hours that set lasts.</p>
+      <p>The operator is the wage and on-costs per hour, and only if you enter it.</p>
+      <p>Operator wages, transport, attachments and GST are excluded unless you enter the operator wage. The numbers are only as good as the inputs.</p>
+    </section>
+
+    <section class="block">
+      <h2>How much of the fuel bill is idling?</h2>
+      <p>The idle share is the part of engine hours the machine is running but not doing work. The idle burn is how many litres it uses in each of those hours. Fuel per hour uses both, so you can see how much of the hourly fuel cost is fuel burned while the machine is not working.</p>
+      <p>FleetMagnify calculates idle time and idle fuel cost for each machine from your own telematics and fuel reports.</p>
+      <p><a href="features.html">See how that is calculated on the features page.</a></p>
+      <p><a href="signup.html">Start a 30-day trial. We'll take a card now — you won't be charged until day 31, after you've set up your fleet.</a></p>
+    </section>
+
+    <section class="block">
+      <h2>Frequently asked questions</h2>
+      <h3>What is owning and operating cost?</h3>
+      <p>Owning cost is the cost of having the machine, whether it works or not. It covers depreciation, finance and interest, and insurance and registration. Operating cost is the cost that rises with every hour the machine runs. It covers fuel, servicing and repairs, tracks or tyres, and the operator if you enter a wage.</p>
+      <h3>Does the cost per hour include the operator?</h3>
+      <p>Only if you enter an operator wage. Leave that field blank and the operator is left out. The worked example does not include an operator.</p>
+      <h3>Why use engine hours rather than days?</h3>
+      <p>Fuel, servicing, tracks, and the life of the machine are counted in hours. Two machines can be on site for the same number of days and work very different hours. Hours worked per year turn the yearly costs into a cost per hour.</p>
+      <h3>Which machines does this work for?</h3>
+      <p>Any machine that has a purchase price, working hours and fuel use, including excavators, loaders, dozers, graders, skidders, forestry harvesters and trucks. The method is the same and only the inputs change.</p>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">
+      <div class="footer-logo">
+        <div class="footer-logo-mark">FM</div>
+        <span class="footer-logo-name">FleetMagnify</span>
+      </div>
+      <span class="footer-copy">© 2026 FleetMagnify Limited. Enterprise Fleet Cost Intelligence.</span>
+    </div>
+    <div class="footer-links">
+      <a href="privacy-policy.html">Privacy</a>
+      <a href="terms-of-service.html">Terms</a>
+      <a href="contact.html">Contact</a>
+    </div>
+  </div>
+</footer>
+
+<script src="js/operating-cost.js"></script>
+<script>
+(function() {
+  var fields = ['purchase','resale','hours','years','working-burn','fuel-price','servicing','interest','insurance','tracks-cost','tracks-hours','idle-share','idle-burn','operator'];
+
+  function raw(id) {
+    return document.getElementById(id).value.replace(/[$,%\s]/g, '');
+  }
+
+  function entered(id) {
+    return document.getElementById(id).value.trim() !== '';
+  }
+
+  function money(n) {
+    var rounded = Math.round(n * 100) / 100;
+    var negative = rounded < 0;
+    var parts = Math.abs(rounded).toFixed(2).split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return (negative ? '-$' : '$') + parts.join('.');
+  }
+
+  function litres(n) {
+    var tenths = Math.round(n * 10) / 10;
+    var negative = tenths < 0;
+    var text = (Math.abs(tenths) % 1 === 0) ? String(Math.abs(Math.round(tenths))) : Math.abs(tenths).toFixed(1);
+    var parts = text.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return (negative ? '-' : '') + parts.join('.');
+  }
+
+  function burn(n) {
+    return (Math.round(n * 10) / 10).toFixed(1);
+  }
+
+  function showMessage(text) {
+    document.getElementById('calc-message').hidden = false;
+    document.getElementById('calc-message').textContent = text;
+    document.getElementById('calc-headline').hidden = true;
+    document.getElementById('calc-table').hidden = true;
+    document.getElementById('calc-idle').hidden = true;
+    document.getElementById('calc-note').hidden = true;
+    document.getElementById('calc-included').hidden = true;
+  }
+
+  function addLine(text) {
+    var li = document.createElement('li');
+    li.textContent = text;
+    document.getElementById('calc-included').appendChild(li);
+  }
+
+  function render() {
+    var list = document.getElementById('calc-included');
+    while (list.firstChild) list.removeChild(list.firstChild);
+
+    var mainIds = ['purchase','resale','hours','years','working-burn','fuel-price','servicing'];
+    var missingMain = mainIds.some(function(id) { return !entered(id); });
+    if (missingMain) {
+      showMessage('Enter the questions above to see a cost per hour.');
+      return;
+    }
+
+    var result = machineOperatingCost({
+      purchasePrice: raw('purchase'),
+      resaleValue: raw('resale'),
+      hoursPerYear: raw('hours'),
+      yearsKept: raw('years'),
+      workingBurnLph: raw('working-burn'),
+      fuelPrice: raw('fuel-price'),
+      servicingPerHour: raw('servicing'),
+      interestRatePercent: entered('interest') ? raw('interest') : null,
+      insurancePerYear: entered('insurance') ? raw('insurance') : null,
+      tracksCost: entered('tracks-cost') ? raw('tracks-cost') : null,
+      tracksHours: entered('tracks-hours') ? raw('tracks-hours') : null,
+      idleSharePercent: entered('idle-share') ? raw('idle-share') : null,
+      idleBurnLph: entered('idle-burn') ? raw('idle-burn') : null,
+      operatorPerHour: entered('operator') ? raw('operator') : null
+    });
+
+    if (!result || result.error || !isFinite(result.totalPerHour)) {
+      showMessage(result && result.error ? result.error : 'Enter the questions above to see a cost per hour.');
+      return;
+    }
+
+    document.getElementById('calc-message').hidden = true;
+    document.getElementById('calc-headline').hidden = false;
+    document.getElementById('calc-headline').textContent = 'Your machine is costing you about ' + money(result.totalPerHour) + ' per hour';
+    document.getElementById('out-owning').textContent = money(result.owningPerHour);
+    document.getElementById('out-operating').textContent = money(result.operatingPerHour);
+    document.getElementById('out-total').textContent = money(result.totalPerHour);
+    document.getElementById('calc-table').hidden = false;
+    document.getElementById('calc-note').hidden = false;
+    list.hidden = false;
+
+    addLine('Depreciation ' + money(result.depreciationPerHour) + ' per hour');
+    if (entered('interest')) addLine('Finance and interest ' + money(result.financePerHour) + ' per hour');
+    if (entered('insurance')) addLine('Insurance and registration ' + money(result.insurancePerHour) + ' per hour');
+    addLine('Fuel ' + money(result.fuelPerHour) + ' per hour (' + burn(result.averageBurnLph) + ' L/h)');
+    addLine('Servicing and repairs ' + money(result.servicingPerHour) + ' per hour');
+    if (entered('tracks-cost') || entered('tracks-hours')) addLine('Tracks or tyres ' + money(result.tracksPerHour) + ' per hour');
+    if (entered('operator')) addLine('Operator ' + money(result.operatorPerHour) + ' per hour');
+
+    var idleLine = document.getElementById('calc-idle');
+    if (entered('idle-share') || entered('idle-burn')) {
+      idleLine.hidden = false;
+      idleLine.textContent = 'Idling uses ' + litres(result.idleLitresPerYear) + ' litres a year, costing ' + money(result.idleFuelPerYear) + '.';
+    } else {
+      idleLine.hidden = true;
+      idleLine.textContent = '';
+    }
+  }
+
+  fields.forEach(function(id) {
+    document.getElementById(id).addEventListener('input', render);
+  });
+
+  document.getElementById('cost-form').addEventListener('submit', function(event) {
+    event.preventDefault();
+  });
+
+  document.getElementById('fill-example').addEventListener('click', function() {
+    var example = {
+      purchase: '250000',
+      resale: '100000',
+      hours: '1500',
+      years: '5',
+      'working-burn': '14',
+      'fuel-price': '2.00',
+      servicing: '12.00',
+      interest: '8',
+      insurance: '4500',
+      'tracks-cost': '20000',
+      'tracks-hours': '4000',
+      'idle-share': '20',
+      'idle-burn': '4',
+      operator: ''
+    };
+    fields.forEach(function(id) {
+      document.getElementById(id).value = example[id];
+    });
+    document.getElementById('more-detail').open = true;
+    render();
+  });
+
+  render();
+})();
+</script>
+<script src="js/mobile-nav.js" defer></script>
+<script defer src="/_vercel/insights/script.js"></script>
+</body>
+</html>
