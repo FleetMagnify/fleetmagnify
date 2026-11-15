@@ -487,6 +487,16 @@ check('worked fleet totals equal $49 plus $8 per truck plus $15 per machine', fu
   }).join('; '));
 });
 
+check('index.html links the cost calculator from the Resources section', function () {
+  var html = read('index.html');
+  var start = html.indexOf('<section class="resources">');
+  var end = html.indexOf('</section>', start);
+  assert.ok(start !== -1 && end > start, 'Resources section');
+  var section = html.slice(start, end);
+  assert.ok(section.indexOf('href="machine-operating-cost-per-hour.html"') !== -1, 'Resources link');
+  assert.ok(html.slice(end).indexOf('href="machine-operating-cost-per-hour.html"') !== -1, 'footer link still present');
+});
+
 check('npm test runs this script', function () {
   var pkg = JSON.parse(read('package.json'));
   assert.ok(pkg.scripts.test.indexOf('node scripts/test-seo-basics.js') !== -1);
