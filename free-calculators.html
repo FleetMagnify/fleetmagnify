@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Free fleet and machine calculators | FleetMagnify</title>
+<meta name="description" content="Free calculators for machine and truck owners: work out cost per hour and utilisation rate from your own numbers. No sign-in required.">
+<link rel="canonical" href="https://www.fleetmagnify.com/free-calculators.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="FleetMagnify">
+<meta property="og:title" content="Free fleet and machine calculators | FleetMagnify">
+<meta property="og:description" content="Free calculators for machine and truck owners: work out cost per hour and utilisation rate from your own numbers. No sign-in required.">
+<meta property="og:url" content="https://www.fleetmagnify.com/free-calculators.html">
+<meta property="og:image" content="https://www.fleetmagnify.com/images/hero.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://www.fleetmagnify.com/images/hero.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/mobile-responsive.css?v=2">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #080C12; color: #E2E8F0; overflow-x: hidden; }
+
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(8,12,18,0.90);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-bottom: 1px solid #2D3748;
+    padding: 0 3rem;
+  }
+  .nav-inner {
+    max-width: 1280px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 68px;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .logo-mark {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: #0EA57A;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 800; color: #080C12; letter-spacing: -0.5px;
+  }
+  .logo-name { font-size: 17px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
+  .logo-name span { color: #0EA57A; }
+  .nav-links { display: flex; align-items: center; gap: 32px; }
+  .nav-links a { font-size: 13.5px; font-weight: 500; color: #9BA4B0; text-decoration: none; transition: color 0.2s; }
+  .nav-links a:hover { color: #F0F2F5; }
+  .nav-links a.active { color: #0EA57A; }
+  .nav-actions { display: flex; align-items: center; gap: 12px; }
+  .btn-ghost {
+    background: none; border: 1px solid #2D3748;
+    color: #C8D0DB; font-size: 13px; font-weight: 500;
+    padding: 8px 20px; border-radius: 8px; cursor: pointer;
+    transition: all 0.2s; font-family: inherit;
+  }
+  .btn-ghost:hover { border-color: rgba(255,255,255,0.25); color: #F0F2F5; }
+  .btn-primary {
+    background: #0EA57A; border: none; color: #080C12;
+    font-size: 13px; font-weight: 700; padding: 9px 22px;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .btn-primary:hover { background: #0BC48E; }
+  a.btn-ghost, a.btn-primary { text-decoration: none; display: inline-block; text-align: center; }
+
+  .page-header {
+    padding: 90px 3rem 56px;
+    background: #080C12;
+    border-bottom: 1px solid #2D3748;
+    position: relative; overflow: hidden;
+  }
+  .page-header-glow {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 65% 55% at 50% 0%, rgba(14,165,122,0.07) 0%, transparent 70%);
+  }
+  .page-header-inner { max-width: 820px; margin: 0 auto; position: relative; z-index: 1; text-align: center; }
+  .section-eyebrow {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #0EA57A; margin-bottom: 18px;
+    justify-content: center;
+  }
+  .section-eyebrow .dash { width: 16px; height: 1.5px; background: #0EA57A; border-radius: 2px; }
+  .page-header h1 {
+    font-size: 44px; font-weight: 800; letter-spacing: -1.6px;
+    line-height: 1.12; color: #F0F2F5; margin-bottom: 16px;
+  }
+  .page-header .sub {
+    font-size: 16px; color: #9BA4B0; line-height: 1.65;
+    max-width: 680px; margin: 0 auto;
+  }
+
+  .content { padding: 72px 3rem 40px; }
+  .content-inner { max-width: 820px; margin: 0 auto; }
+  .block {
+    background: rgba(255,255,255,0.018);
+    border: 1px solid #2D3748;
+    border-radius: 16px;
+    padding: 32px 36px;
+    margin-bottom: 18px;
+  }
+  .block p { font-size: 14.5px; color: #8894A0; line-height: 1.75; }
+  .block p + p { margin-top: 12px; }
+  .block a { color: #0EA57A; text-decoration: none; }
+  .block a:hover { color: #0BC48E; }
+
+  .resources-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+    gap: 24px;
+    margin-bottom: 18px;
+  }
+  .feat-card {
+    background: rgba(255,255,255,0.018);
+    border: 1px solid #2D3748;
+    border-radius: 16px; padding: 32px;
+    transition: border-color 0.25s, background 0.25s;
+    position: relative; overflow: hidden;
+  }
+  .feat-card:hover { border-color: rgba(14,165,122,0.22); background: rgba(14,165,122,0.02); }
+  .feat-card h2 {
+    font-size: 17px; font-weight: 700; color: #D8DFE8;
+    margin-bottom: 10px; letter-spacing: -0.3px;
+  }
+  .feat-card p { font-size: 13.5px; color: #4A5568; line-height: 1.65; }
+  .resource-link {
+    display: inline-block; margin-top: 20px;
+    font-size: 13.5px; font-weight: 700; color: #0EA57A;
+    text-decoration: none; transition: color 0.2s;
+  }
+  .resource-link:hover { color: #0BC48E; }
+
+  footer { border-top: 1px solid #2D3748; padding: 48px 3rem; }
+  .footer-inner {
+    max-width: 1280px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .footer-left { display: flex; align-items: center; gap: 24px; }
+  .footer-logo { display: flex; align-items: center; gap: 9px; }
+  .footer-logo-mark {
+    width: 28px; height: 28px; border-radius: 8px; background: #0EA57A;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 800; color: #080C12;
+  }
+  .footer-logo-name { font-size: 14px; font-weight: 700; color: #3A4A5C; }
+  .footer-copy { font-size: 12px; color: #253040; }
+  .footer-links { display: flex; gap: 24px; flex-wrap: wrap; }
+  .footer-links a { font-size: 12px; color: #253040; text-decoration: none; transition: color 0.2s; }
+  .footer-links a:hover { color: #5A6474; }
+
+  @media (max-width: 900px) {
+    nav { padding: 0 1.5rem; }
+    .page-header { padding: 64px 1.5rem 44px; }
+    .page-header h1 { font-size: 32px; letter-spacing: -1.1px; }
+    .content { padding: 48px 1.5rem 32px; }
+    .block { padding: 24px 22px; }
+    .footer-inner { flex-direction: column; gap: 20px; text-align: center; }
+    .footer-left { flex-direction: column; gap: 8px; }
+    .footer-links { justify-content: center; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a class="logo" href="index.html">
+      <div class="logo-mark">FM</div>
+      <span class="logo-name">Fleet<span>Magnify</span></span>
+    </a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="features.html">Features</a>
+      <a href="platform-guide.html">Platform Guide</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="free-calculators.html" class="active">Free calculators</a>
+      <a href="contact.html">Contact</a>
+    </div>
+    <div class="nav-actions">
+      <a class="btn-ghost" href="login.html">Sign in</a>
+      <a class="btn-primary" href="signup.html">Sign Up</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="page-header-glow"></div>
+  <div class="page-header-inner">
+    <div class="section-eyebrow"><div class="dash"></div> Calculators</div>
+    <h1>Free calculators</h1>
+    <p class="sub">Free, no sign-in. Everything runs in your browser; nothing is stored or sent.</p>
+  </div>
+</header>
+
+<main>
+  <div class="content">
+    <div class="content-inner">
+      <section class="block">
+        <p>There are two free calculators for owners and managers of machines and trucks. Each one uses only the numbers you enter.</p>
+      </section>
+
+      <div class="resources-grid">
+        <div class="feat-card">
+          <h2>What's my machine costing me?</h2>
+          <p>Work out what any machine costs per hour to run, from your own numbers. Free, no sign-in.</p>
+          <a class="resource-link" href="machine-operating-cost-per-hour.html">Open the cost per hour calculator →</a>
+        </div>
+        <div class="feat-card">
+          <h2>What's my utilisation rate?</h2>
+          <p>Work out how much of its available time an asset actually works. Free, no sign-in.</p>
+          <a class="resource-link" href="fleet-utilisation-rate-formula.html">Open the utilisation rate calculator →</a>
+        </div>
+      </div>
+
+      <section class="block">
+        <p>Not sure what a term means? <a href="glossary.html">See the glossary.</a></p>
+      </section>
+
+      <section class="block">
+        <p><a href="signup.html">Start a 30-day trial. We'll take a card now — you won't be charged until day 31, after you've set up your fleet.</a></p>
+        <p><a href="features.html">See how that is calculated on the features page.</a></p>
+      </section>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">
+      <div class="footer-logo">
+        <div class="footer-logo-mark">FM</div>
+        <span class="footer-logo-name">FleetMagnify</span>
+      </div>
+      <span class="footer-copy">© 2026 FleetMagnify Limited. Enterprise Fleet Cost Intelligence.</span>
+    </div>
+    <div class="footer-links">
+      <a href="privacy-policy.html">Privacy</a>
+      <a href="terms-of-service.html">Terms</a>
+      <a href="contact.html">Contact</a>
+      <a href="glossary.html">Glossary</a>
+      <a href="free-calculators.html">Free calculators</a>
+    </div>
+  </div>
+</footer>
+
+<script src="js/mobile-nav.js" defer></script>
+<script defer src="/_vercel/insights/script.js"></script>
+</body>
+</html>
