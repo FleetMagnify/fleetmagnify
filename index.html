@@ -112,6 +112,19 @@
     max-width: 460px; margin-bottom: 40px;
   }
   .hero-actions { display: flex; align-items: center; gap: 14px; margin-bottom: 48px; flex-wrap: wrap; position: relative; z-index: 2; }
+  .hero-calc-link {
+    margin-top: -24px;
+    font-size: 14px;
+    line-height: 1.4;
+    text-align: left;
+  }
+  .hero-calc-link a {
+    color: #6B7785;
+    font-weight: 400;
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .hero-calc-link a:hover { color: #0EA57A; }
   .hero-signin { display: none; }
   .hero-cta-label-mobile { display: none; }
   .btn-hero-cta {
@@ -435,7 +448,7 @@
   .btn-cta-sec:hover { border-color: rgba(255,255,255,0.22); color: #F0F2F5; }
 
   /* ── RESOURCES ── */
-  .resources { padding: 100px 3rem; border-top: 1px solid #2D3748; }
+  .resources { padding: 100px 3rem; border-top: 1px solid #2D3748; scroll-margin-top: 69px; }
   .resources-inner { max-width: 1280px; margin: 0 auto; }
   .resources-grid {
     display: grid;
@@ -623,6 +636,11 @@
       align-items: stretch;
       gap: 10px;
       margin-bottom: 0;
+    }
+    .hero-calc-link {
+      margin-top: 12px;
+      max-width: 100%;
+      text-align: left;
     }
     .btn-hero-cta,
     .hero-signin {
@@ -837,6 +855,7 @@
         </a>
         <a class="btn-hero-outline hero-signin" href="login.html">Sign In</a>
       </div>
+      <p class="hero-calc-link"><a href="#resources">Or try our free calculators →</a></p>
     </div>
 
     <!-- Right visual -->
@@ -1202,7 +1221,7 @@
 </section>
 
 <!-- ── RESOURCES ───────────────────────────────── -->
-<section class="resources">
+<section class="resources" id="resources">
   <div class="resources-inner">
     <div class="section-eyebrow"><div class="dash"></div> Resources</div>
     <div class="resources-grid">
