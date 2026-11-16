@@ -15,7 +15,7 @@
   .card h2 { font-size: 15px; font-weight: 700; color: #F0F2F5; margin-bottom: 16px; }
   .form-group { margin-bottom: 16px; }
   label { display: block; font-size: 12px; font-weight: 600; color: #9BA4B0; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
-  input[type="password"], input[type="file"], select { width: 100%; padding: 10px 14px; background: rgba(255,255,255,0.04); border: 1px solid #2D3748; border-radius: 8px; color: #F0F2F5; font-size: 13px; font-family: inherit; outline: none; }
+  input[type="email"], input[type="password"], input[type="file"], select { width: 100%; padding: 10px 14px; background: rgba(255,255,255,0.04); border: 1px solid #2D3748; border-radius: 8px; color: #F0F2F5; font-size: 13px; font-family: inherit; outline: none; }
   input[type="file"] { cursor: pointer; }
   .btn { padding: 11px 22px; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
   .btn-teal { background: #0EA57A; color: #080C12; }
@@ -39,16 +39,20 @@
   <h1>📦 FleetMagnify Bulk Import</h1>
   <p class="sub">Admin tool — upload historical CSV data for any account.</p>
 
-  <!-- Password gate -->
+  <!-- Sign-in gate -->
   <div id="gate-view" class="visible">
     <div class="card">
       <h2>🔒 Admin Access Required</h2>
       <div class="form-group">
-        <label>Admin Password</label>
-        <input type="password" id="gate-password" placeholder="Enter admin password">
+        <label for="gate-email">Email</label>
+        <input type="email" id="gate-email" autocomplete="username" placeholder="Email">
       </div>
-      <div class="error-msg" id="gate-error">Incorrect password.</div>
-      <button type="button" class="btn btn-teal" id="gate-btn">Unlock →</button>
+      <div class="form-group">
+        <label for="gate-password">Password</label>
+        <input type="password" id="gate-password" autocomplete="current-password" placeholder="Password">
+      </div>
+      <div class="error-msg" id="gate-error">Incorrect email or password.</div>
+      <button type="button" class="btn btn-teal" id="gate-btn">Sign in</button>
     </div>
   </div>
 
@@ -76,6 +80,7 @@
       <button type="button" class="btn btn-teal" id="import-btn" disabled>
         Import Files →
       </button>
+      <button type="button" class="btn btn-secondary" id="signout-btn" style="margin-left:10px;">Sign out</button>
     </div>
 
     <div class="card" id="results-card" style="display:none;">
@@ -102,31 +107,77 @@
 </script>
 <script>
 (function() {
-  var adminSecret = sessionStorage.getItem('fm_bulk_admin') || null;
   var selectedUserId = null;
+  var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+
+  function showGate() {
+    document.getElementById('gate-view').classList.add('visible');
+    document.getElementById('import-view').classList.remove('visible');
+  }
+
+  function showImport() {
+    document.getElementById('gate-view').classList.remove('visible');
+    document.getElementById('import-view').classList.add('visible');
+  }
+
+  function NotAuthorised() {
+    this.notAuthorised = true;
+    this.message = 'Not authorised';
+  }
+
+  async function authHeaders(extra) {
+    var sessionResult = await supabase.auth.getSession();
+    var session = sessionResult && sessionResult.data && sessionResult.data.session;
+    var token = session && session.access_token;
+    if (!token) throw new NotAuthorised();
+    var headers = extra || {};
+    headers.Authorization = 'Bearer ' + token;
+    return headers;
+  }
+
+  async function deny() {
+    await supabase.auth.signOut();
+    showGate();
+    var errEl = document.getElementById('gate-error');
+    errEl.textContent = 'Not authorised';
+    errEl.classList.add('visible');
+  }
+
+  async function readAuthorised(res) {
+    if (res.status === 401 || res.status === 403) {
+      await deny();
+      throw new NotAuthorised();
+    }
+    return res.json();
+  }
 
   // Gate
   document.getElementById('gate-btn').addEventListener('click', async function() {
-    var pwd = document.getElementById('gate-password').value.trim();
+    var email = document.getElementById('gate-email').value.trim();
+    var password = document.getElementById('gate-password').value;
     var errEl = document.getElementById('gate-error');
     errEl.classList.remove('visible');
-    if (!pwd) return;
+    errEl.textContent = 'Incorrect email or password.';
+    if (!email || !password) return;
     this.disabled = true;
     this.textContent = 'Checking...';
     try {
-      var res = await fetch('/api/admin-users', { headers: { 'x-admin-secret': pwd } });
-      if (!res.ok) throw new Error('Unauthorized');
-      var data = await res.json();
-      adminSecret = pwd;
-      sessionStorage.setItem('fm_bulk_admin', pwd);
-      document.getElementById('gate-view').classList.remove('visible');
-      document.getElementById('import-view').classList.add('visible');
+      var signedIn = await supabase.auth.signInWithPassword({ email: email, password: password });
+      if (signedIn.error || !signedIn.data || !signedIn.data.session) {
+        throw new Error('Incorrect email or password.');
+      }
+      var res = await fetch('/api/admin-users', { headers: await authHeaders() });
+      var data = await readAuthorised(res);
+      if (!res.ok) throw new Error('Could not load accounts');
+      showImport();
       populateAccounts(data.users || []);
-    } catch(e) {
-      errEl.classList.add('visible');
+    } catch (e) {
+      if (!e.notAuthorised) errEl.classList.add('visible');
     }
     this.disabled = false;
-    this.textContent = 'Unlock →';
+    this.textContent = 'Sign in';
   });
 
   document.getElementById('gate-password').addEventListener('keydown', function(e) {
@@ -191,15 +242,14 @@
 
         var res = await fetch('/api/bulk-import', {
           method: 'POST',
-          headers: {
+          headers: await authHeaders({
             'Content-Type': isXlsFile ? 'application/octet-stream' : 'text/plain',
-            'x-admin-secret': adminSecret,
             'x-user-id': selectedUserId,
             'x-filename': file.name
-          },
+          }),
           body: body
         });
-        var data = await res.json();
+        var data = await readAuthorised(res);
         if (data.ok) {
           addResult('ok', '✓ ' + file.name + ' — ' + 
             (data.parser || 'unknown') + ': ' + 
@@ -208,7 +258,12 @@
         } else {
           addResult('error', '✕ ' + file.name + ' — ' + (data.error || 'Unknown error'));
         }
-      } catch(e) {
+      } catch (e) {
+        if (e.notAuthorised) {
+          this.disabled = false;
+          this.textContent = 'Import Files →';
+          return;
+        }
         addResult('error', '✕ ' + file.name + ' — ' + e.message);
       }
     }
@@ -242,19 +297,13 @@
     document.getElementById('results-list').appendChild(div);
   }
 
-  // Auto-unlock if session still valid
-  if (adminSecret) {
-    fetch('/api/admin-users', { headers: { 'x-admin-secret': adminSecret } })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        document.getElementById('gate-view').classList.remove('visible');
-        document.getElementById('import-view').classList.add('visible');
-        populateAccounts(data.users || []);
-      }).catch(function() {
-        sessionStorage.removeItem('fm_bulk_admin');
-        adminSecret = null;
-      });
-  }
+  document.getElementById('signout-btn').addEventListener('click', async function() {
+    await supabase.auth.signOut();
+    document.getElementById('gate-email').value = '';
+    document.getElementById('gate-password').value = '';
+    document.getElementById('gate-error').classList.remove('visible');
+    showGate();
+  });
 })();
 </script>
 </body>

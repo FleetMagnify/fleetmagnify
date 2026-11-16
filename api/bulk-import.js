@@ -8,13 +8,14 @@ const { isBpCsv, parseBpReport } = require('../parsers/bp');
 const { isBpTransactionCsv, parseBpTransactionReport } = require('../parsers/bp-transaction');
 const { isMobilCsv, parseMobilReport } = require('../parsers/mobil');
 const { createClient } = require('@supabase/supabase-js');
+const { requireAdminUser } = require('../lib/admin-auth');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  var adminSecret = req.headers['x-admin-secret'];
-  if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  var admin = await requireAdminUser(req);
+  if (!admin.ok) {
+    return res.status(admin.status).json({ error: admin.error });
   }
 
   var userId = req.headers['x-user-id'];

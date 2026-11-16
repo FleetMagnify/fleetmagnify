@@ -36,14 +36,18 @@
   <h1>🔒 FleetMagnify Admin</h1>
   <p class="sub">Internal tool — not for customer use.</p>
 
-  <!-- Password gate -->
+  <!-- Sign-in gate -->
   <div id="gate-view" class="visible">
     <div class="form-group">
-      <label for="gate-password">Admin Password</label>
-      <input type="password" id="gate-password" placeholder="Enter admin password">
+      <label for="gate-email">Email</label>
+      <input type="email" id="gate-email" autocomplete="username" placeholder="Email">
     </div>
-    <div class="error" id="gate-error">Incorrect password.</div>
-    <button type="button" class="btn" id="gate-btn">Unlock</button>
+    <div class="form-group">
+      <label for="gate-password">Password</label>
+      <input type="password" id="gate-password" autocomplete="current-password" placeholder="Password">
+    </div>
+    <div class="error" id="gate-error">Incorrect email or password.</div>
+    <button type="button" class="btn" id="gate-btn">Sign in</button>
   </div>
 
   <!-- Admin panel -->
@@ -61,13 +65,17 @@
     <button type="button" class="btn btn-secondary" id="invoice-billing-btn" disabled>Set Up Invoice Billing</button>
     <div class="success" id="invoice-result"></div>
     <hr class="divider">
-    <button type="button" class="btn btn-secondary" id="signout-admin-btn">← Lock Admin</button>
+    <button type="button" class="btn btn-secondary" id="signout-admin-btn">Sign out</button>
   </div>
 </div>
 
+<script src="js/supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 (function() {
-  var adminSecret = null;
+  var supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
 
   function showGate() {
     document.getElementById('gate-view').classList.add('visible');
@@ -79,48 +87,80 @@
     document.getElementById('admin-view').classList.add('visible');
   }
 
-  async function fetchUsers(secret) {
+  function NotAuthorised() {
+    this.notAuthorised = true;
+    this.message = 'Not authorised';
+  }
+
+  async function authHeaders(extra) {
+    var sessionResult = await supabase.auth.getSession();
+    var session = sessionResult && sessionResult.data && sessionResult.data.session;
+    var token = session && session.access_token;
+    if (!token) throw new NotAuthorised();
+    var headers = extra || {};
+    headers.Authorization = 'Bearer ' + token;
+    return headers;
+  }
+
+  async function deny() {
+    await supabase.auth.signOut();
+    showGate();
+    var errEl = document.getElementById('gate-error');
+    errEl.textContent = 'Not authorised';
+    errEl.classList.add('visible');
+  }
+
+  async function readAuthorised(res) {
+    if (res.status === 401 || res.status === 403) {
+      await deny();
+      throw new NotAuthorised();
+    }
+    return res.json();
+  }
+
+  async function fetchUsers() {
     var res = await fetch('/api/admin-users', {
-      headers: { 'x-admin-secret': secret }
+      headers: await authHeaders()
     });
-    if (!res.ok) throw new Error('Unauthorized or server error');
-    var data = await res.json();
+    var data = await readAuthorised(res);
+    if (!res.ok) throw new Error('Could not load users');
     return data.users || [];
   }
 
-  async function generateLink(secret, email) {
+  async function generateLink(email) {
     var res = await fetch('/api/admin-users', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-admin-secret': secret },
+      headers: await authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ email: email })
     });
-    if (!res.ok) {
-      var err = await res.json();
-      throw new Error(err.error || 'Failed to generate link');
-    }
-    var data = await res.json();
+    var data = await readAuthorised(res);
+    if (!res.ok) throw new Error(data.error || 'Failed to generate link');
     return data.link;
   }
 
   // Gate
   document.getElementById('gate-btn').addEventListener('click', async function() {
-    var pwd = document.getElementById('gate-password').value.trim();
+    var email = document.getElementById('gate-email').value.trim();
+    var password = document.getElementById('gate-password').value;
     var errEl = document.getElementById('gate-error');
     errEl.classList.remove('visible');
-    if (!pwd) return;
+    errEl.textContent = 'Incorrect email or password.';
+    if (!email || !password) return;
     this.disabled = true;
     this.textContent = 'Checking...';
     try {
-      var users = await fetchUsers(pwd);
-      adminSecret = pwd;
-      sessionStorage.setItem('fm_admin_secret', pwd);
+      var signedIn = await supabase.auth.signInWithPassword({ email: email, password: password });
+      if (signedIn.error || !signedIn.data || !signedIn.data.session) {
+        throw new Error('Incorrect email or password.');
+      }
+      var users = await fetchUsers();
       showAdmin();
       populateUsers(users);
-    } catch(e) {
-      errEl.classList.add('visible');
+    } catch (e) {
+      if (!e.notAuthorised) errEl.classList.add('visible');
     }
     this.disabled = false;
-    this.textContent = 'Unlock';
+    this.textContent = 'Sign in';
   });
 
   document.getElementById('gate-password').addEventListener('keydown', function(e) {
@@ -168,13 +208,15 @@
     this.disabled = true;
     this.textContent = 'Generating link...';
     try {
-      var link = await generateLink(adminSecret, email);
+      var link = await generateLink(email);
       var redirectLink = link + '&redirect_to=' + encodeURIComponent('https://fleetmagnify.com/home.html');
       resultEl.innerHTML = '✓ Magic link generated. <a href="' + redirectLink + '" target="_blank" style="color:#0EA57A;">Open in new tab →</a><br><br><small style="color:#3A4A5C; font-size:11px;">Link expires in 60 minutes. Open in an incognito window to avoid signing out of your own account.</small>';
       resultEl.classList.add('visible');
-    } catch(e) {
-      errEl.textContent = e.message;
-      errEl.classList.add('visible');
+    } catch (e) {
+      if (!e.notAuthorised) {
+        errEl.textContent = e.message;
+        errEl.classList.add('visible');
+      }
     }
     this.disabled = false;
     this.textContent = 'Login As This User →';
@@ -201,49 +243,37 @@
     try {
       var res = await fetch('/api/create-invoice-subscription', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-secret': adminSecret
-        },
+        headers: await authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           userId: userId,
           email: email,
           bypassAssetMinimum: true
         })
       });
-      var data = await res.json();
+      var data = await readAuthorised(res);
       if (!res.ok) throw new Error(data.error || 'Failed to set up invoice billing');
       resultEl.textContent = 'Invoice billing created. Subscription: ' + data.subscriptionId;
       resultEl.classList.add('visible');
     } catch (e) {
-      errEl.textContent = e.message;
-      errEl.classList.add('visible');
+      if (!e.notAuthorised) {
+        errEl.textContent = e.message;
+        errEl.classList.add('visible');
+      }
     }
     this.disabled = false;
     this.textContent = 'Set Up Invoice Billing';
   });
 
-  document.getElementById('signout-admin-btn').addEventListener('click', function() {
-    adminSecret = null;
-    sessionStorage.removeItem('fm_admin_secret');
+  document.getElementById('signout-admin-btn').addEventListener('click', async function() {
+    await supabase.auth.signOut();
+    document.getElementById('gate-email').value = '';
     document.getElementById('gate-password').value = '';
+    document.getElementById('gate-error').classList.remove('visible');
     document.getElementById('link-result').classList.remove('visible');
     document.getElementById('invoice-result').classList.remove('visible');
     document.getElementById('admin-error').classList.remove('visible');
     showGate();
   });
-
-  // Auto-unlock if secret still in sessionStorage
-  var saved = sessionStorage.getItem('fm_admin_secret');
-  if (saved) {
-    fetchUsers(saved).then(function(users) {
-      adminSecret = saved;
-      showAdmin();
-      populateUsers(users);
-    }).catch(function() {
-      sessionStorage.removeItem('fm_admin_secret');
-    });
-  }
 })();
 </script>
 </body>

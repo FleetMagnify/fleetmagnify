@@ -1,16 +1,16 @@
 const { createClient } = require('@supabase/supabase-js');
+const { requireAdminUser } = require('../lib/admin-auth');
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', 'https://www.fleetmagnify.com');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-secret');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
 
-  // Gate: check shared secret
-  const secret = req.headers['x-admin-secret'];
-  if (!secret || secret !== process.env.ADMIN_SECRET) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  const admin = await requireAdminUser(req);
+  if (!admin.ok) {
+    return res.status(admin.status).json({ error: admin.error });
   }
 
   const supabase = createClient(
