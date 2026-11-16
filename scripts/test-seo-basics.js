@@ -31,6 +31,7 @@ var PUBLIC = [
   'glossary.html',
   'machine-operating-cost-per-hour.html',
   'fleet-utilisation-rate-formula.html',
+  'free-calculators.html',
   'contact.html',
   'privacy-policy.html',
   'terms-of-service.html',
@@ -263,7 +264,7 @@ check('every public page has one title, one description, one canonical, and the 
   console.log('       hero.jpg ' + hero.width + 'x' + hero.height + ', share card summary_large_image');
 });
 
-check('sitemap lists exactly the 13 public pages and no app page', function () {
+check('sitemap lists exactly the 14 public pages and no app page', function () {
   var xml = read('sitemap.xml');
   assert.ok(!/<lastmod\b/i.test(xml), 'sitemap has lastmod');
   assert.ok(!/<priority\b/i.test(xml), 'sitemap has priority');
@@ -273,7 +274,7 @@ check('sitemap lists exactly the 13 public pages and no app page', function () {
   while ((match = re.exec(xml))) locs.push(match[1]);
   var expected = PUBLIC.map(canonicalFor);
   assert.deepStrictEqual(locs.slice().sort(), expected.slice().sort());
-  assert.strictEqual(locs.length, 13);
+  assert.strictEqual(locs.length, 14);
   locs.forEach(function (loc) {
     assert.ok(loc.indexOf(HOST) === 0, loc);
     if (loc === HOST + '/') {
@@ -527,6 +528,93 @@ check('home hero links to the Resources calculators', function () {
   var section = html.slice(sectionStart, sectionEnd);
   assert.ok(section.indexOf('href="machine-operating-cost-per-hour.html"') !== -1, 'machine cost calculator link');
   assert.ok(section.indexOf('href="fleet-utilisation-rate-formula.html"') !== -1, 'utilisation calculator link');
+});
+
+function navBlocks(html) {
+  var blocks = [];
+  var re = /<div class="nav-links">([\s\S]*?)<\/div>/g;
+  var match;
+  while ((match = re.exec(html))) blocks.push(match[1]);
+  return blocks;
+}
+
+function footerBlock(html) {
+  var start = html.indexOf('<footer');
+  if (start === -1) return '';
+  var end = html.indexOf('</footer>', start);
+  return html.slice(start, end === -1 ? html.length : end);
+}
+
+// Pages whose nav contained the Glossary link. Features, pricing, platform
+// guide, login, signup, and accept-invite have a shorter nav that never
+// linked Glossary, so they do not gain a nav item.
+var NAV_CALCULATOR_PAGES = [
+  'index.html',
+  'supported-platforms.html',
+  'sample-reports.html',
+  'glossary.html',
+  'machine-operating-cost-per-hour.html',
+  'fleet-utilisation-rate-formula.html',
+  'free-calculators.html',
+  'contact.html'
+];
+
+var FOOTER_CALCULATOR_PAGES = [
+  'index.html',
+  'features.html',
+  'pricing.html',
+  'supported-platforms.html',
+  'platform-guide.html',
+  'sample-reports.html',
+  'glossary.html',
+  'machine-operating-cost-per-hour.html',
+  'fleet-utilisation-rate-formula.html',
+  'contact.html',
+  'free-calculators.html'
+];
+
+check('nav no longer links Glossary and links Free calculators in its place', function () {
+  htmlFiles().forEach(function (filename) {
+    navBlocks(read(filename)).forEach(function (block) {
+      assert.ok(block.indexOf('glossary.html') === -1, filename + ' nav still links glossary.html');
+    });
+  });
+  NAV_CALCULATOR_PAGES.forEach(function (filename) {
+    var blocks = navBlocks(read(filename));
+    assert.ok(blocks.some(function (block) {
+      return block.indexOf('href="free-calculators.html"') !== -1 &&
+        block.indexOf('>Free calculators<') !== -1;
+    }), filename + ' is missing the Free calculators nav link');
+  });
+  var freeNav = navBlocks(read('free-calculators.html')).join('\n');
+  assert.ok(/href="free-calculators\.html"[^>]*class="active"/.test(freeNav), 'free calculators nav is not active');
+});
+
+check('public footers keep Glossary and link Free calculators', function () {
+  FOOTER_CALCULATOR_PAGES.forEach(function (filename) {
+    var footer = footerBlock(read(filename));
+    assert.ok(footer.indexOf('href="glossary.html"') !== -1, filename + ' footer does not link glossary.html');
+    assert.ok(footer.indexOf('href="free-calculators.html"') !== -1, filename + ' footer does not link free-calculators.html');
+    if (footer.indexOf('Machine cost per hour') !== -1) {
+      assert.ok(
+        footer.indexOf('href="fleet-utilisation-rate-formula.html"') !== -1,
+        filename + ' footer has Machine cost per hour without the utilisation calculator'
+      );
+    }
+  });
+});
+
+check('free calculators page lists both calculators and has no JSON-LD', function () {
+  var html = read('free-calculators.html');
+  assert.ok(html.indexOf('href="machine-operating-cost-per-hour.html"') !== -1, 'cost calculator link');
+  assert.ok(html.indexOf('Open the cost per hour calculator') !== -1, 'cost calculator link text');
+  assert.ok(html.indexOf('href="fleet-utilisation-rate-formula.html"') !== -1, 'utilisation calculator link');
+  assert.ok(html.indexOf('Open the utilisation rate calculator') !== -1, 'utilisation calculator link text');
+  assert.ok(html.indexOf('href="glossary.html"') !== -1, 'glossary link');
+  assert.ok(html.indexOf('application/ld+json') === -1, 'JSON-LD present');
+  assert.ok(html.indexOf('FAQPage') === -1, 'FAQ structured data present');
+  assert.ok(html.indexOf('<h1>Free calculators</h1>') !== -1, 'h1');
+  assert.ok(html.indexOf("Start a 30-day trial. We'll take a card now — you won't be charged until day 31, after you've set up your fleet.") !== -1, 'trial wording');
 });
 
 check('npm test runs this script', function () {

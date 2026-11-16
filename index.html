@@ -45,8 +45,9 @@
   }
   .logo-name { font-size: 17px; font-weight: 700; color: #F0F2F5; letter-spacing: -0.3px; }
   .logo-name span { color: #0EA57A; }
-  .nav-links { display: flex; align-items: center; gap: 32px; }
-  .nav-links a { font-size: 13.5px; font-weight: 500; color: #9BA4B0; text-decoration: none; transition: color 0.2s; }
+  .nav-links { display: flex; align-items: center; gap: 22px; flex-shrink: 0; }
+  .nav-links a { font-size: 13.5px; font-weight: 500; color: #9BA4B0; text-decoration: none; transition: color 0.2s; white-space: nowrap; }
+  .logo, .nav-actions { flex-shrink: 0; }
   .nav-links a:hover { color: #F0F2F5; }
   .nav-actions { display: flex; align-items: center; gap: 12px; }
   .btn-ghost {
@@ -484,7 +485,7 @@
   }
   .footer-logo-name { font-size: 14px; font-weight: 700; color: #3A4A5C; }
   .footer-copy { font-size: 12px; color: #253040; }
-  .footer-links { display: flex; gap: 24px; }
+  .footer-links { display: flex; gap: 24px; flex-wrap: wrap; }
   .footer-links a { font-size: 12px; color: #253040; text-decoration: none; transition: color 0.2s; }
   .footer-links a:hover { color: #5A6474; }
 
@@ -618,6 +619,7 @@
     .cta-card h2 { font-size: 36px; }
     .footer-inner { flex-direction: column; gap: 20px; text-align: center; }
     .footer-left { flex-direction: column; gap: 8px; }
+    .footer-links { justify-content: center; }
     .modal { padding: 32px 24px 28px; }
     .modal h2 { font-size: 22px; }
   }
@@ -658,6 +660,13 @@
     .hero-cta-label-desktop { display: none; }
     .hero-cta-label-mobile { display: inline; }
     .btn-hero-video { display: none; }
+  }
+  @media (max-width: 1100px) {
+    nav { padding: 0 1rem; }
+    .nav-links { gap: 10px; }
+    .nav-links a { font-size: 12px; }
+    .btn-ghost { padding: 8px 12px; }
+    .btn-primary { padding: 9px 12px; }
   }
 </style>
 <script type="application/ld+json">
@@ -821,7 +830,7 @@
       <a href="features.html">Features</a>
       <a href="platform-guide.html">Platform Guide</a>
       <a href="pricing.html">Pricing</a>
-      <a href="glossary.html">Glossary</a>
+      <a href="free-calculators.html">Free calculators</a>
       <a href="supported-platforms.html">Supported Platforms</a>
       <a href="sample-reports.html">Sample Reports</a>
       <a href="contact.html">Contact</a>
@@ -1258,6 +1267,9 @@
     </div>
     <div class="footer-links">
       <a href="machine-operating-cost-per-hour.html">Machine cost per hour</a>
+      <a href="fleet-utilisation-rate-formula.html">Utilisation rate</a>
+      <a href="glossary.html">Glossary</a>
+      <a href="free-calculators.html">Free calculators</a>
       <a href="privacy-policy.html">Privacy</a>
       <a href="terms-of-service.html">Terms</a>
       <a href="contact.html">Contact</a>
