@@ -505,12 +505,28 @@ check('worked fleet totals equal $49 plus $8 per truck plus $15 per machine', fu
 
 check('index.html links the cost calculator from the Resources section', function () {
   var html = read('index.html');
-  var start = html.indexOf('<section class="resources">');
+  var start = html.indexOf('<section class="resources" id="resources">');
   var end = html.indexOf('</section>', start);
   assert.ok(start !== -1 && end > start, 'Resources section');
   var section = html.slice(start, end);
+  assert.ok(section.indexOf('id="resources"') !== -1, 'resources anchor');
   assert.ok(section.indexOf('href="machine-operating-cost-per-hour.html"') !== -1, 'Resources link');
+  assert.ok(section.indexOf('href="fleet-utilisation-rate-formula.html"') !== -1, 'utilisation calculator link');
   assert.ok(html.slice(end).indexOf('href="machine-operating-cost-per-hour.html"') !== -1, 'footer link still present');
+});
+
+check('home hero links to the Resources calculators', function () {
+  var html = read('index.html');
+  var sectionStart = html.indexOf('<section class="resources" id="resources">');
+  assert.ok(sectionStart !== -1, 'id="resources" on the resources section');
+  var heroLink = '<p class="hero-calc-link"><a href="#resources">Or try our free calculators →</a></p>';
+  var heroAt = html.indexOf(heroLink);
+  assert.ok(heroAt !== -1, 'link href="#resources" with text Or try our free calculators →');
+  assert.ok(heroAt < sectionStart, 'hero link sits above the Resources section');
+  var sectionEnd = html.indexOf('</section>', sectionStart);
+  var section = html.slice(sectionStart, sectionEnd);
+  assert.ok(section.indexOf('href="machine-operating-cost-per-hour.html"') !== -1, 'machine cost calculator link');
+  assert.ok(section.indexOf('href="fleet-utilisation-rate-formula.html"') !== -1, 'utilisation calculator link');
 });
 
 check('npm test runs this script', function () {
