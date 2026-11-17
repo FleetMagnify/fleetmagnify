@@ -5,7 +5,7 @@
  * Three cases:
  *   1. INBOUND_WEBHOOK_SECRET set and req.query.token matches
  *   2. secret set and token wrong or missing
- *   3. secret not set (today's behaviour, plus one warning)
+ *   3. secret not set: refuse the request
  */
 var assert = require('assert');
 var handler = require('../api/email-inbound');
@@ -139,7 +139,7 @@ async function main() {
     );
     assertNoSecretLeak(cap.all());
 
-    // 3. Secret not set: same as before (handler continues), one warning per call.
+    // 3. Secret not set: refuse the request, one warning, body is not parsed.
     delete process.env.INBOUND_WEBHOOK_SECRET;
     cap.warns.length = 0;
     cap.logs.length = 0;
@@ -147,10 +147,11 @@ async function main() {
     var openReq = fakeReq({}, 'https://fleetmagnify.com/api/email-inbound?token=' + SECRET);
     var openRes = fakeRes();
     await handler(openReq, openRes);
-    assert.strictEqual(openRes.statusCode, 200);
-    assert.strictEqual(openReq._state.piped, true, 'unset secret should reach body parsing');
+    assert.strictEqual(openRes.statusCode, 503);
+    assert.deepStrictEqual(openRes.body, { error: 'Inbound webhook is not configured' });
+    assert.strictEqual(openReq._state.piped, false, 'unset secret must not parse the body');
     var unauthWarns = cap.warns.filter(function(line) {
-      return line === 'INBOUND_WEBHOOK_SECRET not set - webhook is unauthenticated';
+      return line === 'email-inbound: INBOUND_WEBHOOK_SECRET is not set; refusing the request';
     });
     assert.strictEqual(unauthWarns.length, 1, 'warn once per invocation');
     assertNoSecretLeak(cap.all());
@@ -159,9 +160,11 @@ async function main() {
     var openReq2 = fakeReq({});
     var openRes2 = fakeRes();
     await handler(openReq2, openRes2);
+    assert.strictEqual(openRes2.statusCode, 503);
+    assert.strictEqual(openReq2._state.piped, false);
     assert.strictEqual(
       cap.warns.filter(function(line) {
-        return line === 'INBOUND_WEBHOOK_SECRET not set - webhook is unauthenticated';
+        return line === 'email-inbound: INBOUND_WEBHOOK_SECRET is not set; refusing the request';
       }).length,
       1,
       'a second invocation warns once more, not zero'

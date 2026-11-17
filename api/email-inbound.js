@@ -21,6 +21,8 @@ const {
   scrubLinkError,
 } = require('../parsers/email-report-link');
 const escapeHtml = require('../lib/escape-html');
+const knownSenders = require('../lib/known-senders');
+const missingFeedAlert = require('../lib/missing-feed-alert');
 
 function classifyUnknownCsv(rawCsv) {
   var lines = String(rawCsv).split(/\r?\n/);
@@ -79,10 +81,7 @@ const SUPABASE_URL =
   process.env.SUPABASE_URL || 'https://pddsgvuzvuwueuvpoytw.supabase.co';
 
 function extractEmailAddress(raw) {
-  if (!raw) return '';
-  var str = String(raw).trim();
-  var match = str.match(/<([^>]+)>/);
-  return (match ? match[1] : str).trim().toLowerCase();
+  return knownSenders.extractEmailAddress(raw);
 }
 
 function extractLocalPart(email) {
@@ -323,11 +322,22 @@ function requestPath(req) {
 //   https://<host>/api/email-inbound?token=<secret>
 // Rotate the secret by changing the Vercel env var INBOUND_WEBHOOK_SECRET
 // and the token query parameter in the SendGrid destination URL together.
+// If INBOUND_WEBHOOK_SECRET is unset or empty, this refuses the request.
+// It does not accept unauthenticated mail.
+//
+// Only known report senders are imported. Built-in provider domains live in
+// lib/known-senders.js. INBOUND_EXTRA_SENDERS is a comma-separated list of
+// extra exact addresses (name@example.test) or bare domains (example.test).
+// A sender that is not on either list is stored on email_imports with status
+// held_unapproved and error_message "sender not approved", and is not parsed.
+// After that sender is allowed, scripts/reprocess-held-imports.js can import
+// the stored file. No real addresses belong in this file.
 function authorizeInbound(req, res) {
   var secret = process.env.INBOUND_WEBHOOK_SECRET;
-  if (!secret) {
-    console.warn('INBOUND_WEBHOOK_SECRET not set - webhook is unauthenticated');
-    return true;
+  if (typeof secret !== 'string' || secret.trim() === '') {
+    console.warn('email-inbound: INBOUND_WEBHOOK_SECRET is not set; refusing the request');
+    res.status(503).json({ error: 'Inbound webhook is not configured' });
+    return false;
   }
   var token = req && req.query ? req.query.token : '';
   // Hash both sides first so timingSafeEqual always sees equal-length buffers.
@@ -338,6 +348,422 @@ function authorizeInbound(req, res) {
     return false;
   }
   return true;
+}
+
+function oneLine(value) {
+  return String(value || '').replace(/[\r\n]/g, ' ');
+}
+
+function reportFiles(files) {
+  return (files || []).filter(function (f) {
+    return isCsvAttachment(f.filename, f.mimeType) || isXlsAttachment(f.filename, f.mimeType);
+  });
+}
+
+function storedReport(attachment) {
+  var isXls = isXlsAttachment(attachment.filename, attachment.mimeType);
+  var rawCsv = isXls ? '' : attachment.buffer.toString('utf8');
+  var storedRaw = isXls ? ('BASE64_XLS:' + attachment.buffer.toString('base64')) : rawCsv;
+  return {
+    isXls: isXls,
+    rawCsv: rawCsv,
+    storedRaw: storedRaw,
+    filename: attachment.filename || null,
+    buffer: attachment.buffer,
+  };
+}
+
+async function importSavedAttachment(supabase, spec) {
+  var isXls = spec.isXls;
+  var rawCsv = spec.rawCsv;
+  var userId = spec.userId;
+  var importId = spec.importId;
+  var filename = spec.filename;
+  var receivedAt = spec.receivedAt;
+  var buffer = spec.buffer;
+
+  if (isXls) {
+    try {
+      var bpXlsResult = await parseBpTransactionReport(supabase, {
+        userId: userId,
+        importId: importId,
+        fileBuffer: buffer,
+      });
+      console.log(
+        'email-inbound: BP transaction (XLS) parse complete',
+        filename,
+        bpXlsResult.recordsUpserted + ' purchases'
+      );
+    } catch (bpXlsErr) {
+      console.error(
+        'email-inbound: BP transaction (XLS) parse failed',
+        filename,
+        bpXlsErr.message
+      );
+      await sendFailureAlert(filename, bpXlsErr.message, userId);
+    }
+  } else if (isNavmanCsv(rawCsv)) {
+    try {
+      var parseResult = await parseNavmanReport(supabase, {
+        userId: userId,
+        importId: importId,
+        rawCsv: rawCsv,
+        filename: filename,
+        receivedAt: receivedAt,
+      });
+      console.log(
+        'email-inbound: Navman parse complete',
+        filename,
+        parseResult.recordsUpserted + ' records,',
+        parseResult.assetsCreated + ' assets created'
+      );
+    } catch (parseErr) {
+      console.error(
+        'email-inbound: Navman parse failed',
+        filename,
+        parseErr.message
+      );
+      await sendFailureAlert(filename, parseErr.message, userId);
+    }
+  } else if (isBpTransactionCsv(rawCsv)) {
+    try {
+      var bpTransactionResult = await parseBpTransactionReport(supabase, {
+        userId: userId,
+        importId: importId,
+        rawCsv: rawCsv,
+      });
+      console.log(
+        'email-inbound: BP transaction parse complete',
+        filename,
+        bpTransactionResult.recordsUpserted + ' purchases'
+      );
+    } catch (bpTransactionErr) {
+      console.error(
+        'email-inbound: BP transaction parse failed',
+        filename,
+        bpTransactionErr.message
+      );
+      await sendFailureAlert(filename, bpTransactionErr.message, userId);
+    }
+  } else if (isBpCsv(rawCsv)) {
+    try {
+      var bpResult = await parseBpReport(supabase, {
+        userId: userId,
+        importId: importId,
+        rawCsv: rawCsv,
+      });
+      console.log(
+        'email-inbound: BP parse complete',
+        filename,
+        bpResult.recordsUpserted + ' purchases,',
+        bpResult.assetsCreated + ' assets created'
+      );
+    } catch (bpErr) {
+      console.error(
+        'email-inbound: BP parse failed',
+        filename,
+        bpErr.message
+      );
+      await sendFailureAlert(filename, bpErr.message, userId);
+    }
+  } else if (isMobilCsv(rawCsv)) {
+    try {
+      var mobilResult = await parseMobilReport(supabase, {
+        userId: userId,
+        importId: importId,
+        rawCsv: rawCsv,
+      });
+      console.log(
+        'email-inbound: Mobil parse complete',
+        filename,
+        mobilResult.recordsUpserted + ' purchases'
+      );
+    } catch (mobilErr) {
+      console.error(
+        'email-inbound: Mobil parse failed',
+        filename,
+        mobilErr.message
+      );
+      await sendFailureAlert(filename, mobilErr.message, userId);
+    }
+  } else if (isNavmanMileageCsv(rawCsv)) {
+    try {
+      // A header-only mileage export returns processed with
+      // recordsUpserted 0 and does not throw, so this catch must not
+      // send a failure email for it.
+      var mileageResult = await parseNavmanMileageReport(supabase, {
+        userId: userId,
+        importId: importId,
+        rawCsv: rawCsv,
+      });
+      console.log(
+        'email-inbound: Navman mileage parse complete',
+        filename,
+        mileageResult.recordsUpserted + ' records,',
+        mileageResult.pendingAdded + ' pending assets added'
+      );
+    } catch (mileageErr) {
+      console.error(
+        'email-inbound: Navman mileage parse failed',
+        filename,
+        mileageErr.message
+      );
+      await sendFailureAlert(filename, mileageErr.message, userId);
+    }
+  } else if (isNavmanIdleCsv(rawCsv)) {
+    try {
+      // Header-only exports, and files whose events are all Duration 0,
+      // return processed with recordsUpserted 0 and do not throw.
+      // This catch is only for real failures, so those must not alert.
+      var idleResult = await parseNavmanIdleReport(supabase, {
+        userId: userId,
+        importId: importId,
+        rawCsv: rawCsv,
+      });
+      console.log(
+        'email-inbound: Navman idle parse complete',
+        filename,
+        idleResult.recordsUpserted + ' records,',
+        idleResult.pendingAdded + ' pending assets added'
+      );
+    } catch (idleErr) {
+      console.error(
+        'email-inbound: Navman idle parse failed',
+        filename,
+        idleErr.message
+      );
+      await sendFailureAlert(filename, idleErr.message, userId);
+    }
+  } else if (isVisionLinkFuelCsv(rawCsv)) {
+    try {
+      var visionFuelResult = await parseVisionLinkFuelReport(supabase, {
+        userId: userId,
+        importId: importId,
+        rawCsv: rawCsv,
+        filename: filename,
+        receivedAt: receivedAt,
+      });
+      console.log(
+        'email-inbound: VisionLink Fleet Fuel parse complete',
+        filename,
+        visionFuelResult.recordsUpserted + ' records,',
+        visionFuelResult.skippedNoSplit + ' without fuel split skipped,',
+        visionFuelResult.unmatched + ' unmatched,',
+        'date=' + visionFuelResult.recordDate
+      );
+    } catch (visionFuelErr) {
+      console.error(
+        'email-inbound: VisionLink Fleet Fuel parse failed',
+        filename,
+        visionFuelErr.message
+      );
+      await sendFailureAlert(filename, visionFuelErr.message, userId);
+    }
+  } else if (isVisionLinkCsv(rawCsv)) {
+    try {
+      var visionResult = await parseVisionLinkReport(supabase, {
+        userId: userId,
+        importId: importId,
+        rawCsv: rawCsv,
+        filename: filename,
+        receivedAt: receivedAt,
+      });
+      console.log(
+        'email-inbound: VisionLink parse complete',
+        filename,
+        visionResult.recordsUpserted + ' records,',
+        visionResult.skippedEmpty + ' empty skipped,',
+        visionResult.unmatched + ' unmatched,',
+        visionResult.hoursUpdated + ' hour meters updated'
+      );
+    } catch (visionErr) {
+      console.error(
+        'email-inbound: VisionLink parse failed',
+        filename,
+        visionErr.message
+      );
+      await sendFailureAlert(filename, visionErr.message, userId);
+    }
+  } else if (isJohnDeereUtilizationCsv(rawCsv)) {
+    try {
+      var deereResult = await parseJohnDeereUtilizationReport(supabase, {
+        userId: userId,
+        importId: importId,
+        rawCsv: rawCsv,
+        filename: filename,
+        receivedAt: receivedAt,
+      });
+      console.log(
+        'email-inbound: John Deere Utilization parse complete',
+        filename,
+        deereResult.summary
+      );
+    } catch (deereErr) {
+      console.error(
+        'email-inbound: John Deere Utilization parse failed',
+        filename,
+        deereErr.message
+      );
+      await sendFailureAlert(filename, deereErr.message, userId);
+    }
+  } else if (isEroadCsv(rawCsv)) {
+    try {
+      var eroadResult = await parseEroadReport(supabase, {
+        userId: userId,
+        importId: importId,
+        rawCsv: rawCsv,
+        filename: filename,
+        receivedAt: receivedAt,
+      });
+      console.log(
+        'email-inbound: eROAD parse complete',
+        filename,
+        eroadResult.recordsUpserted + ' records,',
+        eroadResult.unmatched + ' unmatched,',
+        eroadResult.odometerUpdated + ' odometers updated,',
+        'date=' + eroadResult.recordDate
+      );
+    } catch (eroadErr) {
+      console.error(
+        'email-inbound: eROAD parse failed',
+        filename,
+        eroadErr.message
+      );
+      await sendFailureAlert(filename, eroadErr.message, userId);
+    }
+  } else {
+    var classification = classifyUnknownCsv(rawCsv);
+    var updateResult = await supabase
+      .from('email_imports')
+      .update({
+        status: 'unrecognized',
+        detected_category: classification.detectedCategory,
+        detected_headers: classification.headerLine,
+      })
+      .eq('id', importId);
+    if (updateResult.error) {
+      console.error(
+        'email-inbound: failed to mark import as unrecognized',
+        filename,
+        updateResult.error.message
+      );
+    }
+    console.log(
+      'email-inbound: unrecognized CSV format',
+      filename,
+      'classified as',
+      classification.detectedCategory
+    );
+  }
+}
+
+function holdNoticeHtml(fromEmail, filenames, userId) {
+  var fileLabel = filenames.length ? filenames.join(', ') : '(no file)';
+  return '<p><strong>Inbound report held</strong></p>' +
+    '<p><strong>Sender:</strong> ' + escapeHtml(fromEmail || '') + '</p>' +
+    '<p><strong>File:</strong> ' + escapeHtml(fileLabel) + '</p>' +
+    '<p><strong>User ID:</strong> ' + escapeHtml(userId) + '</p>' +
+    '<p>' + escapeHtml('held because the sender is not allowed; add it to INBOUND_EXTRA_SENDERS or to lib/known-senders.js if it is real') + '</p>';
+}
+
+async function sendHoldNotice(fromEmail, filenames, userId) {
+  var apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return;
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: missingFeedAlert.ALERT_FROM,
+        to: missingFeedAlert.ALERT_TO,
+        subject: 'FleetMagnify held an inbound report',
+        html: holdNoticeHtml(fromEmail, filenames, userId)
+      })
+    });
+  } catch (err) {
+    console.error('email-inbound: held-sender notice failed', err && err.message ? err.message : err);
+  }
+}
+
+async function priorHeldSender(supabase, fromEmail, receivedAt, insertedIds) {
+  var receivedMs = new Date(receivedAt).getTime();
+  if (isNaN(receivedMs)) receivedMs = Date.now();
+  var since = new Date(receivedMs - 24 * 60 * 60 * 1000).toISOString();
+  var query = supabase.from('email_imports').select('id');
+  if (fromEmail) query = query.eq('from_email', fromEmail);
+  else query = query.is('from_email', null);
+  var result = await query.eq('status', 'held_unapproved').gte('received_at', since);
+  if (!result || result.error) {
+    var message = result && result.error && result.error.message ? result.error.message : 'notice check failed';
+    return { error: message };
+  }
+  var rows = result.data || [];
+  for (var i = 0; i < rows.length; i++) {
+    var id = rows[i] && rows[i].id;
+    if (id && !insertedIds[id]) return { found: true };
+  }
+  return { found: false };
+}
+
+async function holdUnapprovedSender(supabase, input) {
+  var reports = reportFiles(input.files);
+  var stored = [];
+  if (!reports.length) {
+    stored.push({
+      filename: subjectAsFilename(getField(input.fields, 'subject')),
+      raw_csv: emailBodyForStorage(input.fields),
+    });
+  } else {
+    reports.forEach(function (attachment) {
+      var report = storedReport(attachment);
+      stored.push({ filename: report.filename, raw_csv: report.storedRaw });
+    });
+  }
+
+  var insertedIds = {};
+  var filenames = [];
+  for (var i = 0; i < stored.length; i++) {
+    var item = stored[i];
+    filenames.push(item.filename || '(no file)');
+    try {
+      var saved = await supabase.from('email_imports').insert({
+        user_id: input.userId,
+        received_at: input.receivedAt,
+        from_email: input.fromEmail || null,
+        to_email: input.toEmail,
+        filename: item.filename,
+        raw_csv: item.raw_csv,
+        status: 'held_unapproved',
+        error_message: 'sender not approved',
+      }).select('id').single();
+      if (saved.error) {
+        console.error('email-inbound: failed to hold unapproved sender', saved.error.message);
+        continue;
+      }
+      if (saved.data && saved.data.id) insertedIds[saved.data.id] = true;
+    } catch (saveErr) {
+      console.error('email-inbound: failed to hold unapproved sender', saveErr.message);
+    }
+  }
+
+  if (!Object.keys(insertedIds).length) return;
+
+  try {
+    var prior = await priorHeldSender(supabase, input.fromEmail, input.receivedAt, insertedIds);
+    if (prior.error) {
+      console.error('email-inbound: held-sender notice check failed', prior.error);
+      return;
+    }
+    if (prior.found) return;
+  } catch (checkErr) {
+    console.error('email-inbound: held-sender notice check failed', checkErr && checkErr.message ? checkErr.message : checkErr);
+    return;
+  }
+
+  await sendHoldNotice(input.fromEmail, filenames, input.userId);
 }
 
 async function processInboundEmail(supabase, input) {
@@ -388,6 +814,41 @@ async function processInboundEmail(supabase, input) {
     var toEmail = matched.toEmail;
     var userResult = { data: matched.user };
     console.log('email-inbound: received mail for', toEmail, 'from', fromEmail || '(unknown)');
+
+    var senderAllowed = false;
+    try {
+      senderAllowed = knownSenders.isAllowedSender(fromEmail, process.env) === true;
+    } catch (allowErr) {
+      console.error(
+        'email-inbound: sender check failed',
+        allowErr && allowErr.message ? allowErr.message : allowErr
+      );
+      senderAllowed = false;
+    }
+    if (!senderAllowed) {
+      try {
+        await holdUnapprovedSender(supabase, {
+          userId: userResult.data.user_id,
+          toEmail: toEmail,
+          fromEmail: fromEmail,
+          receivedAt: receivedAt,
+          fields: fields,
+          files: files,
+        });
+      } catch (holdErr) {
+        console.error(
+          'email-inbound: hold failed',
+          holdErr && holdErr.message ? holdErr.message : holdErr
+        );
+      }
+      return { ok: true, message: 'Received' };
+    }
+
+    console.log(
+      'email-inbound: accepted sender domain ' + knownSenders.senderDomain(fromEmail) +
+      ' spf=' + oneLine(getField(fields, 'SPF')) +
+      ' dkim=' + oneLine(getField(fields, 'dkim'))
+    );
 
     // Now includes XLS/XLSX attachments alongside CSV — BP is the only
     // provider currently known to send XLS (see bp-transaction.js /
@@ -549,323 +1010,15 @@ async function processInboundEmail(supabase, input) {
 
       var importId = insertResult.data.id;
 
-      if (isXls) {
-        try {
-          var bpXlsResult = await parseBpTransactionReport(supabase, {
-            userId: userResult.data.user_id,
-            importId: importId,
-            fileBuffer: attachment.buffer,
-          });
-          console.log(
-            'email-inbound: BP transaction (XLS) parse complete',
-            attachment.filename,
-            bpXlsResult.recordsUpserted + ' purchases'
-          );
-        } catch (bpXlsErr) {
-          console.error(
-            'email-inbound: BP transaction (XLS) parse failed',
-            attachment.filename,
-            bpXlsErr.message
-          );
-          await sendFailureAlert(
-            attachment.filename,
-            bpXlsErr.message,
-            userResult.data.user_id
-          );
-        }
-      } else if (isNavmanCsv(rawCsv)) {
-        try {
-          var parseResult = await parseNavmanReport(supabase, {
-            userId: userResult.data.user_id,
-            importId: importId,
-            rawCsv: rawCsv,
-            filename: attachment.filename || null,
-            receivedAt: receivedAt,
-          });
-          console.log(
-            'email-inbound: Navman parse complete',
-            attachment.filename,
-            parseResult.recordsUpserted + ' records,',
-            parseResult.assetsCreated + ' assets created'
-          );
-        } catch (parseErr) {
-          console.error(
-            'email-inbound: Navman parse failed',
-            attachment.filename,
-            parseErr.message
-          );
-          await sendFailureAlert(
-            attachment.filename,
-            parseErr.message,
-            userResult.data.user_id
-          );
-        }
-      } else if (isBpTransactionCsv(rawCsv)) {
-        try {
-          var bpTransactionResult = await parseBpTransactionReport(supabase, {
-            userId: userResult.data.user_id,
-            importId: importId,
-            rawCsv: rawCsv,
-          });
-          console.log(
-            'email-inbound: BP transaction parse complete',
-            attachment.filename,
-            bpTransactionResult.recordsUpserted + ' purchases'
-          );
-        } catch (bpTransactionErr) {
-          console.error(
-            'email-inbound: BP transaction parse failed',
-            attachment.filename,
-            bpTransactionErr.message
-          );
-          await sendFailureAlert(
-            attachment.filename,
-            bpTransactionErr.message,
-            userResult.data.user_id
-          );
-        }
-      } else if (isBpCsv(rawCsv)) {
-        try {
-          var bpResult = await parseBpReport(supabase, {
-            userId: userResult.data.user_id,
-            importId: importId,
-            rawCsv: rawCsv,
-          });
-          console.log(
-            'email-inbound: BP parse complete',
-            attachment.filename,
-            bpResult.recordsUpserted + ' purchases,',
-            bpResult.assetsCreated + ' assets created'
-          );
-        } catch (bpErr) {
-          console.error(
-            'email-inbound: BP parse failed',
-            attachment.filename,
-            bpErr.message
-          );
-          await sendFailureAlert(
-            attachment.filename,
-            bpErr.message,
-            userResult.data.user_id
-          );
-        }
-      } else if (isMobilCsv(rawCsv)) {
-        try {
-          var mobilResult = await parseMobilReport(supabase, {
-            userId: userResult.data.user_id,
-            importId: importId,
-            rawCsv: rawCsv,
-          });
-          console.log(
-            'email-inbound: Mobil parse complete',
-            attachment.filename,
-            mobilResult.recordsUpserted + ' purchases'
-          );
-        } catch (mobilErr) {
-          console.error(
-            'email-inbound: Mobil parse failed',
-            attachment.filename,
-            mobilErr.message
-          );
-          await sendFailureAlert(
-            attachment.filename,
-            mobilErr.message,
-            userResult.data.user_id
-          );
-        }
-      } else if (isNavmanMileageCsv(rawCsv)) {
-        try {
-          // A header-only mileage export returns processed with
-          // recordsUpserted 0 and does not throw, so this catch must not
-          // send a failure email for it.
-          var mileageResult = await parseNavmanMileageReport(supabase, {
-            userId: userResult.data.user_id,
-            importId: importId,
-            rawCsv: rawCsv,
-          });
-          console.log(
-            'email-inbound: Navman mileage parse complete',
-            attachment.filename,
-            mileageResult.recordsUpserted + ' records,',
-            mileageResult.pendingAdded + ' pending assets added'
-          );
-        } catch (mileageErr) {
-          console.error(
-            'email-inbound: Navman mileage parse failed',
-            attachment.filename,
-            mileageErr.message
-          );
-          await sendFailureAlert(
-            attachment.filename,
-            mileageErr.message,
-            userResult.data.user_id
-          );
-        }
-      } else if (isNavmanIdleCsv(rawCsv)) {
-        try {
-          // Header-only exports, and files whose events are all Duration 0,
-          // return processed with recordsUpserted 0 and do not throw.
-          // This catch is only for real failures, so those must not alert.
-          var idleResult = await parseNavmanIdleReport(supabase, {
-            userId: userResult.data.user_id,
-            importId: importId,
-            rawCsv: rawCsv,
-          });
-          console.log(
-            'email-inbound: Navman idle parse complete',
-            attachment.filename,
-            idleResult.recordsUpserted + ' records,',
-            idleResult.pendingAdded + ' pending assets added'
-          );
-        } catch (idleErr) {
-          console.error(
-            'email-inbound: Navman idle parse failed',
-            attachment.filename,
-            idleErr.message
-          );
-          await sendFailureAlert(
-            attachment.filename,
-            idleErr.message,
-            userResult.data.user_id
-          );
-        }
-      } else if (isVisionLinkFuelCsv(rawCsv)) {
-        try {
-          var visionFuelResult = await parseVisionLinkFuelReport(supabase, {
-            userId: userResult.data.user_id,
-            importId: importId,
-            rawCsv: rawCsv,
-            filename: attachment.filename || null,
-            receivedAt: receivedAt,
-          });
-          console.log(
-            'email-inbound: VisionLink Fleet Fuel parse complete',
-            attachment.filename,
-            visionFuelResult.recordsUpserted + ' records,',
-            visionFuelResult.skippedNoSplit + ' without fuel split skipped,',
-            visionFuelResult.unmatched + ' unmatched,',
-            'date=' + visionFuelResult.recordDate
-          );
-        } catch (visionFuelErr) {
-          console.error(
-            'email-inbound: VisionLink Fleet Fuel parse failed',
-            attachment.filename,
-            visionFuelErr.message
-          );
-          await sendFailureAlert(
-            attachment.filename,
-            visionFuelErr.message,
-            userResult.data.user_id
-          );
-        }
-      } else if (isVisionLinkCsv(rawCsv)) {
-        try {
-          var visionResult = await parseVisionLinkReport(supabase, {
-            userId: userResult.data.user_id,
-            importId: importId,
-            rawCsv: rawCsv,
-            filename: attachment.filename || null,
-            receivedAt: receivedAt,
-          });
-          console.log(
-            'email-inbound: VisionLink parse complete',
-            attachment.filename,
-            visionResult.recordsUpserted + ' records,',
-            visionResult.skippedEmpty + ' empty skipped,',
-            visionResult.unmatched + ' unmatched,',
-            visionResult.hoursUpdated + ' hour meters updated'
-          );
-        } catch (visionErr) {
-          console.error(
-            'email-inbound: VisionLink parse failed',
-            attachment.filename,
-            visionErr.message
-          );
-          await sendFailureAlert(
-            attachment.filename,
-            visionErr.message,
-            userResult.data.user_id
-          );
-        }
-      } else if (isJohnDeereUtilizationCsv(rawCsv)) {
-        try {
-          var deereResult = await parseJohnDeereUtilizationReport(supabase, {
-            userId: userResult.data.user_id,
-            importId: importId,
-            rawCsv: rawCsv,
-            filename: attachment.filename || null,
-            receivedAt: receivedAt,
-          });
-          console.log(
-            'email-inbound: John Deere Utilization parse complete',
-            attachment.filename,
-            deereResult.summary
-          );
-        } catch (deereErr) {
-          console.error(
-            'email-inbound: John Deere Utilization parse failed',
-            attachment.filename,
-            deereErr.message
-          );
-          await sendFailureAlert(
-            attachment.filename,
-            deereErr.message,
-            userResult.data.user_id
-          );
-        }
-      } else if (isEroadCsv(rawCsv)) {
-        try {
-          var eroadResult = await parseEroadReport(supabase, {
-            userId: userResult.data.user_id,
-            importId: importId,
-            rawCsv: rawCsv,
-            filename: attachment.filename || null,
-            receivedAt: receivedAt,
-          });
-          console.log(
-            'email-inbound: eROAD parse complete',
-            attachment.filename,
-            eroadResult.recordsUpserted + ' records,',
-            eroadResult.unmatched + ' unmatched,',
-            eroadResult.odometerUpdated + ' odometers updated,',
-            'date=' + eroadResult.recordDate
-          );
-        } catch (eroadErr) {
-          console.error(
-            'email-inbound: eROAD parse failed',
-            attachment.filename,
-            eroadErr.message
-          );
-          await sendFailureAlert(
-            attachment.filename,
-            eroadErr.message,
-            userResult.data.user_id
-          );
-        }
-      } else {
-        var classification = classifyUnknownCsv(rawCsv);
-        var updateResult = await supabase
-          .from('email_imports')
-          .update({
-            status: 'unrecognized',
-            detected_category: classification.detectedCategory,
-            detected_headers: classification.headerLine,
-          })
-          .eq('id', importId);
-        if (updateResult.error) {
-          console.error(
-            'email-inbound: failed to mark import as unrecognized',
-            attachment.filename,
-            updateResult.error.message
-          );
-        }
-        console.log(
-          'email-inbound: unrecognized CSV format',
-          attachment.filename,
-          'classified as',
-          classification.detectedCategory
-        );
-      }
+      await importSavedAttachment(supabase, {
+        userId: userResult.data.user_id,
+        importId: importId,
+        filename: attachment.filename || null,
+        rawCsv: rawCsv,
+        buffer: attachment.buffer,
+        isXls: isXls,
+        receivedAt: receivedAt,
+      });
 
       saved.push(attachment.filename || ('attachment-' + (i + 1)));
       console.log('email-inbound: saved CSV import', attachment.filename, 'for user', userResult.data.user_id);
@@ -908,6 +1061,7 @@ async function handler(req, res) {
 
 module.exports = handler;
 module.exports.processInboundEmail = processInboundEmail;
+module.exports.importSavedAttachment = importSavedAttachment;
 module.exports.sendFailureAlert = sendFailureAlert;
 
 module.exports.config = {

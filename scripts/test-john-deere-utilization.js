@@ -664,7 +664,9 @@ async function runInbound(fields, files, download) {
   var alerts = [];
   var calls = [];
   var previousKey = process.env.RESEND_API_KEY;
+  var previousExtra = process.env.INBOUND_EXTRA_SENDERS;
   var previousFetch = global.fetch;
+  delete process.env.INBOUND_EXTRA_SENDERS;
   process.env.RESEND_API_KEY = 'test-resend-key';
   global.fetch = function(url, opts) {
     var href = String(url);
@@ -687,6 +689,8 @@ async function runInbound(fields, files, download) {
     global.fetch = previousFetch;
     if (previousKey === undefined) delete process.env.RESEND_API_KEY;
     else process.env.RESEND_API_KEY = previousKey;
+    if (previousExtra === undefined) delete process.env.INBOUND_EXTRA_SENDERS;
+    else process.env.INBOUND_EXTRA_SENDERS = previousExtra;
   }
 }
 
@@ -708,7 +712,7 @@ async function testFetch() {
   ]);
   var mail = {
     to: TO,
-    from: 'desk@example.com',
+    from: 'reports@johndeere.com',
     subject: 'Fwd: Daily Utilization (Utilization) Report Completed',
     text: forwardedText(),
     html: '',
@@ -820,7 +824,7 @@ async function testFetch() {
 
   var attached = await runInbound({
     to: TO,
-    from: 'desk@example.com',
+    from: 'reports@johndeere.com',
     subject: 'Daily Utilization (Utilization) Report Completed',
     text: 'CSV attached',
     html: '',
@@ -843,7 +847,7 @@ async function testFetch() {
 
   var invite = await runInbound({
     to: TO,
-    from: 'desk@example.com',
+    from: 'reports@johndeere.com',
     subject: 'You are invited to a John Deere team',
     text: 'Join Example Logging. Your code is 482913.',
     html: '<p>Join Example Logging.</p>',
