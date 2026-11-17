@@ -104,7 +104,9 @@ function noAttachmentRows(state) {
 
 async function main() {
   var previousKey = process.env.RESEND_API_KEY;
+  var previousExtra = process.env.INBOUND_EXTRA_SENDERS;
   var previousFetch = global.fetch;
+  delete process.env.INBOUND_EXTRA_SENDERS;
   var alerts = [];
   process.env.RESEND_API_KEY = 'test-resend-key';
   global.fetch = function(url, opts) {
@@ -117,7 +119,7 @@ async function main() {
     var plain = createMock();
     var plainResult = await inbound.processInboundEmail(plain.supabase, mail({
       to: 'Yard Desk <' + TO + '>',
-      from: 'Setup Bot <setup@example.com>',
+      from: 'Setup Bot <setup@teletracnavman.net>',
       subject: '  Team invite for Excavator 12  ',
       text: 'Your sign-in code is 482913.\nIt expires tonight.',
       html: '<p>ignore this html</p>',
@@ -128,7 +130,7 @@ async function main() {
     var row = importRows(plain.state)[0].row;
     assert.strictEqual(row.user_id, USER);
     assert.strictEqual(row.received_at, RECEIVED);
-    assert.strictEqual(row.from_email, 'setup@example.com');
+    assert.strictEqual(row.from_email, 'setup@teletracnavman.net');
     assert.strictEqual(row.to_email, TO);
     assert.strictEqual(row.filename, 'Team invite for Excavator 12');
     assert.strictEqual(row.raw_csv, 'Your sign-in code is 482913.\nIt expires tonight.');
@@ -142,7 +144,7 @@ async function main() {
     var truncated = createMock();
     await inbound.processInboundEmail(truncated.supabase, mail({
       to: TO,
-      from: 'setup@example.com',
+      from: 'setup@teletracnavman.net',
       subject: longSubject,
       text: 'code 100200',
     }));
@@ -161,7 +163,7 @@ async function main() {
     ].join('');
     await inbound.processInboundEmail(htmlOnly.supabase, mail({
       to: TO,
-      from: 'forwarding@example.com',
+      from: 'forwarding@bp.com',
       subject: 'Confirm forwarding',
       text: '   ',
       html: html,
@@ -178,7 +180,7 @@ async function main() {
     var clipped = createMock();
     await inbound.processInboundEmail(clipped.supabase, mail({
       to: TO,
-      from: 'setup@example.com',
+      from: 'setup@teletracnavman.net',
       subject: 'Long note',
       text: longBody,
     }));
@@ -189,7 +191,7 @@ async function main() {
     var empty = createMock();
     await inbound.processInboundEmail(empty.supabase, mail({
       to: TO,
-      from: 'setup@example.com',
+      from: 'setup@teletracnavman.net',
       subject: '   ',
       text: '',
       html: '',
@@ -204,7 +206,7 @@ async function main() {
     var csv = createMock();
     var csvResult = await inbound.processInboundEmail(csv.supabase, mail({
       to: TO,
-      from: 'reports@example.com',
+      from: 'reports@vl.cat.com',
       subject: 'Daily notes',
       text: 'see attached',
     }, [{
@@ -233,7 +235,7 @@ async function main() {
     var linked = createMock();
     var linkResult = await inbound.processInboundEmail(linked.supabase, mail({
       to: TO,
-      from: 'reports@example.com',
+      from: 'reports@vl.cat.com',
       subject: 'Your scheduled report',
       text: 'Download Report https://vl.cat.com/downloadreport?token=FAKETOKEN',
       html: '',
@@ -253,7 +255,7 @@ async function main() {
     var unknown = createMock({ unknown: true });
     var unknownResult = await inbound.processInboundEmail(unknown.supabase, mail({
       to: 'nobody-zz99@uploads.fleetmagnify.com',
-      from: 'setup@example.com',
+      from: 'setup@teletracnavman.net',
       subject: 'A code',
       text: '482913',
     }));
@@ -266,7 +268,7 @@ async function main() {
     var broken = createMock({ insertError: { message: 'insert rejected' } });
     var brokenResult = await inbound.processInboundEmail(broken.supabase, mail({
       to: TO,
-      from: 'setup@example.com',
+      from: 'setup@teletracnavman.net',
       subject: 'Sign-in code',
       text: '482913',
     }));
@@ -286,6 +288,8 @@ async function main() {
     global.fetch = previousFetch;
     if (previousKey === undefined) delete process.env.RESEND_API_KEY;
     else process.env.RESEND_API_KEY = previousKey;
+    if (previousExtra === undefined) delete process.env.INBOUND_EXTRA_SENDERS;
+    else process.env.INBOUND_EXTRA_SENDERS = previousExtra;
   }
 }
 

@@ -11,7 +11,7 @@ var OWNER = '00000000-0000-4000-8000-0000000000e1';
 var LATE = '00000000-0000-4000-8000-0000000000e2';
 var UPLOAD = 'abc-1234@uploads.example.com';
 var SUPPORT = 'support@example.com';
-var SENDER = 'reports@plant.example';
+var SENDER = 'reports@teletracnavman.net';
 var VL_TOKEN = 'FAKEENVELOPETOKEN';
 var VL_LINK = 'https://vl.cat.com/downloadreport?token=' + VL_TOKEN;
 var DEERE_HANDLE = '00000000-0000-4000-8000-0000000000ee';
@@ -184,6 +184,8 @@ function forwardFields(extra) {
 
 async function main() {
   var previousFetch = global.fetch;
+  var previousExtra = process.env.INBOUND_EXTRA_SENDERS;
+  delete process.env.INBOUND_EXTRA_SENDERS;
   var cap = captureConsole();
   global.fetch = function() {
     throw new Error('unexpected fetch');
@@ -403,7 +405,7 @@ async function main() {
       }],
     });
     var visionResult = await inbound.processInboundEmail(vision.supabase, mail(forwardFields({
-      from: 'Vision Desk <reports@vl.example>',
+      from: 'Vision Desk <reports@vl.cat.com>',
       subject: 'Scheduled utilization',
       text: 'Download Report ' + VL_LINK,
       html: '<a href="' + VL_LINK + '">Download Report</a>',
@@ -411,7 +413,7 @@ async function main() {
     assert.strictEqual(visionResult.ok, true);
     assert.strictEqual(visionResult.user_id, OWNER);
     assert.strictEqual(importRows(vision.state)[0].row.to_email, UPLOAD);
-    assert.strictEqual(importRows(vision.state)[0].row.from_email, 'reports@vl.example');
+    assert.strictEqual(importRows(vision.state)[0].row.from_email, 'reports@vl.cat.com');
     var visionRows = vision.state.upserts.filter(function(entry) { return entry.table === 'telematics_records'; });
     assert.strictEqual(visionRows.length, 1);
     assert.strictEqual(visionRows[0].rows[0].asset_id, 41);
@@ -436,7 +438,7 @@ async function main() {
       }],
     });
     var deereResult = await inbound.processInboundEmail(deere.supabase, mail(forwardFields({
-      from: 'Machine Desk <reports@machine.example>',
+      from: 'Machine Desk <reports@johndeere.com>',
       subject: 'Daily Utilization (Utilization) Report Completed',
       text: '- CSV (' + DEERE_LINK + ')',
       html: '<a href="' + DEERE_LINK.replace(/&/g, '&amp;') + '">CSV</a>',
@@ -444,7 +446,7 @@ async function main() {
     assert.strictEqual(deereResult.ok, true);
     assert.strictEqual(deereResult.user_id, OWNER);
     assert.strictEqual(importRows(deere.state)[0].row.to_email, UPLOAD);
-    assert.strictEqual(importRows(deere.state)[0].row.from_email, 'reports@machine.example');
+    assert.strictEqual(importRows(deere.state)[0].row.from_email, 'reports@johndeere.com');
     var deereRows = deere.state.upserts.filter(function(entry) { return entry.table === 'telematics_records'; });
     assert.strictEqual(deereRows.length, 1);
     assert.strictEqual(deereRows[0].rows[0].asset_id, 51);
@@ -462,6 +464,8 @@ async function main() {
   } finally {
     cap.restore();
     global.fetch = previousFetch;
+    if (previousExtra === undefined) delete process.env.INBOUND_EXTRA_SENDERS;
+    else process.env.INBOUND_EXTRA_SENDERS = previousExtra;
   }
 }
 
