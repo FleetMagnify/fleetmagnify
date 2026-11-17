@@ -5,11 +5,13 @@
  * due 7 days after issue.
  *
  * Requires a signed-in user. The id and email come from that session.
- * userId and email in the request body are not used, except when a valid
- * admin secret is supplied. That path still reads them from the body.
+ * userId and email in the request body are not used, except when the caller
+ * is a signed-in user on the ADMIN_USER_IDS allowlist. That path still reads
+ * them from the body.
  */
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
+const { requireAdminUser } = require('../lib/admin-auth');
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL || 'https://pddsgvuzvuwueuvpoytw.supabase.co';
@@ -83,19 +85,20 @@ module.exports = async function handler(req, res) {
 
   try {
     var poNumber = req.body && req.body.poNumber ? String(req.body.poNumber).trim() : '';
-    var adminSecret = req.headers['x-admin-secret'];
-    var isAdmin = !!(adminSecret && process.env.ADMIN_SECRET && adminSecret === process.env.ADMIN_SECRET);
+    var adminResult = await requireAdminUser(req);
+    var isAdmin = adminResult.ok === true;
     var bypassAssetMinimum = !!(isAdmin && req.body && req.body.bypassAssetMinimum);
     var userId;
     var email;
+    var supabase;
 
-    var supabase = createSupabaseClient();
     if (isAdmin) {
       userId = req.body && req.body.userId;
       email = req.body && req.body.email;
       if (!userId || !email) {
         return res.status(400).json({ error: 'userId and email are required' });
       }
+      supabase = createSupabaseClient();
     } else {
       var signedIn = await requireSignedInUser(req);
       if (signedIn.errorStatus) {
@@ -103,6 +106,7 @@ module.exports = async function handler(req, res) {
       }
       userId = signedIn.user.id;
       email = signedIn.user.email;
+      supabase = createSupabaseClient();
       var blocked = await teamMemberBlock(supabase, userId);
       if (blocked) {
         return res.status(blocked.errorStatus).json({ error: blocked.error });

@@ -22,11 +22,15 @@ process.env.SUPABASE_URL = 'https://example.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test';
 process.env.STRIPE_SECRET_KEY = 'sk_test_example';
 process.env.STRIPE_PRICE_PLATFORM = 'price_platform_test';
-process.env.ADMIN_SECRET = 'test-admin-secret';
+process.env.SUPABASE_ANON_KEY = 'anon-test-key';
+delete process.env.ADMIN_USER_IDS;
 
 var state = {};
 
+var ADMIN_ID = '11111111-1111-4111-8111-111111111111';
+
 function reset() {
+  delete process.env.ADMIN_USER_IDS;
   state.user = { id: OWNER, email: OWNER_EMAIL };
   state.profile = {
     id: OWNER,
@@ -62,9 +66,9 @@ function createClient(url, key, options) {
   if (authHeader) state.authClients += 1;
   return {
     auth: {
-      getUser: async function() {
+      getUser: async function(passedToken) {
         state.getUserCalls += 1;
-        var token = String(authHeader || '').replace('Bearer ', '').trim();
+        var token = passedToken || String(authHeader || '').replace(/^Bearer\s+/i, '').trim();
         if (token && token === TOKEN && state.user) {
           return { data: { user: state.user }, error: null };
         }
@@ -328,20 +332,22 @@ check('an account member is rejected on both endpoints', function() {
   });
 });
 
-check('a valid admin secret on the invoice endpoint uses the body user', function() {
+check('an allowlisted admin token on the invoice endpoint uses the body user', function() {
   reset();
+  process.env.ADMIN_USER_IDS = ADMIN_ID;
+  state.user = { id: ADMIN_ID, email: 'admin@example.test' };
   state.profile = {
     id: BODY_USER,
     stripe_customer_id: null,
     company_name: 'Example Quarry'
   };
-  return call(invoice, { 'x-admin-secret': 'test-admin-secret' }, {
+  return call(invoice, { authorization: 'Bearer ' + TOKEN }, {
     userId: BODY_USER,
     email: BODY_EMAIL,
     bypassAssetMinimum: true
   }).then(function(res) {
     assert.strictEqual(res.statusCode, 200);
-    assert.strictEqual(state.getUserCalls, 0);
+    assert.ok(state.getUserCalls >= 1);
     assert.strictEqual(state.customers[0].email, BODY_EMAIL);
     assert.strictEqual(state.customers[0].metadata.supabase_user_id, BODY_USER);
     assert.strictEqual(state.subscriptions[0].metadata.supabase_user_id, BODY_USER);
@@ -358,7 +364,7 @@ check('a valid admin secret on the invoice endpoint uses the body user', functio
   });
 });
 
-check('a wrong admin secret does not accept the body user', function() {
+check('the old shared-password header does not accept the body user', function() {
   reset();
   return call(invoice, { 'x-admin-secret': 'not-the-secret' }, {
     userId: BODY_USER,
@@ -368,6 +374,20 @@ check('a wrong admin secret does not accept the body user', function() {
     assert.strictEqual(res.statusCode, 401);
     assert.strictEqual(state.subscriptions.length, 0);
     assert.strictEqual(state.customers.length, 0);
+  });
+});
+
+check('a signed-in user who is not on the allowlist cannot bypass the asset minimum for the body user', function() {
+  reset();
+  state.assetCount = 0;
+  return call(invoice, signedInHeaders(), {
+    userId: BODY_USER,
+    email: BODY_EMAIL,
+    bypassAssetMinimum: true
+  }).then(function(res) {
+    assert.strictEqual(res.statusCode, 403);
+    assert.strictEqual(state.subscriptions.length, 0);
+    assert.strictEqual(state.assetLookups[0], OWNER);
   });
 });
 
@@ -395,8 +415,11 @@ check('signup and upgrade send the session token', function() {
   assert.ok(login.indexOf("window.location.href = nextPage || 'home.html'") !== -1);
   assert.ok(login.indexOf('Your account is created. If you were asked to confirm your email') !== -1);
 
-  assert.ok(admin.indexOf("'x-admin-secret': adminSecret") !== -1);
-  assert.strictEqual(admin.indexOf('Authorization'), -1);
+  assert.strictEqual(admin.indexOf('x-admin-secret'), -1);
+  assert.strictEqual(admin.indexOf('fm_admin_secret'), -1);
+  assert.ok(admin.indexOf("headers.Authorization = 'Bearer ' + token") !== -1);
+  assert.ok(admin.indexOf('signInWithPassword') !== -1);
+  assert.ok(admin.indexOf('supabase.auth.signOut()') !== -1);
   return Promise.resolve();
 });
 

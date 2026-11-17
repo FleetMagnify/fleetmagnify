@@ -5,11 +5,13 @@
  * for accounts that have divisions or already have that line item.
  *
  * Vercel Cron invokes this as GET with Authorization: Bearer CRON_SECRET.
- * Admins can also POST with x-admin-secret to run it on demand.
+ * An allowlisted admin can also POST with Authorization: Bearer <access token>
+ * to run it on demand.
  */
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
 const sync = require('../lib/sync-subscription-quantity');
+const { requireAdminUser } = require('../lib/admin-auth');
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL || 'https://pddsgvuzvuwueuvpoytw.supabase.co';
@@ -32,21 +34,21 @@ function createStripeClient() {
   return new Stripe(secretKey);
 }
 
-function isAuthorized(req) {
+async function isAuthorized(req, deps) {
+  deps = deps || {};
   var cronSecret = process.env.CRON_SECRET;
-  var adminSecret = process.env.ADMIN_SECRET;
-  var auth = req.headers.authorization || '';
+  var auth = (req.headers && req.headers.authorization) || '';
   if (cronSecret && auth === 'Bearer ' + cronSecret) return true;
-  if (adminSecret && req.headers['x-admin-secret'] === adminSecret) return true;
-  return false;
+  var admin = await requireAdminUser(req, { supabase: deps.adminAuth });
+  return admin.ok === true;
 }
 
-module.exports = async function handler(req, res) {
+module.exports = async function handler(req, res, deps) {
   if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req, deps))) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 

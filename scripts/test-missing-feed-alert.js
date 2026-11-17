@@ -290,10 +290,24 @@ async function main() {
 
   var previousKey = process.env.RESEND_API_KEY;
   var previousCron = process.env.CRON_SECRET;
-  var previousAdmin = process.env.ADMIN_SECRET;
+  var previousAdmin = process.env.ADMIN_USER_IDS;
   var previousFetch = global.fetch;
+  var ADMIN_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  var ADMIN_TOKEN = 'admin-test-token';
   process.env.CRON_SECRET = 'cron-test-secret';
-  process.env.ADMIN_SECRET = 'admin-test-secret';
+  process.env.ADMIN_USER_IDS = ADMIN_ID;
+  function adminAuth() {
+    return {
+      auth: {
+        getUser: async function (token) {
+          if (token === ADMIN_TOKEN) {
+            return { data: { user: { id: ADMIN_ID, email: 'admin@example.test' } }, error: null };
+          }
+          return { data: { user: null }, error: { message: 'invalid' } };
+        }
+      }
+    };
+  }
   var cap = captureConsole();
   var sent = [];
 
@@ -479,10 +493,10 @@ async function main() {
     var dryRes = mockRes();
     await handler({
       method: 'POST',
-      headers: { 'x-admin-secret': 'admin-test-secret' },
+      headers: { authorization: 'Bearer ' + ADMIN_TOKEN },
       query: { dryRun: '1' },
       url: '/api/check-missing-reports?dryRun=1'
-    }, dryRes, { supabase: dryDb.supabase, now: today, fetch: recordingFetch });
+    }, dryRes, { supabase: dryDb.supabase, now: today, fetch: recordingFetch, adminAuth: adminAuth() });
     assert.strictEqual(dryRes.statusCode, 200);
     assert.strictEqual(dryRes.body.ok, true);
     assert.strictEqual(dryRes.body.dryRun, true);
@@ -520,7 +534,7 @@ async function main() {
       method: 'POST',
       headers: { authorization: 'Bearer wrong', 'x-admin-secret': 'nope' },
       query: {}
-    }, wrong, { supabase: deniedDb.supabase, now: today, fetch: recordingFetch });
+    }, wrong, { supabase: deniedDb.supabase, now: today, fetch: recordingFetch, adminAuth: adminAuth() });
     assert.strictEqual(wrong.statusCode, 401);
     assert.strictEqual(deniedDb.calls.imports.length, 0);
     assert.strictEqual(sent.length, 0);
@@ -549,8 +563,8 @@ async function main() {
     else process.env.RESEND_API_KEY = previousKey;
     if (previousCron === undefined) delete process.env.CRON_SECRET;
     else process.env.CRON_SECRET = previousCron;
-    if (previousAdmin === undefined) delete process.env.ADMIN_SECRET;
-    else process.env.ADMIN_SECRET = previousAdmin;
+    if (previousAdmin === undefined) delete process.env.ADMIN_USER_IDS;
+    else process.env.ADMIN_USER_IDS = previousAdmin;
   }
 }
 

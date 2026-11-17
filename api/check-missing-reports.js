@@ -2,12 +2,14 @@
  * Daily quiet-feed check.
  *
  * Vercel Cron invokes this as GET with Authorization: Bearer CRON_SECRET.
- * Admins can POST with x-admin-secret. POST ?dryRun=1 returns the overdue
- * list and sends no email. A missing Resend key or a Resend failure is
- * returned as JSON and is not thrown, so the cron does not retry-loop.
+ * An allowlisted admin can POST with Authorization: Bearer <access token>.
+ * POST ?dryRun=1 returns the overdue list and sends no email, and only an
+ * allowlisted admin token can do that. A missing Resend key or a Resend
+ * failure is returned as JSON and is not thrown, so the cron does not retry-loop.
  */
 const { createClient } = require('@supabase/supabase-js');
 const alert = require('../lib/missing-feed-alert');
+const { requireAdminUser } = require('../lib/admin-auth');
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL || 'https://pddsgvuzvuwueuvpoytw.supabase.co';
@@ -29,13 +31,13 @@ function headerValue(req, name) {
   return typeof value === 'string' ? value : '';
 }
 
-function isAuthorized(req) {
+async function isAuthorized(req, deps) {
+  deps = deps || {};
   var cronSecret = process.env.CRON_SECRET;
-  var adminSecret = process.env.ADMIN_SECRET;
   var auth = headerValue(req, 'authorization');
   if (cronSecret && auth === 'Bearer ' + cronSecret) return true;
-  if (adminSecret && headerValue(req, 'x-admin-secret') === adminSecret) return true;
-  return false;
+  var admin = await requireAdminUser(req, { supabase: deps.adminAuth });
+  return admin.ok === true;
 }
 
 function queryValue(req, name) {
@@ -62,11 +64,12 @@ function queryValue(req, name) {
   return '';
 }
 
-function isDryRun(req) {
+async function isDryRun(req, deps) {
+  deps = deps || {};
   if (!req || req.method !== 'POST') return false;
-  var adminSecret = process.env.ADMIN_SECRET;
-  if (!adminSecret || headerValue(req, 'x-admin-secret') !== adminSecret) return false;
-  return queryValue(req, 'dryRun') === '1';
+  if (queryValue(req, 'dryRun') !== '1') return false;
+  var admin = await requireAdminUser(req, { supabase: deps.adminAuth });
+  return admin.ok === true;
 }
 
 async function handler(req, res, deps) {
@@ -74,7 +77,7 @@ async function handler(req, res, deps) {
   if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req, deps))) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -82,7 +85,7 @@ async function handler(req, res, deps) {
     var result = await alert.runCheck({
       supabase: deps.supabase || createSupabaseClient(),
       now: deps.now || new Date(),
-      dryRun: isDryRun(req),
+      dryRun: await isDryRun(req, deps),
       fetch: deps.fetch || global.fetch
     });
     return res.status(200).json(result);
