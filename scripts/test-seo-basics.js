@@ -622,5 +622,36 @@ check('npm test runs this script', function () {
   assert.ok(pkg.scripts.test.indexOf('node scripts/test-seo-basics.js') !== -1);
 });
 
+check('sample reports page does not overstate that figures are not estimated', function () {
+  var html = read('sample-reports.html');
+  assert.strictEqual(titles(html)[0], 'Sample fleet cost reports | FleetMagnify');
+  assert.ok(html.indexOf('not estimated') === -1, 'sample-reports.html still says not estimated');
+  assert.ok(
+    html.indexOf('Figures are calculated from your telematics and fuel data plus the asset details you enter, such as purchase price and payload.') !== -1,
+    'replacement sentence'
+  );
+  assert.ok(
+    html.indexOf('2.680680605 kg CO2-e per litre') !== -1,
+    'emission factor still present'
+  );
+  var withoutNav = html.replace(/<nav\b[\s\S]*?<\/nav>/gi, '');
+  var body = withoutNav.replace(/<footer\b[\s\S]*?<\/footer>/gi, '');
+  var paragraph = 'Want to try the numbers yourself first? Use the <a href="machine-operating-cost-per-hour.html">machine cost per hour calculator</a> or the <a href="fleet-utilisation-rate-formula.html">fleet utilisation rate calculator</a>. They are free and need no sign-in.';
+  assert.ok(body.indexOf(paragraph) !== -1, 'calculator paragraph in the body');
+  assert.ok(body.indexOf('href="machine-operating-cost-per-hour.html"') !== -1, 'cost calculator link outside nav and footer');
+  assert.ok(body.indexOf('href="fleet-utilisation-rate-formula.html"') !== -1, 'utilisation calculator link outside nav and footer');
+});
+
+check('all page titles are unique', function () {
+  var seen = {};
+  htmlFiles().forEach(function (filename) {
+    var pageTitles = titles(read(filename));
+    assert.strictEqual(pageTitles.length, 1, filename + ' title count');
+    var title = pageTitles[0];
+    assert.ok(!seen[title], title + ' is used by ' + seen[title] + ' and ' + filename);
+    seen[title] = filename;
+  });
+});
+
 if (!pass) process.exit(1);
 console.log('All SEO basics checks passed.');

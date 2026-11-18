@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sample Reports | FleetMagnify</title>
+<title>Sample fleet cost reports | FleetMagnify</title>
 <meta name="description" content="Sample reports for cost per kilometre, job cost, idle cost, trips, and emissions, showing how FleetMagnify calculates each figure from telematics and fuel data.">
 <link rel="canonical" href="https://www.fleetmagnify.com/sample-reports.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="FleetMagnify">
-<meta property="og:title" content="Sample Reports | FleetMagnify">
+<meta property="og:title" content="Sample fleet cost reports | FleetMagnify">
 <meta property="og:description" content="Sample reports for cost per kilometre, job cost, idle cost, trips, and emissions, showing how FleetMagnify calculates each figure from telematics and fuel data.">
 <meta property="og:url" content="https://www.fleetmagnify.com/sample-reports.html">
 <meta property="og:image" content="https://www.fleetmagnify.com/images/hero.jpg">
@@ -88,6 +88,9 @@
     font-size: 16px; color: #6B7785; line-height: 1.65;
     max-width: 720px; margin: 0 auto;
   }
+  .reports-hero p + p { margin-top: 16px; }
+  .reports-hero p a { color: #0EA57A; text-decoration: none; }
+  .reports-hero p a:hover { color: #0BC48E; }
 
   /* ── REPORTS ── */
   .reports { padding: 72px 3rem 48px; }
@@ -224,6 +227,7 @@
   <div class="reports-hero-inner">
     <h1>What FleetMagnify Reports Look Like</h1>
     <p>Every report in FleetMagnify is calculated from your telematics and fuel card data. Here is exactly what each module outputs and how the numbers are calculated.</p>
+    <p>Want to try the numbers yourself first? Use the <a href="machine-operating-cost-per-hour.html">machine cost per hour calculator</a> or the <a href="fleet-utilisation-rate-formula.html">fleet utilisation rate calculator</a>. They are free and need no sign-in.</p>
   </div>
 </section>
 
@@ -349,7 +353,7 @@
       </div>
       <div class="report-block">
         <div class="report-label">How calculated</div>
-        <p>Actual fuel consumption from fill-to-fill analysis multiplied by NZ Ministry for the Environment emission factor for diesel (2.680680605 kg CO2-e per litre). All figures are data-derived, not estimated.</p>
+        <p>Actual fuel consumption from fill-to-fill analysis multiplied by NZ Ministry for the Environment emission factor for diesel (2.680680605 kg CO2-e per litre). Figures are calculated from your telematics and fuel data plus the asset details you enter, such as purchase price and payload.</p>
       </div>
     </article>
 
