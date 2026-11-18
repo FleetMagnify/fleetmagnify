@@ -642,6 +642,34 @@ check('sample reports page does not overstate that figures are not estimated', f
   assert.ok(body.indexOf('href="fleet-utilisation-rate-formula.html"') !== -1, 'utilisation calculator link outside nav and footer');
 });
 
+check('public pages do not claim ESG, regulatory or government-standard compliance', function () {
+  var banned = [
+    'suitable for ESG',
+    'ESG disclosure',
+    'regulatory obligations',
+    'ESG ready',
+    'ready for ESG',
+    'ESG and',
+    'NZ government standards',
+    'compliance and ESG'
+  ];
+  ['index.html', 'features.html', 'platform-guide.html'].forEach(function (filename) {
+    var html = read(filename);
+    banned.forEach(function (phrase) {
+      assert.ok(html.indexOf(phrase) === -1, filename + ' still contains ' + phrase);
+    });
+  });
+  var faqs = jsonLdBlocks(read('index.html')).map(JSON.parse).filter(function (block) {
+    return block['@type'] === 'FAQPage';
+  });
+  assert.strictEqual(faqs.length, 1, 'index FAQ JSON-LD');
+  var emissions = faqs[0].mainEntity.filter(function (question) {
+    return question.name === 'How are emissions calculated in FleetMagnify?';
+  });
+  assert.strictEqual(emissions.length, 1, 'emissions FAQ question');
+  assert.ok(emissions[0].acceptedAnswer.text.indexOf('2.680680605') !== -1, 'emission factor in FAQ answer');
+});
+
 check('all page titles are unique', function () {
   var seen = {};
   htmlFiles().forEach(function (filename) {
