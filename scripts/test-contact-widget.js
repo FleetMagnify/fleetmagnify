@@ -487,6 +487,7 @@ check('the widget script is on the public pages and nowhere else', function () {
 check('the widget script stays small and does not collect storage or call other origins', function () {
   var source = read('js/contact-widget.js');
   assert.ok(source.length < 8192, 'widget is ' + source.length + ' bytes');
+  assert.ok(source.indexOf('100vh') === -1, 'injected CSS contains 100vh');
   assert.ok(source.indexOf('http://') === -1);
   assert.ok(source.indexOf('https://') === -1);
   assert.ok(source.indexOf('privacy-policy.html') !== -1);

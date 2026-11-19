@@ -1,32 +1,31 @@
-(function () {
+(function() {
   if (document.getElementById('contact-form') || document.getElementById('cw-root')) return;
 
   var css = document.createElement('style');
   css.textContent =
-    '#cw-root{position:fixed;z-index:90;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;align-items:flex-end;gap:8px;pointer-events:none;font-family:inherit}' +
+    ':root{--r:env(safe-area-inset-right,0px);--b:env(safe-area-inset-bottom,0px)}' +
+    '#cw-root{position:fixed;z-index:90;right:calc(16px + var(--r));bottom:calc(16px + var(--b));display:flex;flex-direction:column;align-items:flex-end;gap:8px;pointer-events:none}' +
     '#cw-btn,#cw-panel{pointer-events:auto}' +
-    '#cw-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:48px;min-height:48px;padding:0 16px;border:0;border-radius:999px;background:#0EA57A;color:#080C12;font:inherit;font-weight:700;font-size:14px;cursor:pointer}' +
-    '#cw-btn:focus-visible{outline:2px solid #F0F2F5}' +
-    '#cw-panel{width:340px;max-height:min(70vh,560px);overflow:auto;background:#111827;color:#E2E8F0;border:1px solid #2D3748;border-radius:16px;padding:16px}' +
+    '#cw-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 14px;border:0;border-radius:999px;background:#0EA57A;color:#080C12;font:inherit;font-weight:700;font-size:14px;box-shadow:0 8px 18px #0005,0 0 16px #0EA57A73}' +
+    '#cw-btn:hover{background:#0BC48E;transform:translateY(-2px)}#cw-btn:focus-visible{outline:2px solid #fff}' +
+    '@keyframes cw-ring{to{opacity:0;transform:scale(1.45)}}' +
+    '#cw-btn.cw-pulse:before{content:"";position:absolute;inset:-4px;border-radius:999px;border:2px solid #0EA57A8c;animation:cw-ring 1.15s ease-out 2 forwards}' +
+    '#cw-panel{width:340px;max-height:70dvh;overflow:auto;box-sizing:border-box;background:#111827;color:#E2E8F0;border:1px solid #2D3748;border-radius:16px;padding:16px}' +
     '#cw-panel[hidden]{display:none}#cw-panel *{box-sizing:border-box}' +
-    '.cw-head{display:flex;align-items:center;justify-content:space-between;gap:8px}' +
-    '#cw-title{margin:0;font-size:16px;font-weight:700}' +
-    '.cw-x{background:transparent;color:#9BA4B0;border:0;cursor:pointer;font:inherit;font-weight:600;min-width:48px;min-height:44px}' +
-    '.cw-intro,.cw-note,#cw-status{font-size:13px;line-height:1.45;color:#9BA4B0}' +
-    '.cw-intro{margin:0}.cw-note{margin:10px 0 0;font-size:12px}#cw-status{margin:8px 0 0;color:#E8B86D}' +
-    '#cw-panel label{display:block;margin:10px 0 4px;font-size:13px;font-weight:600;color:#C8D0DB}' +
-    '#cw-panel input,#cw-panel textarea{width:100%;background:#080C12;color:#E2E8F0;border:1px solid #2D3748;border-radius:10px;padding:10px 12px;font:inherit;font-size:14px}' +
-    '#cw-panel textarea{min-height:96px;resize:vertical}' +
-    '#cw-panel input:focus,#cw-panel textarea:focus{outline:2px solid #0EA57A}' +
+    '.cw-head{display:flex;align-items:center;justify-content:space-between}' +
+    '#cw-title{margin:0;font-size:16px}.cw-x{background:0;color:#9BA4B0;border:0;font:inherit;min-width:48px;min-height:44px}' +
+    '#cw-status,.cw-intro,.cw-note{margin:8px 0 0;font-size:13px;color:#9BA4B0}#cw-status{color:#E8B86D}' +
+    '#cw-panel label{display:block;margin:10px 0 4px;font-size:13px;font-weight:600}' +
+    '#cw-panel input,#cw-panel textarea{width:100%;background:#080C12;color:inherit;border:1px solid #2D3748;border-radius:10px;padding:10px 12px;font:inherit}' +
+    '#cw-panel textarea{min-height:96px}#cw-panel :focus{outline:2px solid #0EA57A}' +
     '.cw-hp{position:fixed;left:-9999px;top:0;width:1px;height:1px;border:0}' +
-    '#cw-send,#cw-done .cw-x{display:block;margin-top:12px;min-height:44px;border:0;border-radius:10px;background:#0EA57A;color:#080C12;font:inherit;font-weight:700;cursor:pointer}' +
-    '#cw-send{width:100%}#cw-send:disabled{opacity:.65}' +
-    '.cw-note a,#cw-status a{color:#0EA57A}#cw-done p{margin:0;font-size:14px;line-height:1.5}' +
-    'body{padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}' +
+    '#cw-send,#cw-done .cw-x{display:block;margin-top:12px;min-height:44px;border:0;border-radius:10px;background:#0EA57A;color:#080C12;font:inherit;font-weight:700}' +
+    '#cw-send{width:100%}#cw-send:disabled{opacity:.65}.cw-note a,#cw-status a{color:#0EA57A}#cw-done p{margin:0;font-size:14px}' +
+    'footer.footer,footer{padding-bottom:calc(72px + var(--b))}' +
     '@media (max-width:599px){.cw-label{display:none}#cw-btn{width:48px;height:48px;padding:0}' +
-    '#cw-root{left:calc(100vw - 60px - env(safe-area-inset-right,0px));top:calc(100vh - 60px - env(safe-area-inset-bottom,0px));right:auto;bottom:auto}' +
-    '#cw-panel{position:fixed;left:0;width:100vw;max-width:100vw;max-height:70vh;top:calc(100vh - 72px - env(safe-area-inset-bottom,0px));transform:translateY(-100%);border-radius:16px 16px 0 0;border-width:1px 0 0}}' +
-    '@media (prefers-reduced-motion:reduce){#cw-root{animation:none;transition:none}}';
+    '#cw-root{right:calc(100% - 100dvw + 16px + var(--r));bottom:calc(100% - 100dvh + 16px + var(--b))}' +
+    '#cw-panel{position:fixed;left:0;width:100dvw;bottom:calc(100% - 100dvh + 72px + var(--b));max-height:70dvh;border-radius:16px 16px 0 0;border-width:1px 0 0}}' +
+    '@media (prefers-reduced-motion:reduce){#cw-btn,#cw-btn:before{animation:none;transition:none}}';
   document.head.appendChild(css);
 
   var root = document.createElement('div');
@@ -54,6 +53,9 @@
   document.body.appendChild(root);
 
   var btn = document.getElementById('cw-btn');
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    setTimeout(function() { btn.classList.add('cw-pulse'); }, 6000);
+  }
   var panel = document.getElementById('cw-panel');
   var form = document.getElementById('cw-form');
   var formWrap = document.getElementById('cw-form-wrap');
@@ -67,9 +69,9 @@
   var doneClose = document.getElementById('cw-done-close');
 
   function focusEl(el) {
-    var x = window.scrollX, y = window.scrollY;
+    var x = scrollX, y = scrollY;
     if (el && el.focus) el.focus({ preventScroll: true });
-    window.scrollTo(x, y);
+    scrollTo(x, y);
   }
   function showFailure() {
     sendBtn.disabled = false;
@@ -96,14 +98,14 @@
     focusEl(btn);
   }
 
-  btn.addEventListener('click', function () { if (panel.hidden) openPanel(); else closePanel(); });
+  btn.addEventListener('click', function() { if (panel.hidden) openPanel(); else closePanel(); });
   document.getElementById('cw-close').addEventListener('click', closePanel);
   doneClose.addEventListener('click', closePanel);
-  document.addEventListener('keydown', function (event) {
+  document.addEventListener('keydown', function(event) {
     if (event.key === 'Escape' && !panel.hidden) { event.preventDefault(); closePanel(); }
   });
 
-  form.addEventListener('submit', function (event) {
+  form.addEventListener('submit', function(event) {
     event.preventDefault();
     if (sendBtn.disabled) return;
     var email = emailInput.value.trim();
@@ -123,20 +125,11 @@
     sendBtn.textContent = 'Sending…';
     var elapsed = (typeof performance !== 'undefined' && performance.now) ? Math.round(performance.now()) : 0;
     fetch('/api/contact-form', {
-      method: 'POST',
-      credentials: 'omit',
+      method: 'POST', credentials: 'omit',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source: 'widget',
-        email: email,
-        message: message,
-        name: nameInput.value.trim(),
-        page: location.pathname,
-        elapsed: elapsed,
-        website: honeypot.value
-      })
-    }).then(function (res) {
-      return res.json().catch(function () { return {}; }).then(function (data) {
+      body: JSON.stringify({ source: 'widget', email: email, message: message, name: nameInput.value.trim(), page: location.pathname, elapsed: elapsed, website: honeypot.value })
+    }).then(function(res) {
+      return res.json().catch(function() { return {}; }).then(function(data) {
         if (!res.ok || !data || !data.ok) { showFailure(); return; }
         formWrap.hidden = true;
         done.hidden = false;
